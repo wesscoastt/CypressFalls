@@ -348,6 +348,16 @@ input.mi,select.mi{background:#0a1017;border:1px solid #2b3a52;border-radius:5px
 .mmBtns{display:flex;flex-direction:column;gap:9px;}
 .mbtn.big{padding:15px;font-size:12px;letter-spacing:.14em;}
 
+
+body.fs{position:fixed;inset:0;width:100vw;height:100vh;overflow:hidden;}
+body.fs #gl{width:100vw !important;height:100vh !important;}
+@media (orientation:landscape) and (max-height:480px){
+  #unitBox{transform:scale(.82);transform-origin:top left;}
+  #topRight{transform:scale(.82);transform-origin:top right;}
+  #rowTop{top:calc(8px + env(safe-area-inset-top));}
+  #minimapWrap{width:132px;height:132px;}
+  #speedo{transform:scale(.84);transform-origin:bottom left;}
+}
 </style>
 </head>
 <body>
@@ -427,6 +437,7 @@ input.mi,select.mi{background:#0a1017;border:1px solid #2b3a52;border-radius:5px
     <div class="tsm" id="btnMap">MAP</div>
     <div class="tsm" id="btnWpn">WPN</div>
     <div class="tsm" id="btnCam">CAM</div>
+    <div class="tsm" id="btnFull">&#9974;</div>
     <div class="tsm" id="btnPause">&#9208;</div>
   </div>
 </div>
@@ -644,8 +655,15 @@ Builder.prototype.plate = function(x, y, z, sx, sz, col, rot){
   this.quad(T(-hx,-hz), T(hx,-hz), T(hx,hz), T(-hx,hz), col);
   return this;
 };
-Builder.prototype.cyl = function(x, y, z, r1, r2, h, seg, col, capTop){
+/* A cylinder/cone. `caps` closes it: 1 = top, 2 = bottom, 3 = both.
+   An open tube is single-sided, so from the wrong angle the near wall is
+   culled and you look straight into the inside of the far wall. That is what
+   made the trees and roofs read as hollow shells. Anything the player can get
+   underneath should be capped. */
+Builder.prototype.cyl = function(x, y, z, r1, r2, h, seg, col, caps){
   var i, a0, a1, y0 = y, y1 = y + h;
+  if(caps === true) caps = 1;
+  caps = caps || 0;
   for(i = 0; i < seg; i++){
     a0 = i / seg * TAU; a1 = (i+1) / seg * TAU;
     var x0 = x + Math.cos(a0)*r1, z0 = z + Math.sin(a0)*r1;
@@ -653,7 +671,8 @@ Builder.prototype.cyl = function(x, y, z, r1, r2, h, seg, col, capTop){
     var X0 = x + Math.cos(a0)*r2, Z0 = z + Math.sin(a0)*r2;
     var X1 = x + Math.cos(a1)*r2, Z1 = z + Math.sin(a1)*r2;
     this.quad([x0,y0,z0],[x1,y0,z1],[X1,y1,Z1],[X0,y1,Z0], col);
-    if(capTop) this.tri(x,y1,z, X0,y1,Z0, X1,y1,Z1, col);
+    if(caps & 1) this.tri(x,y1,z, X0,y1,Z0, X1,y1,Z1, col);
+    if(caps & 2) this.tri(x,y0,z, x1,y0,z1, x0,y0,z0, col);
   }
   return this;
 };
@@ -1305,13 +1324,25 @@ function resolveSolid(pos, r){
 function bTree(B, x, z, s){
   s = s || 1;
   var h = wrng(4, 8) * s, tr = wrng(.28, .45) * s;
-  B.cyl(x, 0, z, tr, tr * .8, h * .45, 6, C.trunk, false);
-  var lc = wrand() < .5 ? C.leaf : C.leaf2;
-  lc = jitCol(lc, .3);
-  var r = wrng(1.6, 2.8) * s;
-  B.cyl(x, h * .4, z, r * .55, r, h * .22, 7, lc, false);
-  B.cyl(x, h * .6, z, r, r * .82, h * .3, 7, lc, false);
-  B.cyl(x, h * .88, z, r * .82, 0.1, h * .34, 7, lc, true);
+  var lc = jitCol(wrand() < .5 ? C.leaf : C.leaf2, .28);
+  var r = wrng(1.7, 3.0) * s;
+  var kind = wrand();
+  if(kind < .18){
+    /* cedar: one tall closed cone */
+    B.cyl(x, 0, z, tr * .9, tr * .7, h * .28, 6, C.trunk, 2);
+    B.cyl(x, h * .22, z, r * .92, .06, h * 1.05, 8, lc, 3);
+  } else if(kind < .34){
+    /* mesquite: low and wide */
+    B.cyl(x, 0, z, tr, tr * .74, h * .40, 6, C.trunk, 2);
+    B.cyl(x, h * .34, z, r * .70, r * 1.15, h * .26, 8, lc, 2);
+    B.cyl(x, h * .58, z, r * 1.15, r * .30, h * .34, 8, lc, 3);
+  } else {
+    /* live oak: stacked closed canopy */
+    B.cyl(x, 0, z, tr, tr * .8, h * .45, 6, C.trunk, 2);
+    B.cyl(x, h * .40, z, r * .58, r, h * .22, 8, lc, 2);
+    B.cyl(x, h * .60, z, r, r * .84, h * .30, 8, shade(lc, .94), 0);
+    B.cyl(x, h * .88, z, r * .84, .08, h * .34, 8, shade(lc, 1.06), 3);
+  }
 }
 function bBush(B, x, z){
   var r = wrng(.7, 1.4);
@@ -1954,6 +1985,20 @@ function fillDistricts(){
     }
   }
 }
+/* Point clearance only tests the centre, so a wide building whose middle sits
+   clear can still have a corner sticking into the carriageway. This samples the
+   whole rotated footprint. */
+function footprintClear(x, z, w, d, rot, pad){
+  var co = Math.cos(rot || 0), si = Math.sin(rot || 0);
+  var hw = w * .5, hd = d * .5;
+  var pts = [[0,0],[-hw,-hd],[hw,-hd],[hw,hd],[-hw,hd],[0,-hd],[0,hd],[-hw,0],[hw,0]];
+  var i;
+  for(i = 0; i < pts.length; i++){
+    var px = pts[i][0], pz = pts[i][1];
+    if(!roadClear(x + px * co - pz * si, z + px * si + pz * co, pad)) return false;
+  }
+  return true;
+}
 function roadClear(x, z, pad){
   var i;
   for(i = 0; i < ROADS.length; i++){
@@ -1996,7 +2041,9 @@ function fillBlock(d, bx, bz, w, h){
       var sw = bw / nb - 6, sh = bh - 6;
       var px = x0 + 3 + (i + .5) * (bw / nb), pz = cz;
       var fl = dc < 200 ? wri(4, 12) : (dc < 320 ? wri(3, 7) : wri(2, 4));
-      var r = bTower(B, px, pz, 0, Math.min(sw, 44), Math.min(sh, 40), fl);
+      var tw = Math.min(sw, 44), td = Math.min(sh, 40);
+      if(!footprintClear(px, pz, tw + 4, td + 4, 0, 2)) continue;
+      var r = bTower(B, px, pz, 0, tw, td, fl);
       addSolid(px, pz, r.hw, r.hd, fl * 3.6, 0);
     }
     return;
@@ -2011,10 +2058,10 @@ function fillBlock(d, bx, bz, w, h){
       var hx = x0 + (i + .5) * (bw / cols);
       var hz = rows === 1 ? cz : (j === 0 ? z0 + bh * .27 : z0 + bh * .73);
       var rot = rows === 1 ? 0 : (j === 0 ? Math.PI : 0);
-      if(!roadClear(hx, hz, 9)) continue;
-      if(wrand() < .05){ bTree(B, hx, hz, 1.3); continue; }
       var hw = small ? wrng(11, 14) : wrng(13, 17);
       var hd = small ? wrng(8, 10.5) : wrng(9.5, 12.5);
+      if(!footprintClear(hx, hz, hw + 5, hd + 5, rot, 3)) continue;
+      if(wrand() < .05){ bTree(B, hx, hz, 1.3); continue; }
       var rr = bHouse(B, hx, hz, rot, hw, hd);
       addSolid(hx, hz, rr.hw, rr.hd, 8, rot);
       /* driveway to street */
@@ -2033,7 +2080,7 @@ function fillBlock(d, bx, bz, w, h){
     var tc = Math.max(1, Math.floor(bw / 26));
     for(i = 0; i < tc; i++){
       var tx = x0 + (i + .5) * (bw / tc), tz = cz + wrng(-3, 3);
-      if(!roadClear(tx, tz, 7)) continue;
+      if(!footprintClear(tx, tz, 20, 10, 0, 3)) continue;
       var trot = (wrand() < .5) ? 0 : Math.PI;
       var rt = bTrailer(B, tx, tz, trot);
       addSolid(tx, tz, rt.hw, rt.hd, 5, trot);
@@ -3711,9 +3758,9 @@ Ped.prototype.followEdge = function(dt, spdF){
 function spawnTrafficAt(edgeIdx, t, dir){
   var e = EDGES[edgeIdx], a = NODES[e.a], b = NODES[e.b];
   var ang = Math.atan2(b.z - a.z, b.x - a.x);
-  var lane = (e.w / 4) * (dir > 0 ? 1 : -1) * -1;
-  var x = a.x + (b.x - a.x) * t - Math.sin(ang) * lane;
-  var z = a.z + (b.z - a.z) * t + Math.cos(ang) * lane;
+  var lp0 = lanePoint(e, dir, t, 0);
+  var lane = laneOffset(e, dir);
+  var x = lp0.x, z = lp0.z;
   var cd = pickCivDef();
   /* keep the big rigs off residential streets */
   if((cd.body === 'semi' || cd.body === 'bus' || cd.body === 'boxtruck') &&
@@ -3744,6 +3791,8 @@ function trafficUpdate(v, dt){
   var a = NODES[v.dir > 0 ? e.a : e.b], b = NODES[v.dir > 0 ? e.b : e.a];
   var ang = Math.atan2(b.z - a.z, b.x - a.x);
 
+  v.brakeReason = null;
+  updateStuck(v, dt);
   if(v.pulled){ v.throttle = 0; v.brake = 1; v.steer = 0; return; }
 
   /* advance param along edge from real position */
@@ -3771,7 +3820,7 @@ function trafficUpdate(v, dt){
       }
       v.edge = best;
       v.dir = (NODES[best.a].i === nn.i) ? 1 : -1;
-      v.lane = (best.w / 4) * (v.dir > 0 ? -1 : 1);
+      v.lane = laneOffset(best, v.dir);
       e = v.edge;
       a = NODES[v.dir > 0 ? e.a : e.b]; b = NODES[v.dir > 0 ? e.b : e.a];
       ang = Math.atan2(b.z - a.z, b.x - a.x);
@@ -3782,10 +3831,9 @@ function trafficUpdate(v, dt){
   /* steer toward lane point ahead */
   var look = clamp(6 + v.spd * .75, 6, 34);
   var tAhead = clamp(v.t + look / Math.max(e.len, 1), 0, 1);
-  var lane = (e.w / 4) * (v.dir > 0 ? -1 : 1);
-  if(v.pulling) lane = (e.w / 2 + 2.4) * (v.dir > 0 ? -1 : 1);
-  var tx = a.x + (b.x - a.x) * tAhead - Math.sin(ang) * lane;
-  var tz = a.z + (b.z - a.z) * tAhead + Math.cos(ang) * lane;
+  var extra = v.pulling ? (e.w * .30 + 2.0) * (v.dir > 0 ? -1 : 1) : 0;
+  var lp = lanePoint(e, v.dir, tAhead, extra);
+  var tx = lp.x, tz = lp.z;
   var want = Math.atan2(tz - v.z, tx - v.x);
   var err = angDiff(want, v.h);
   if(v.behav === 'drunk'){ v.wander += dt; err += Math.sin(v.wander * 1.3) * .16; }
@@ -3798,14 +3846,20 @@ function trafficUpdate(v, dt){
   if(G.weather === 'fog') tgt *= .78;
 
   /* obstacle ahead */
-  var ahead = trafficAhead(v, 24 + v.spd * 1.1);
-  if(ahead !== null) tgt = Math.min(tgt, ahead * .6);
+  var ahead = trafficAhead(v, 26 + v.spd * 1.3);
+  if(ahead !== null){
+    tgt = Math.min(tgt, ahead * .6);
+    if(ahead < 3) v.brakeReason = 'queue';
+  }
 
   /* traffic control at end node */
   if(!v.fleeing){
     var distToEnd = (1 - v.t) * e.len;
     if(distToEnd < 26 + v.spd * 1.2){
-      if(b.light && !lightGreen(b, e)) tgt = Math.min(tgt, Math.max(0, (distToEnd - 7) * .5));
+      if(b.light && !signalAllows(b, e, distToEnd, v.spd)){
+        tgt = Math.min(tgt, Math.max(0, (distToEnd - 7) * .5));
+        v.brakeReason = 'signal';
+      }
       else if(b.stop && distToEnd < 16){
         if(v.stopTimer < 1.4){ tgt = Math.min(tgt, Math.max(0, (distToEnd - 6) * .5)); if(distToEnd < 8) v.stopTimer += dt; }
       }
@@ -3991,6 +4045,276 @@ function updateSpikes(dt){
     }
     if(s.t > 180){ G.scene.remove(s.mesh); Pursuit.spikes.splice(i, 1); }
   }
+}
+/* ============================================================
+   TRAFFIC PHYSICALITY + LIVE SIGNALS
+   ============================================================ */
+
+/* ---- lane convention -------------------------------------------
+   Right-hand traffic. Travelling from a -> b along an edge, the
+   correct lane centre sits on the +normal side, where the normal is
+   the edge direction rotated +90 degrees in the render's handedness.
+   Every place that computes a lane offset now calls this, so the
+   convention can never drift between spawn, turn and steer again.
+------------------------------------------------------------------ */
+function laneOffset(edge, dir){
+  var lanes = edge.lanes || 1;
+  var half = edge.w * .5;
+  /* centre of the innermost forward lane, kept off the centreline and
+     off the curb */
+  var laneW = Math.min(3.6, (half - .6) / Math.max(1, lanes));
+  return (half - laneW * .5 - .4) * (dir > 0 ? -1 : 1);
+}
+function lanePoint(edge, dir, t, extra){
+  var a = NODES[dir > 0 ? edge.a : edge.b];
+  var b = NODES[dir > 0 ? edge.b : edge.a];
+  var ang = Math.atan2(b.z - a.z, b.x - a.x);
+  var off = laneOffset(edge, dir) + (extra || 0);
+  return {
+    x: a.x + (b.x - a.x) * t - Math.sin(ang) * off,
+    z: a.z + (b.z - a.z) * t + Math.cos(ang) * off,
+    ang: ang
+  };
+}
+
+/* ---- vehicle vs vehicle collision -------------------------------
+   Cars are treated as oriented capsules along their long axis. This is
+   cheap and stable and stops the pile-ups where two cars occupied the
+   same square of road and just sat inside each other.
+------------------------------------------------------------------ */
+/* 2D separating-axis test on two oriented boxes.
+   The old capsule test collapsed to zero distance whenever two cars
+   interpenetrated along their length, and the zero-distance fallback pushed
+   them apart sideways -- which can never unstack a nose-to-tail pile. SAT
+   always returns the true minimum translation vector, so a rear-end shunt
+   resolves backwards along the road the way it should. */
+function vehBox(v){
+  var c = Math.cos(v.h), s2 = Math.sin(v.h);
+  return {
+    x:v.x, z:v.z,
+    fx:c, fz:s2,
+    rx:-s2, rz:c,
+    hl:(v.P ? v.P.len : 4.8) * .5,
+    hw:(v.P ? v.P.wid : 1.9) * .5
+  };
+}
+function projRadius(b, ax, az){
+  return Math.abs(b.fx * ax + b.fz * az) * b.hl +
+         Math.abs(b.rx * ax + b.rz * az) * b.hw;
+}
+function satOverlap(A, B){
+  var axes = [[A.fx, A.fz], [A.rx, A.rz], [B.fx, B.fz], [B.rx, B.rz]];
+  var dx = B.x - A.x, dz = B.z - A.z;
+  var best = 1e9, bx = 0, bz = 0, i;
+  for(i = 0; i < 4; i++){
+    var ax = axes[i][0], az = axes[i][1];
+    var sep = Math.abs(dx * ax + dz * az);
+    var ov = projRadius(A, ax, az) + projRadius(B, ax, az) - sep;
+    if(ov <= 0) return null;
+    if(ov < best){
+      best = ov;
+      var sign = (dx * ax + dz * az) < 0 ? -1 : 1;
+      bx = ax * sign; bz = az * sign;
+    }
+  }
+  return { depth:best, nx:bx, nz:bz };
+}
+
+/* separate two vehicles, splitting the push by mass */
+function separate(v, o){
+  var hit = satOverlap(vehBox(v), vehBox(o));
+  if(!hit) return 0;
+  var nx = hit.nx, nz = hit.nz;
+  var push = hit.depth * 1.02 + .01;
+
+  var heavy = { semi:3, bus:3, boxtruck:3, van:1.6, swat:2.4 };
+  var mv = (v.def && heavy[v.def.body]) || 1;
+  var mo = (o.def && heavy[o.def.body]) || 1;
+  if(v.kind === 'player') mv = Math.max(mv, 2);
+  if(o.kind === 'player') mo = Math.max(mo, 2);
+  var total = mv + mo;
+
+  v.x -= nx * push * (mo / total); v.z -= nz * push * (mo / total);
+  o.x += nx * push * (mv / total); o.z += nz * push * (mv / total);
+
+  var rvx = (o.spd * Math.cos(o.h)) - (v.spd * Math.cos(v.h));
+  var rvz = (o.spd * Math.sin(o.h)) - (v.spd * Math.sin(v.h));
+  var closing = rvx * nx + rvz * nz;
+  if(closing < 0){
+    var nAng = Math.atan2(nz, nx);
+    var imp = -closing * .6;
+    v.spd -= imp * Math.cos(angDiff(nAng, v.h)) * (mo / total);
+    o.spd += imp * Math.cos(angDiff(nAng, o.h)) * (mv / total);
+    v.spd = clamp(v.spd, -14, 62);
+    o.spd = clamp(o.spd, -14, 62);
+  }
+  return push;
+}
+
+/* Is this stretch of lane already occupied? Spawning blind was putting cars
+   inside each other before the solver ever got a chance to run. */
+function laneFree(x, z, minD){
+  var i, m = minD || 9;
+  for(i = 0; i < G.traffic.length; i++){
+    var o = G.traffic[i];
+    if(dist2(x, z, o.x, o.z) < m * m) return false;
+  }
+  var pv = G.veh || G.cruiser;
+  if(pv && dist2(x, z, pv.x, pv.z) < m * m) return false;
+  return true;
+}
+
+function resolveVehicleCollisions(dt){
+  var pass;
+  for(pass = 0; pass < 3; pass++) collisionPass(dt, pass);
+}
+function collisionPass(dt, pass){
+  var list = G.traffic;
+  var i, j, n = list.length;
+  var px = G.player.x, pz = G.player.z;
+  for(i = 0; i < n; i++){
+    var v = list[i];
+    if(!v.alive) continue;
+    /* No distance gate. Traffic simulates out to the despawn radius, so gating
+       collision to the camera let distant cars stack up unchecked and they were
+       already interpenetrated by the time the player arrived. The fleet is
+       capped, so all-pairs with a broad phase is cheap. */
+    for(j = i + 1; j < n; j++){
+      var o = list[j];
+      if(!o.alive) continue;
+      var dq = (v.x - o.x) * (v.x - o.x) + (v.z - o.z) * (v.z - o.z);
+      if(dq > 169) continue;                      /* 13m broad phase */
+      var push = separate(v, o);
+      if(push > .35){
+        if(pass === 0){ v.nudge = (v.nudge || 0) + dt; o.nudge = (o.nudge || 0) + dt; }
+      }
+    }
+    /* against the player's vehicle */
+    var pv = G.veh || G.cruiser;
+    if(pv && pv !== v){
+      var dp = (v.x - pv.x) * (v.x - pv.x) + (v.z - pv.z) * (v.z - pv.z);
+      if(dp < 169){
+        var pushed = separate(pv, v);
+        if(pushed > .5 && pass === 0){
+          var imp = Math.abs(pv.spd - v.spd);
+          if(imp > 5 && !v.hitCool){
+            v.hitCool = 1.2;
+            pv.dmg = clamp(pv.dmg + imp * .0035 / Math.max(pv.def.dur, .2), 0, 1);
+            Audio_crash(clamp(imp / 30, .12, .8));
+            shakeCam(clamp(imp * .016, .06, .5));
+            if(G.onDuty && imp > 9){
+              v.driver.cooperation = clamp(v.driver.cooperation - .3, 0, 1);
+              addXP(-40, 'Collision with a civilian vehicle');
+              G.conduct = clamp(G.conduct - .03, 0, 1);
+            }
+          }
+        }
+      }
+    }
+    if(v.hitCool && pass === 0) v.hitCool = Math.max(0, v.hitCool - dt);
+    /* a car that has been shoved for a while gives up and re-acquires a lane */
+    if(pass === 0 && v.nudge > 2.2){ v.nudge = 0; snapToLane(v); }
+  }
+}
+/* put a wedged car back on the nearest legal lane heading */
+function snapToLane(v){
+  var n = nearestEdge(v.x, v.z);
+  if(n.e < 0) return;
+  var e = EDGES[n.e];
+  var a = NODES[e.a], b = NODES[e.b];
+  var ang = Math.atan2(b.z - a.z, b.x - a.x);
+  /* keep whichever direction is closer to how the car already points */
+  var dir = Math.abs(angDiff(ang, v.h)) < Math.PI / 2 ? 1 : -1;
+  v.edge = e; v.dir = dir; v.t = n.t;
+  var lp = lanePoint(e, dir, clamp(n.t, .02, .98), 0);
+  v.x = lp.x; v.z = lp.z;
+  v.h = dir > 0 ? lp.ang : lp.ang + Math.PI;
+  v.spd = Math.min(v.spd, 6);
+  v.stuck = 0;
+}
+
+/* ---- stuck detection -------------------------------------------- */
+function updateStuck(v, dt){
+  if(v.pulled || v.beingStopped || v.fleeing){ v.stuck = 0; return; }
+  if(Math.abs(v.spd) < .7 && v.brakeReason !== 'signal' && v.brakeReason !== 'queue'){
+    v.stuck = (v.stuck || 0) + dt;
+    if(v.stuck > 5){ snapToLane(v); }
+  } else if(Math.abs(v.spd) > 2){
+    v.stuck = 0;
+  }
+}
+
+/* ============================================================
+   LIVE TRAFFIC SIGNALS
+   The heads are baked into the chunk mesh, so the lamps have to be
+   separate objects. A small pool follows the player and lights only
+   the signals actually in view.
+   ============================================================ */
+var SIGPOOL = [], SIGMAX = 28, sigGroup = null;
+var SIG_R = 0xd83a2a, SIG_A = 0xe0a326, SIG_G = 0x3fbf5a, SIG_OFF = 0x1a1d22;
+
+function initSignals(scene){
+  sigGroup = new THREE.Group();
+  sigGroup.frustumCulled = false;
+  var geo = new THREE.SphereGeometry(.30, 6, 5);
+  var i, j;
+  for(i = 0; i < SIGMAX; i++){
+    var g = new THREE.Group();
+    var lamps = [];
+    for(j = 0; j < 3; j++){
+      var m = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ color:SIG_OFF }));
+      m.position.set(0, 1.0 - j * .52, 0);
+      g.add(m); lamps.push(m);
+    }
+    g.visible = false;
+    g.userData.lamps = lamps;
+    sigGroup.add(g);
+    SIGPOOL.push(g);
+  }
+  scene.add(sigGroup);
+}
+/* which signal nodes are worth drawing right now */
+function updateSignals(dt){
+  if(!sigGroup) return;
+  var px = G.player.x, pz = G.player.z;
+  var used = 0, i, j;
+  for(i = 0; i < NODES.length && used < SIGMAX; i++){
+    var n = NODES[i];
+    if(!n.light) continue;
+    if(Math.abs(n.x - px) > 150 || Math.abs(n.z - pz) > 150) continue;
+    /* one head per approach, up to four */
+    for(j = 0; j < n.e.length && used < SIGMAX; j++){
+      var e = EDGES[n.e[j]];
+      var other = NODES[e.a].i === n.i ? NODES[e.b] : NODES[e.a];
+      var ang = Math.atan2(other.z - n.z, other.x - n.x);
+      var g = SIGPOOL[used++];
+      /* head hangs over the approach lane, facing oncoming traffic */
+      var off = e.w * .5 + 1.0;
+      g.position.set(n.x + Math.cos(ang) * off * 1.6 - Math.sin(ang) * (e.w * .25),
+                     (n.y || 0) + 5.4,
+                     n.z + Math.sin(ang) * off * 1.6 + Math.cos(ang) * (e.w * .25));
+      g.rotation.y = -ang;
+      g.visible = true;
+      var green = lightGreen(n, e);
+      var amber = n.light.amber && green;
+      var lamps = g.userData.lamps;
+      lamps[0].material.color.setHex(!green ? SIG_R : SIG_OFF);
+      lamps[1].material.color.setHex(amber ? SIG_A : SIG_OFF);
+      lamps[2].material.color.setHex((green && !amber) ? SIG_G : SIG_OFF);
+    }
+  }
+  for(i = used; i < SIGMAX; i++) SIGPOOL[i].visible = false;
+}
+
+/* Amber must actually mean something: a car close enough to the line
+   commits, anything further back stops. */
+function signalAllows(node, edge, distToLine, spd){
+  if(!node || !node.light) return true;
+  var green = lightGreen(node, edge);
+  if(!green) return false;
+  if(!node.light.amber) return true;
+  /* amber: commit only if stopping would mean slamming the brakes */
+  return distToLine < Math.max(6, spd * 1.1);
 }
 /* ============================================================
    RADAR / LIDAR
@@ -7728,6 +8052,12 @@ function initEngine(){
   renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
   renderer.setSize(window.innerWidth, window.innerHeight);
   renderer.shadowMap.enabled = false;
+  /* Without tone mapping the three lights summed past 1.0 and every surface
+     clipped to white -- which is why the grass and asphalt read as one flat
+     grey sheet. Filmic curve plus sRGB output keeps the highlights in range. */
+  renderer.toneMapping = THREE.ACESFilmicToneMapping;
+  renderer.toneMappingExposure = 1.02;
+  renderer.outputEncoding = THREE.sRGBEncoding;
 
   scene = new THREE.Scene();
   G.scene = scene;
@@ -7738,12 +8068,12 @@ function initEngine(){
   camera = new THREE.PerspectiveCamera(66, window.innerWidth / window.innerHeight, 0.35, 3400);
   camera.position.set(0, 8, 14);
 
-  hemi = new THREE.HemisphereLight(0xbfd8f5, 0x4a4033, 0.75);
+  hemi = new THREE.HemisphereLight(0xbfd8f5, 0x55503f, 0.42);
   scene.add(hemi);
-  sun = new THREE.DirectionalLight(0xfff2d8, 0.95);
+  sun = new THREE.DirectionalLight(0xfff2d8, 0.78);
   sun.position.set(360, 620, 220);
   scene.add(sun);
-  ambient = new THREE.AmbientLight(0xffffff, 0.22);
+  ambient = new THREE.AmbientLight(0xffffff, 0.10);
   scene.add(ambient);
 
   /* procedural sky + cloud layer + the shared grain texture */
@@ -7752,6 +8082,7 @@ function initEngine(){
   cloudMesh = buildClouds(scene, buildCloudTexture());
 
   buildRain();
+  initSignals(scene);
   window.addEventListener('resize', onResize, false);
 }
 function onResize(){
@@ -7815,10 +8146,12 @@ function updateSky(dt){
   var wx = WX[G.weather] || WX.clear;
   var key = SKY_KEYS[G.weather] || SKY_KEYS.clear;
 
-  /* --- lights --- */
-  sun.intensity = day * 1.05 * wx.sun;
-  hemi.intensity = .18 + day * .60 * (wx.amb / .55);
-  ambient.intensity = .10 + day * .16;
+  /* --- lights ---
+     Budgeted so sun + hemi + ambient peaks near 1.15 at noon. Anything much
+     above that and the filmic curve still washes the midtones out. */
+  sun.intensity = day * .72 * wx.sun;
+  hemi.intensity = .12 + day * .34 * (wx.amb / .55);
+  ambient.intensity = .07 + day * .06;
   sun.color.setHex(day < .32 ? 0xffc79a : 0xfff2d8);
 
   /* --- sky gradient --- */
@@ -8076,6 +8409,7 @@ function bindInput(){
   tap($('btnMap'), toggleMap);
   tap($('btnWpn'), toggleWeaponWheel);
   tap($('btnPause'), togglePause);
+  tap($('btnFull'), toggleFullscreen);
   tap($('btnFire'), fireWeapon);
   tap($('wheelClose'), closeWeaponWheel);
   tap($('pzClose'), closePause);
@@ -8112,6 +8446,41 @@ function bindInput(){
     applyLook((e.clientX - mx) * .006, (e.clientY - my) * .003);
     mx = e.clientX; my = e.clientY;
   }, false);
+}
+/* iOS Safari has no Element.requestFullscreen, only the webkit prefix, and on
+   iPhone it is unavailable entirely -- so fall back to a CSS layer that fills
+   the viewport and hides the browser chrome behind scroll. */
+function toggleFullscreen(){
+  var el = document.documentElement;
+  var doc = document;
+  var isFull = doc.fullscreenElement || doc.webkitFullscreenElement;
+  try {
+    if(!isFull){
+      if(el.requestFullscreen) { el.requestFullscreen(); G.fullscreen = true; }
+      else if(el.webkitRequestFullscreen) { el.webkitRequestFullscreen(); G.fullscreen = true; }
+      else { cssFullscreen(true); }
+    } else {
+      if(doc.exitFullscreen) doc.exitFullscreen();
+      else if(doc.webkitExitFullscreen) doc.webkitExitFullscreen();
+      G.fullscreen = false;
+      cssFullscreen(false);
+    }
+  } catch(e){ cssFullscreen(!G.cssFull); }
+  setTimeout(onResize, 260);
+}
+function cssFullscreen(on){
+  G.cssFull = on;
+  var b = document.body;
+  if(on){
+    b.className = 'fs';
+    window.scrollTo(0, 1);
+    toast('FULLSCREEN \u2014 SWIPE DOWN TO EXIT', '');
+  } else {
+    b.className = '';
+  }
+  var fb = $('btnFull');
+  if(fb) fb.className = 'tsm' + (on ? ' on' : '');
+  setTimeout(onResize, 60);
 }
 function applyLook(dx, dy){
   G.pitch = clamp(G.pitch + dy, -.5, .7);
@@ -8172,6 +8541,7 @@ function onKey(k, e){
   if(k === 'm'){ if(G.mdtOpen) closeMDT(); else openMDT(G.mdtTab); return; }
   if(k === 'tab'){ if(e) e.preventDefault(); if(G.menuOpen) closeMenu(); else openMenu(); return; }
   if(k === 'n'){ toggleMap(); return; }
+  if(k === 'f' && K['shift']){ toggleFullscreen(); return; }
   if(k === 'c'){ G.camMode = (G.camMode + 1) % CAMMODES.length; toast('CAMERA \u2014 ' + CAMMODES[G.camMode].toUpperCase(), ''); return; }
   if(k === 'x'){ deploySpikes(); return; }
   if(k === 'v'){ toggleVoice(); return; }
@@ -8395,7 +8765,10 @@ function populate(dt){
       var ax = NODES[e.a].x + dxE * t, az = NODES[e.a].z + dzE * t;
       var d = dist(px, pz, ax, az);
       if(d < 95) continue;
-      var nv = spawnTrafficAt(ei, t, chance(.5) ? 1 : -1);
+      var sdir = chance(.5) ? 1 : -1;
+      var slp = lanePoint(e, sdir, t, 0);
+      if(!laneFree(slp.x, slp.z, 11)) continue;
+      var nv = spawnTrafficAt(ei, t, sdir);
       scene.add(nv.mesh);
       G.traffic.push(nv);
       done++;
@@ -8488,22 +8861,25 @@ function tick(ts){
     pv.physics(dt); pv.sync();
   }
 
-  /* traffic */
+  /* traffic: decide, integrate, THEN resolve contacts, THEN push to the meshes.
+     Resolving after sync left every mesh a frame behind the solver, which is
+     what made cars look like they were sitting inside one another. */
   for(i = G.traffic.length - 1; i >= 0; i--){
     var v = G.traffic[i];
-    var far = dist(G.player.x, G.player.z, v.x, v.z);
-    if(far > 260 && !v.fleeing && v !== G.stopVeh){
-      /* cheap update far away */
-      trafficUpdate(v, dt);
-      v.physics(dt);
-      v.mesh.position.set(v.x, v.y, v.z);
-      v.mesh.rotation.y = -v.h;
-      continue;
-    }
     trafficUpdate(v, dt);
     v.physics(dt);
-    v.sync();
-    v.updateLights(dt, G.night);
+  }
+  resolveVehicleCollisions(dt);
+  for(i = G.traffic.length - 1; i >= 0; i--){
+    var v2 = G.traffic[i];
+    var far = dist(G.player.x, G.player.z, v2.x, v2.z);
+    if(far > 260 && !v2.fleeing && v2 !== G.stopVeh){
+      v2.mesh.position.set(v2.x, v2.y, v2.z);
+      v2.mesh.rotation.y = -v2.h;
+      continue;
+    }
+    v2.sync();
+    v2.updateLights(dt, G.night);
   }
 
   /* peds */
@@ -8515,6 +8891,7 @@ function tick(ts){
 
   /* police systems */
   updateWeapons(dt);
+  updateSignals(dt);
   Radar.update(dt);
   ALPR.update(dt);
   Pursuit.update(dt);
@@ -8673,6 +9050,7 @@ G.walkAnim = 0;
 G.paused = false; G.pauseOpen = false; G.mainOpen = false; G.mmTab = 'home'; G.pauseTab = 'main';
 G.shakeMul = 1; G.drawDist = 1150; G.trafficMul = 1; G.pedMul = 1;
 G.forceLog = [];
+G.fullscreen = false; G.cssFull = false;
 
 boot();
 
