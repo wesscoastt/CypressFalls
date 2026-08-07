@@ -358,6 +358,91 @@ body.fs #gl{width:100vw !important;height:100vh !important;}
   #minimapWrap{width:132px;height:132px;}
   #speedo{transform:scale(.84);transform-origin:bottom left;}
 }
+
+/* ================= LAYOUT ZONES (no overlaps) =================
+   bottom-left  : minimap + street bar, speedo stacked above
+   bottom-right : gas / brake / act / fire
+   left-middle  : movement stick
+   top-right    : status card, then the small button column beneath it
+   top-left     : unit card
+=============================================================== */
+#minimapWrap{position:absolute !important;left:calc(10px + var(--sal)) !important;right:auto !important;
+  bottom:calc(10px + var(--sab)) !important;width:172px;height:172px;border-radius:50%;overflow:hidden;
+  border:2px solid rgba(0,0,0,.65);box-shadow:0 4px 18px rgba(0,0,0,.55);background:#0b1a24;z-index:26;}
+#mmLabel{position:absolute;left:0;right:0;bottom:0;text-align:center;font:700 9px/1.9 ui-monospace,Menlo,monospace;
+  letter-spacing:.12em;text-transform:uppercase;background:rgba(6,10,16,.88);color:#dfe6ef;}
+#speedo{position:absolute !important;left:calc(10px + var(--sal)) !important;
+  bottom:calc(190px + var(--sab)) !important;min-width:150px;z-index:26;}
+/* stick clears the minimap */
+#stick{left:calc(200px + env(safe-area-inset-left)) !important;
+  bottom:calc(24px + env(safe-area-inset-bottom)) !important;}
+/* small buttons hang under the status card, never over the map */
+#rowTop{right:calc(10px + env(safe-area-inset-right)) !important;
+  top:calc(96px + env(safe-area-inset-top)) !important;}
+#rowLeft{left:auto !important;right:calc(84px + env(safe-area-inset-right)) !important;
+  bottom:calc(212px + env(safe-area-inset-bottom)) !important;flex-direction:row !important;flex-wrap:wrap;
+  max-width:210px;justify-content:flex-end;}
+.tbtn.gas{right:calc(20px + env(safe-area-inset-right));bottom:calc(116px + env(safe-area-inset-bottom));width:80px;height:80px;}
+.tbtn.brk{right:calc(112px + env(safe-area-inset-right));bottom:calc(34px + env(safe-area-inset-bottom));width:68px;height:68px;}
+.tbtn.act{right:calc(24px + env(safe-area-inset-right));bottom:calc(30px + env(safe-area-inset-bottom));width:70px;height:70px;}
+.tbtn.fire{right:calc(106px + env(safe-area-inset-right));bottom:calc(122px + env(safe-area-inset-bottom));width:62px;height:62px;}
+#objective{bottom:calc(200px + var(--sab)) !important;left:50% !important;transform:translateX(-50%);}
+#prompt{bottom:calc(120px + var(--sab)) !important;}
+#weapon{bottom:calc(206px + env(safe-area-inset-bottom)) !important;
+  right:calc(184px + env(safe-area-inset-right)) !important;}
+
+@media (orientation:landscape) and (max-height:460px){
+  #minimapWrap{width:128px;height:128px;}
+  #speedo{bottom:calc(146px + var(--sab)) !important;transform:scale(.8);transform-origin:bottom left;}
+  #stick{left:calc(152px + env(safe-area-inset-left)) !important;
+         bottom:calc(14px + env(safe-area-inset-bottom)) !important;
+         width:104px;height:104px;}
+  #rowTop{top:calc(74px + env(safe-area-inset-top)) !important;}
+  #rowLeft{bottom:calc(176px + env(safe-area-inset-bottom)) !important;}
+  #objective{bottom:calc(152px + var(--sab)) !important;}
+  #weapon{bottom:calc(160px + env(safe-area-inset-bottom)) !important;}
+  .tsm{min-width:54px;padding:7px 8px;font-size:9px;}
+}
+
+
+/* ============ HUD DENSITY ============
+   Minimal keeps only what you cannot drive without. Compact is the
+   phone default. Full is the old desktop layout. */
+body.hud-minimal #dispatch,
+body.hud-minimal #alpr,
+body.hud-minimal #radar,
+body.hud-minimal #topRight,
+body.hud-minimal #rowLeft,
+body.hud-minimal #prompt{display:none !important;}
+body.hud-minimal #unitBox{min-width:0;padding:5px 9px;}
+body.hud-minimal #unitBox .rank,
+body.hud-minimal #unitBox #xpWrap{display:none;}
+body.hud-minimal #speedo{min-width:0;padding:6px 9px;}
+body.hud-minimal #speedo .gaugeLbl,
+body.hud-minimal #speedo #fuelG,
+body.hud-minimal #speedo #dmgG{display:none;}
+
+body.hud-compact #dispatch{max-height:96px;opacity:.9;}
+body.hud-compact #unitBox{min-width:0;padding:6px 10px;}
+body.hud-compact #topRight{min-width:0;padding:6px 10px;}
+body.hud-compact #speedo{min-width:132px;padding:7px 10px 8px;}
+body.hud-compact #rowLeft{max-width:170px;}
+
+body.hs-s #hud{font-size:92%;}
+body.hs-s #unitBox,body.hs-s #topRight,body.hs-s #speedo{transform:scale(.86);}
+body.hs-s #unitBox,body.hs-s #speedo{transform-origin:left;}
+body.hs-s #topRight{transform-origin:right;}
+body.hs-l #unitBox,body.hs-l #topRight,body.hs-l #speedo{transform:scale(1.12);}
+body.hs-l #unitBox{transform-origin:top left;}
+body.hs-l #topRight{transform-origin:top right;}
+body.hs-l #speedo{transform-origin:bottom left;}
+body.hs-l .tsm{min-width:74px;padding:11px 12px;font-size:11px;}
+
+/* on a short landscape phone, force the tighter layout regardless */
+@media (orientation:landscape) and (max-height:430px){
+  #dispatch{display:none !important;}
+  #unitBox #xpWrap{display:none;}
+}
 </style>
 </head>
 <body>
@@ -430,6 +515,8 @@ body.fs #gl{width:100vw !important;height:100vh !important;}
     <div class="tsm" id="btnSiren">SIREN</div>
     <div class="tsm" id="btnRadar">RADAR</div>
     <div class="tsm" id="btnAlpr">ALPR</div>
+    <div class="tsm" id="btnBackup">BACKUP</div>
+    <div class="tsm" id="btnAir">AIR</div>
   </div>
   <div id="rowTop">
     <div class="tsm" id="btnDuty">DUTY</div>
@@ -437,6 +524,7 @@ body.fs #gl{width:100vw !important;height:100vh !important;}
     <div class="tsm" id="btnMap">MAP</div>
     <div class="tsm" id="btnWpn">WPN</div>
     <div class="tsm" id="btnCam">CAM</div>
+    <div class="tsm" id="btnExit">EXIT</div>
     <div class="tsm" id="btnFull">&#9974;</div>
     <div class="tsm" id="btnPause">&#9208;</div>
   </div>
@@ -457,6 +545,9 @@ body.fs #gl{width:100vw !important;height:100vh !important;}
 </div></div>
 
 <div id="mainmenu"><div id="mmBox">
+  <div class="mtop"><div class="logo"></div><div class="ttl">CYPRESS FALLS PATROL</div>
+    <div class="sub mono" id="mmSub">BAYARD COUNTY</div>
+    <div class="mclose" id="mmClose">CLOSE</div></div>
   <div id="mmTabs"></div>
   <div id="mmBody"></div>
 </div></div>
@@ -717,7 +808,7 @@ Builder.prototype.geo = function(uvScale){
   g.setAttribute('position', new THREE.Float32BufferAttribute(this.p, 3));
   g.setAttribute('normal', new THREE.Float32BufferAttribute(this.n, 3));
   g.setAttribute('color', new THREE.Float32BufferAttribute(this.c, 3));
-  var sc = uvScale || 0.14;
+  var sc = uvScale || 0.42;
   var uv = new Float32Array((this.p.length / 3) * 2);
   var i, j = 0;
   for(i = 0; i < this.p.length; i += 3){
@@ -982,9 +1073,9 @@ var CHUNK = 250;
 var CHUNKS = Math.ceil((WORLD * 2) / CHUNK);
 
 var C = {
-  asphalt:0x33373d, asphaltOld:0x3c4046, concrete:0x9aa0a8, sidewalk:0xa8aeb6,
-  dirt:0xa8916a, gravel:0x8f8b84, grass:0x6f9451, grassDry:0x9aa05e, field:0xbba95f,
-  fieldGreen:0x7fa055, water:0x2f5f7a, line:0xe6e8ea, lineY:0xd6b83c,
+  asphalt:0x2f3339, asphaltOld:0x383c42, concrete:0x8a9098, sidewalk:0x999fa8,
+  dirt:0x9c8560, gravel:0x84807a, grass:0x5d8a3f, grassDry:0x87904e, field:0xa39549,
+  fieldGreen:0x6e9448, water:0x2f5f7a, line:0xdfe2e6, lineY:0xd6b83c,
   roofDark:0x3e4249, roofTan:0x8a7c68, brickRed:0x8f5b45, brickTan:0xb59b7a,
   stucco:0xd9cfbb, stuccoW:0xe6e1d6, wood:0x8d7458, metalBlue:0x4a6f8a,
   glass:0x2a3f52, glassLit:0x6f8fa8, trunk:0x5b4632, leaf:0x3f7a3f, leaf2:0x4f8a45,
@@ -1806,6 +1897,835 @@ function bPort(B, x, z){
   B.box(x + 96, 5, z + 90, 60, 10, 26, 0xa8aeb4, 0);
   addSolid(x + 96, z + 90, 30, 13, 11, 0);
 }
+
+/* Mast-arm geometry and the live lamp pool were computing head positions from
+   two different formulas, so the coloured lamps floated away from the housings.
+   Both now call this. */
+function signalMastWidth(n){
+  var k, mw = 0;
+  for(k = 0; k < n.e.length; k++) mw = Math.max(mw, EDGES[n.e[k]].w);
+  return mw;
+}
+function signalHeadPos(n, idx){
+  var mw = signalMastWidth(n);
+  var a = idx / 4 * TAU + Math.PI / 4;
+  var px = n.x + Math.cos(a) * (mw / 2 + 2.6);
+  var pz = n.z + Math.sin(a) * (mw / 2 + 2.6);
+  var ax = Math.cos(a + Math.PI), az = Math.sin(a + Math.PI);
+  return {
+    poleX:px, poleZ:pz,
+    x:px + ax * 4.6, y:(n.y || 0) + 5.9, z:pz + az * 4.6,
+    face:Math.atan2(az, ax) + Math.PI
+  };
+}
+/* ============================================================
+   TEXAS COMMERCIAL ARCHITECTURE
+   Flat-shaded low-poly forms with real signage. Signs cannot live in
+   the chunk mesh (they need textures), so they are registered here and
+   built as a separate batched pass after the world bakes.
+   ============================================================ */
+
+var SIGNS = [], SIGN_MAX = 420;
+function addSign(x, y, z, rot, w, h, txt, bg, fg, style){
+  if(SIGNS.length >= SIGN_MAX) return;
+  SIGNS.push({ x:x, y:y, z:z, rot:rot, w:w, h:h, txt:txt, bg:bg, fg:fg, style:style || 'board' });
+}
+
+/* ---- palettes ---- */
+var FACADE = [0xe8e0cf, 0xdcd3c0, 0xc9bfa8, 0xd8cbb4, 0xe4dcc9, 0xcfc4ae];
+var BRICK  = [0x9c5a3c, 0x8d4f36, 0xa66444, 0x7d4530];
+var AWNING = [0xb03a2e, 0x1f618d, 0x196f3d, 0x8a6d3b, 0x5b3a6b, 0x2e4053];
+var SHOPS  = ['GROCERY','PHARMACY','LIQUOR','CLEANERS','RESTAURANT','NAILS','BARBER','TACOS',
+              'LAUNDRY','INSURANCE','DENTIST','PAWN','TAX SERVICE','PHONES','BAKERY','SALON',
+              'DOLLAR','HARDWARE','VACANT','TITLE LOANS','BBQ','DONUTS','CHECK CASHING','THRIFT'];
+
+/* ============================================================
+   STRIP MALL  (reference: awninged unit row with sign boards)
+   ============================================================ */
+function bStripMall(B, x, z, rot, w, d, units){
+  var wall = jitCol(wpick(FACADE), .06);
+  var h = wrng(5.4, 6.4);
+  var px = Math.cos(rot + Math.PI / 2), pz = Math.sin(rot + Math.PI / 2);
+  var qx = Math.cos(rot), qz = Math.sin(rot);
+  units = units || Math.max(3, Math.min(8, Math.floor(w / 9)));
+  var uw = w / units;
+
+  /* main volume + parapet */
+  B.box(x, h / 2, z, w, h, d, wall, rot);
+  B.box(x, h + .34, z, w + .55, .68, d + .55, shade(wall, .80), rot);
+
+  var i;
+  for(i = 0; i < units; i++){
+    var t = -w / 2 + uw * (i + .5);
+    var ux = x + t * qx, uz = z + t * qz;
+    var front = d / 2;
+    var accent = jitCol(wpick(AWNING), .08);
+    var brickBay = wrand() < .28;
+
+    /* some bays are brick-faced and step forward, like the reference */
+    if(brickBay){
+      var bc = jitCol(wpick(BRICK), .07);
+      B.box(ux + px * (front + .22), h / 2, uz + pz * (front + .22), uw * .96, h, .45, bc, rot);
+    }
+    /* raised parapet cap over a bay breaks up the roofline */
+    if(wrand() < .34){
+      B.box(ux + px * (front - .4), h + 1.05, uz + pz * (front - .4), uw * .82, 1.5, 1.5,
+            brickBay ? jitCol(wpick(BRICK), .05) : shade(wall, 1.06), rot);
+    }
+
+    /* storefront glass + door */
+    B.box(ux + px * (front + .05), 1.95, uz + pz * (front + .05), uw * .80, 2.9, .12, C.glass, rot);
+    B.box(ux + px * (front + .09) - qx * uw * .30, 1.15, uz + pz * (front + .09) - qz * uw * .30,
+          uw * .20, 2.3, .10, shade(C.glass, .82), rot);
+    /* bulkhead under the glass */
+    B.box(ux + px * (front + .07), .30, uz + pz * (front + .07), uw * .84, .60, .16, shade(wall, .86), rot);
+
+    /* awning: a wedge, not a slab */
+    var ay = 3.45;
+    B.box(ux + px * (front + .95), ay, uz + pz * (front + .95), uw * .88, .16, 1.85, accent, rot);
+    B.box(ux + px * (front + 1.82), ay - .34, uz + pz * (front + 1.82), uw * .88, .62, .16, shade(accent, .88), rot);
+    B.box(ux + px * (front + .48), ay + .30, uz + pz * (front + .48), uw * .88, .70, .14, shade(accent, 1.05), rot);
+
+    /* sign board above the awning */
+    var sy = h - .95;
+    B.box(ux + px * (front + .18), sy, uz + pz * (front + .18), uw * .78, 1.25, .22, shade(accent, .92), rot);
+    addSign(ux + px * (front + .32), sy, uz + pz * (front + .32), rot,
+            uw * .70, 1.02, wpick(SHOPS), accent, 0xf4f4f0, 'board');
+  }
+
+  /* roof units */
+  var n = Math.max(2, Math.floor(w / 9));
+  for(i = 0; i < n; i++){
+    var rt = -w / 2 + (i + .5) * (w / n);
+    B.box(x + rt * qx + px * wrng(-d / 5, d / 5), h + 1.0,
+          z + rt * qz + pz * wrng(-d / 5, d / 5), 2.2, 1.0, 1.7, 0x9099a2, rot);
+  }
+  addSolid(x, z, w / 2, d / 2, h, rot);
+  return { hw:w / 2, hd:d / 2 };
+}
+
+/* ============================================================
+   GROCERY / BIG BOX  (reference: brick box, glass entry tower)
+   ============================================================ */
+function bGrocery(B, x, z, rot, name, brand){
+  var w = 74, d = 46, h = 9.5;
+  var brick = jitCol(wpick(BRICK), .05);
+  var px = Math.cos(rot + Math.PI / 2), pz = Math.sin(rot + Math.PI / 2);
+  var qx = Math.cos(rot), qz = Math.sin(rot);
+  brand = brand || 0xd23b2c;
+
+  B.box(x, h / 2, z, w, h, d, brick, rot);
+  B.box(x, h + .5, z, w + .8, 1.0, d + .8, shade(brick, .74), rot);
+
+  /* entry tower, taller, glass grid on two faces */
+  var tw = 20, th = 14;
+  var tx = x - qx * (w * .18), tz = z - qz * (w * .18);
+  B.box(tx, th / 2, tz + 0, tw, th, d * .52, shade(brick, 1.05), rot);
+  B.box(tx, th + .55, tz, tw + 1.0, 1.1, d * .52 + 1.0, shade(brick, .72), rot);
+  /* glass curtain wall with mullions */
+  var gf = d * .26 + .1;
+  B.box(tx + px * gf, 7.4, tz + pz * gf, tw * .78, 11.0, .14, C.glass, rot);
+  var i;
+  for(i = 0; i < 6; i++){
+    var mt = -tw * .39 + (i / 5) * tw * .78;
+    B.box(tx + mt * qx + px * (gf + .09), 7.4, tz + mt * qz + pz * (gf + .09), .22, 11.0, .10, 0x2e3238, rot);
+  }
+  for(i = 0; i < 4; i++){
+    B.box(tx + px * (gf + .09), 2.6 + i * 2.9, tz + pz * (gf + .09), tw * .78, .20, .10, 0x2e3238, rot);
+  }
+  /* brick piers flanking the entry */
+  B.box(tx + tw * .48 * qx + px * (gf - .1), 6.4, tz + tw * .48 * qz + pz * (gf - .1), 2.0, 12.8, 1.6, shade(brick, .92), rot);
+  B.box(tx - tw * .48 * qx + px * (gf - .1), 6.4, tz - tw * .48 * qz + pz * (gf - .1), 2.0, 12.8, 1.6, shade(brick, .92), rot);
+  /* name across the tower */
+  addSign(tx + px * (gf + .30), 11.0, tz + pz * (gf + .30), rot, tw * .62, 2.6, name || 'GROCERY', brand, 0xffffff, 'channel');
+
+  /* long entry canopy along the front of the main box */
+  var cf = d / 2 + 2.4;
+  B.box(x + qx * (w * .22) + px * cf, 5.0, z + qz * (w * .22) + pz * cf, w * .46, .30, 5.0, 0xd7dade, rot);
+  for(i = 0; i < 4; i++){
+    var ct = w * .06 + i * (w * .38 / 3);
+    B.box(x + ct * qx + px * (cf + 2.2), 2.5, z + ct * qz + pz * (cf + 2.2), .34, 5.0, .34, 0xb9bec4, rot);
+  }
+  /* secondary GROCERY sign on the main box */
+  B.box(x + qx * (w * .24) + px * (d / 2 + .06), 7.6, z + qz * (w * .24) + pz * (d / 2 + .06), w * .30, 2.0, .18, shade(brick, 1.10), rot);
+  addSign(x + qx * (w * .24) + px * (d / 2 + .22), 7.6, z + qz * (w * .24) + pz * (d / 2 + .22), rot,
+          w * .24, 1.6, 'GROCERY', shade(brick, 1.10), brand, 'channel');
+  /* storefront glazing along the front */
+  B.box(x + qx * (w * .22) + px * (d / 2 + .05), 2.4, z + qz * (w * .22) + pz * (d / 2 + .05), w * .42, 4.2, .13, C.glass, rot);
+
+  /* cart corrals */
+  for(i = 0; i < 3; i++){
+    var kx = x + (w * .06 + i * 6.5) * qx + px * (d / 2 + 6.5);
+    var kz = z + (w * .06 + i * 6.5) * qz + pz * (d / 2 + 6.5);
+    B.box(kx, .55, kz, 1.6, 1.1, 3.4, 0xa8adb4, rot);
+  }
+  /* rooftop plant */
+  for(i = 0; i < 7; i++){
+    B.box(x + wrng(-w / 2.4, w / 2.4) * qx + px * wrng(-d / 3, d / 3), h + 1.1,
+          z + wrng(-w / 2.4, w / 2.4) * qz + pz * wrng(-d / 3, d / 3), 3.0, 1.2, 2.4, 0x9099a2, rot);
+  }
+  addSolid(x, z, w / 2, d / 2, h, rot);
+  bPylon(B, x - qx * (w / 2 + 12), z - qz * (w / 2 + 12), brand);
+  return { hw:w / 2, hd:d / 2 };
+}
+
+/* ============================================================
+   AUTO REPAIR  (reference: roll-up bays, sign band, parapet)
+   ============================================================ */
+function bAutoRepair(B, x, z, rot){
+  var w = 26, d = 18, h = 6.2;
+  var wall = jitCol(0xd8d6d0, .05);
+  var px = Math.cos(rot + Math.PI / 2), pz = Math.sin(rot + Math.PI / 2);
+  var qx = Math.cos(rot), qz = Math.sin(rot);
+
+  B.box(x, h / 2, z, w, h, d, wall, rot);
+  /* stepped parapet cap */
+  B.box(x, h + .30, z, w + .7, .60, d + .7, shade(wall, .80), rot);
+  B.box(x, h + .78, z, w + .3, .40, d + .3, shade(wall, .88), rot);
+  /* base course */
+  B.box(x, .35, z, w + .35, .70, d + .35, shade(wall, .74), rot);
+
+  /* two roll-up bay doors, recessed with a lintel */
+  var i;
+  for(i = 0; i < 2; i++){
+    var t = -3.2 + i * 8.6;
+    var bx = x + t * qx + px * (d / 2 + .04);
+    var bz = z + t * qz + pz * (d / 2 + .04);
+    B.box(bx, 2.15, bz, 6.4, 4.3, .16, 0x3d434a, rot);              /* dark opening */
+    B.box(bx, 3.95, bz, 6.9, .55, .28, shade(wall, .92), rot);      /* lintel */
+    /* slats suggest a shutter half open */
+    var j;
+    for(j = 0; j < 4; j++){
+      B.box(bx, 3.55 - j * .30, bz, 6.2, .17, .22, 0xb6bbc1, rot);
+    }
+    /* pier between bays */
+    B.box(x + (t + 4.3) * qx + px * (d / 2 + .10), h / 2, z + (t + 4.3) * qz + pz * (d / 2 + .10),
+          1.5, h, .40, shade(wall, .94), rot);
+  }
+  /* office door + window on the left end */
+  B.box(x - 10.6 * qx + px * (d / 2 + .05), 1.6, z - 10.6 * qz + pz * (d / 2 + .05), 2.6, 3.2, .12, C.glass, rot);
+  /* sign band */
+  addSign(x + 1.2 * qx + px * (d / 2 + .30), h - .75, z + 1.2 * qz + pz * (d / 2 + .30), rot,
+          10.0, 1.1, 'AUTO REPAIR', shade(wall, .86), 0x2a2e34, 'flat');
+  addSolid(x, z, w / 2, d / 2, h, rot);
+  return { hw:w / 2, hd:d / 2 };
+}
+
+/* ============================================================
+   BANK  (reference: stone piers, glass corner, drive-thru)
+   ============================================================ */
+function bBank(B, x, z, rot){
+  var w = 26, d = 20, h = 7.4;
+  var wall = jitCol(0xe2dccd, .04);
+  var stone = jitCol(0xcbc2ae, .05);
+  var px = Math.cos(rot + Math.PI / 2), pz = Math.sin(rot + Math.PI / 2);
+  var qx = Math.cos(rot), qz = Math.sin(rot);
+
+  B.box(x, h / 2, z, w, h, d, wall, rot);
+  /* raised centre block with a deep cap */
+  B.box(x, h + 1.9, z, w * .46, 3.8, d * .72, wall, rot);
+  B.box(x, h + 3.95, z, w * .50, .70, d * .76, 0x53585e, rot);
+  B.box(x, h + .38, z, w + .8, .76, d + .8, 0x53585e, rot);
+
+  /* full-height glazing on the front centre */
+  var f = d / 2 + .05;
+  B.box(x, 5.4, z + 0, 1, 1, 1, wall, rot);
+  B.box(x + px * f, 5.2, z + pz * f, w * .40, 9.6, .14, C.glass, rot);
+  var i;
+  for(i = 0; i < 5; i++){
+    var mt = -w * .20 + (i / 4) * w * .40;
+    B.box(x + mt * qx + px * (f + .09), 5.2, z + mt * qz + pz * (f + .09), .20, 9.6, .10, 0x2b2f35, rot);
+  }
+  for(i = 0; i < 4; i++){
+    B.box(x + px * (f + .09), 1.6 + i * 2.6, z + pz * (f + .09), w * .40, .18, .10, 0x2b2f35, rot);
+  }
+  /* stone piers */
+  for(i = 0; i < 3; i++){
+    var pt = -w * .30 + i * (w * .30);
+    B.box(x + pt * qx + px * (f - .05), 4.2, z + pt * qz + pz * (f - .05), 1.7, 8.4, 1.5, stone, rot);
+  }
+  /* flat entry canopy */
+  B.box(x + px * (f + 2.0), 4.5, z + pz * (f + 2.0), w * .80, .28, 4.0, 0x53585e, rot);
+  /* window band on the wings */
+  B.box(x + w * .34 * qx + px * f, 3.0, z + w * .34 * qz + pz * f, w * .22, 2.0, .12, C.glass, rot);
+  B.box(x - w * .34 * qx + px * f, 3.0, z - w * .34 * qz + pz * f, w * .22, 2.0, .12, C.glass, rot);
+
+  addSign(x - w * .32 * qx + px * (f + .22), 6.0, z - w * .32 * qz + pz * (f + .22), rot, 6.4, 1.5, 'BANK', wall, 0x3a3f46, 'channel');
+  addSign(x + w * .34 * qx + px * (f + .22), 6.0, z + w * .34 * qz + pz * (f + .22), rot, 5.0, 1.2, 'BANK', wall, 0x3a3f46, 'channel');
+  addSign(x + w * .34 * qx + px * (f + .22), 4.0, z + w * .34 * qz + pz * (f + .22), rot, 5.4, .8, 'DRIVE-THRU', wall, 0x3a3f46, 'flat');
+
+  /* drive-thru lane canopy off the side */
+  var sx = x - qx * (w / 2 + 7), sz = z - qz * (w / 2 + 7);
+  B.plate(sx, .04, sz, 16, 12, C.asphaltOld, rot);
+  B.box(sx, 4.6, sz, 8.0, .30, 11.0, 0xd7dade, rot);
+  B.box(sx - 3.4 * qx, 2.3, sz - 3.4 * qz, .34, 4.6, .34, 0xb9bec4, rot);
+  B.box(sx + 3.4 * qx, 2.3, sz + 3.4 * qz, .34, 4.6, .34, 0xb9bec4, rot);
+  B.box(sx, 1.3, sz + 0, 1.0, 2.6, .8, 0x6f757c, rot);   /* ATM pedestal */
+  addSolid(x, z, w / 2, d / 2, h, rot);
+  return { hw:w / 2, hd:d / 2 };
+}
+
+/* ============================================================
+   GAS STATION  (reference: red-banded canopy, lit soffit, pumps)
+   ============================================================ */
+function bGasStationV2(B, x, z, rot, brand, name){
+  var i, px = Math.cos(rot + Math.PI / 2), pz = Math.sin(rot + Math.PI / 2);
+  var qx = Math.cos(rot), qz = Math.sin(rot);
+  brand = brand || 0xd2372c;
+  B.plate(x, .05, z, 64, 48, C.asphaltOld, rot);
+
+  /* --- canopy --- */
+  var cx = x - qx * 14, cz = z - qz * 14;
+  var cw = 28, cd = 19, cy = 6.4;
+  B.box(cx, cy + .55, cz, cw, .55, cd, 0xf0f1f2, rot);          /* white top slab */
+  B.box(cx, cy + .05, cz, cw + .5, .62, cd + .5, brand, rot);   /* brand band */
+  B.box(cx, cy - .38, cz, cw - .3, .30, cd - .3, 0xdfe2e5, rot);/* soffit */
+  /* lit panels in the soffit */
+  for(i = 0; i < 4; i++){
+    var lx = -cw * .28 + (i / 3) * cw * .56;
+    B.box(cx + lx * qx, cy - .55, cz + lx * qz, 2.2, .10, 1.6, 0xfff6d8, rot);
+  }
+  /* columns with a brand collar */
+  for(i = 0; i < 4; i++){
+    var ox = (i % 2 ? 9.5 : -9.5), oz = (i > 1 ? 6.8 : -6.8);
+    var mx2 = cx + ox * qx - oz * px, mz2 = cz + ox * qz - oz * pz;
+    B.box(mx2, 3.1, mz2, .95, 6.2, .95, 0xdfe2e5, rot);
+    B.box(mx2, 4.5, mz2, 1.05, .70, 1.05, brand, rot);
+  }
+  /* --- pumps --- */
+  for(i = 0; i < 4; i++){
+    var o2 = -6.8 + (i % 2) * 13.6, o3 = (i > 1 ? 5.0 : -5.0);
+    var mx = cx + o2 * qx - o3 * px, mz = cz + o2 * qz - o3 * pz;
+    B.box(mx, .16, mz, 5.6, .32, 2.6, C.concrete, rot);           /* island */
+    B.box(mx, 1.15, mz, 1.15, 1.9, 2.0, 0xe6e9ec, rot);           /* body */
+    B.box(mx, 1.95, mz, 1.25, .55, 1.5, 0x14181d, rot);           /* screen bezel */
+    B.box(mx, 1.95, mz + .0, 1.05, .38, 1.62, 0x1d5c3a, rot);     /* green readout */
+    B.box(mx, 2.35, mz, 1.30, .28, 2.05, brand, rot);             /* topper */
+    B.box(mx + .70 * px, .95, mz + .70 * pz, .55, .9, .30, 0xc0392b, rot);
+    B.box(mx - .70 * px, .95, mz - .70 * pz, .55, .9, .30, 0xc0392b, rot);
+    B.box(mx, .70, mz, .30, .10, 2.9, 0x8d9299, rot);             /* bollard rail */
+  }
+  /* --- store --- */
+  var sx = x + qx * 21, sz2 = z + qz * 21;
+  var sw = 27, sd = 15, sh = 6.0;
+  B.box(sx, sh / 2, sz2, sw, sh, sd, 0xf0f1f2, rot);
+  B.box(sx, sh + .34, sz2, sw + .6, .68, sd + .6, 0xd3d6d9, rot);
+  B.box(sx, sh - .55, sz2, sw + .7, 1.10, sd + .7, brand, rot);
+  /* glazing with mullions and a door */
+  B.box(sx - px * (sd / 2 + .06), 2.2, sz2 - pz * (sd / 2 + .06), sw * .82, 3.6, .14, C.glass, rot);
+  for(i = 0; i < 6; i++){
+    var gt = -sw * .40 + (i / 5) * sw * .80;
+    B.box(sx + gt * qx - px * (sd / 2 + .12), 2.2, sz2 + gt * qz - pz * (sd / 2 + .12), .18, 3.6, .10, 0x2f343a, rot);
+  }
+  B.box(sx, .30, sz2 - pz * (sd / 2 + .10), sw * .84, .60, .18, 0xc9ced3, rot);
+  addSign(sx, sh - .55, sz2 - pz * (sd / 2 + .40), rot + Math.PI, sw * .52, .95, name || 'FUEL MART', brand, 0xffffff, 'channel');
+  /* ice box and air pump outside */
+  B.box(sx + sw * .40 * qx - px * (sd / 2 + 1.0), .8, sz2 + sw * .40 * qz - pz * (sd / 2 + 1.0), 1.6, 1.6, 1.0, 0xdfe3e6, rot);
+  bPylon(B, x - qx * 30 - px * 20, z - qz * 30 - pz * 20, brand);
+  addSolid(sx, sz2, sw / 2, sd / 2, sh, rot);
+}
+
+/* ============================================================
+   FAST FOOD / DRIVE-THRU
+   ============================================================ */
+function bFastFood(B, x, z, rot, name){
+  var w = 20, d = 16, h = 5.6;
+  var wall = jitCol(wpick([0xe4dccb, 0xd9d2c2, 0xdfd6c4]), .05);
+  var accent = jitCol(wpick([0xc0392b, 0xd68910, 0x1f618d, 0x196f3d]), .07);
+  var px = Math.cos(rot + Math.PI / 2), pz = Math.sin(rot + Math.PI / 2);
+  var qx = Math.cos(rot), qz = Math.sin(rot);
+
+  B.box(x, h / 2, z, w, h, d, wall, rot);
+  B.box(x, h + .32, z, w + .6, .64, d + .6, shade(wall, .78), rot);
+  B.box(x, h - .70, z, w + .7, 1.0, d + .7, accent, rot);
+  /* mansard-ish accent over the entry */
+  B.box(x, h + 1.2, z + 0, w * .40, 1.6, d * .60, accent, rot);
+  /* glazing */
+  B.box(x + px * (d / 2 + .05), 2.1, z + pz * (d / 2 + .05), w * .70, 3.4, .13, C.glass, rot);
+  var i;
+  for(i = 0; i < 5; i++){
+    var t = -w * .35 + (i / 4) * w * .70;
+    B.box(x + t * qx + px * (d / 2 + .11), 2.1, z + t * qz + pz * (d / 2 + .11), .18, 3.4, .10, 0x2f343a, rot);
+  }
+  addSign(x, h - .70, z + 0, rot, w * .48, .90, name || 'BURGERS', accent, 0xffffff, 'channel');
+  addSign(x + px * (d / 2 + .26), h - .70, z + pz * (d / 2 + .26), rot, w * .48, .90, name || 'BURGERS', accent, 0xffffff, 'channel');
+  /* drive-thru lane + menu board + window */
+  var lx = x - qx * (w / 2 + 6), lz = z - qz * (w / 2 + 6);
+  B.plate(lx, .04, lz, 12, 20, C.asphaltOld, rot);
+  B.box(lx, 1.5, lz + 4 * pz, 1.4, 3.0, 2.6, 0x2f343a, rot);
+  B.box(lx, 1.7, lz + 4 * pz, 1.0, 2.0, 2.2, 0xfff2cc, rot);
+  bPylon(B, x + qx * (w / 2 + 9), z + qz * (w / 2 + 9), accent);
+  addSolid(x, z, w / 2, d / 2, h, rot);
+  return { hw:w / 2, hd:d / 2 };
+}
+
+/* ============================================================
+   CHURCH / MOTEL / SELF STORAGE  (fill the rest of the county)
+   ============================================================ */
+function bChurch(B, x, z, rot){
+  var w = 22, d = 30, h = 7.0;
+  var wall = jitCol(0xe8e4d8, .04);
+  var px = Math.cos(rot + Math.PI / 2), pz = Math.sin(rot + Math.PI / 2);
+  var qx = Math.cos(rot), qz = Math.sin(rot);
+  B.box(x, h / 2, z, w, h, d, wall, rot);
+  B.roof(x, h, z, w, d, 4.2, jitCol(0x6b4a35, .06), rot, 1);
+  /* steeple */
+  var tx = x + px * (d / 2 - 3), tz = z + pz * (d / 2 - 3);
+  B.box(tx, 6.0, tz, 5.0, 12.0, 5.0, wall, rot);
+  B.cyl(tx, 12.0, tz, 3.4, .1, 6.5, 4, jitCol(0x6b4a35, .05), 3);
+  B.box(tx, 19.4, tz, .34, 2.2, .34, 0xd8d3c4, rot);
+  B.box(tx, 19.0, tz, 1.2, .34, .34, 0xd8d3c4, rot);
+  /* arched windows suggested by tall thin glass */
+  var i;
+  for(i = 0; i < 4; i++){
+    var t = -d * .28 + (i / 3) * d * .56;
+    B.box(x + px * 0 + t * pz * 0 + (w / 2 + .05) * qx, 3.6, z + (w / 2 + .05) * qz + t * pz, 1.3, 3.6, .12, 0x6d8fa8, rot);
+    B.box(x - (w / 2 + .05) * qx, 3.6, z - (w / 2 + .05) * qz + t * pz, 1.3, 3.6, .12, 0x6d8fa8, rot);
+  }
+  addSign(x + px * (d / 2 + .3), 5.4, z + pz * (d / 2 + .3), rot, 7.0, 1.1, 'FIRST BAPTIST', wall, 0x4a3f30, 'flat');
+  addSolid(x, z, w / 2, d / 2, h, rot);
+  return { hw:w / 2, hd:d / 2 };
+}
+function bMotel(B, x, z, rot){
+  var w = 46, d = 13, h = 6.4;
+  var wall = jitCol(wpick([0xd9cfbb, 0xcfc6b2, 0xe0d7c4]), .05);
+  var accent = jitCol(wpick([0x1f618d, 0xb03a2e, 0x196f3d]), .06);
+  var px = Math.cos(rot + Math.PI / 2), pz = Math.sin(rot + Math.PI / 2);
+  var qx = Math.cos(rot), qz = Math.sin(rot);
+  B.box(x, h / 2, z, w, h, d, wall, rot);
+  B.box(x, h + .30, z, w + .6, .60, d + .6, shade(wall, .80), rot);
+  /* walkway and rail on the upper floor */
+  B.box(x + px * (d / 2 + 1.4), 3.25, z + pz * (d / 2 + 1.4), w, .22, 2.8, shade(wall, .90), rot);
+  B.box(x + px * (d / 2 + 2.7), 3.85, z + pz * (d / 2 + 2.7), w, 1.0, .14, accent, rot);
+  var i, rooms = 9;
+  for(i = 0; i < rooms; i++){
+    var t = -w / 2 + (w / rooms) * (i + .5);
+    var f = d / 2 + .05;
+    B.box(x + t * qx + px * f, 1.5, z + t * qz + pz * f, 1.5, 3.0, .12, 0x4a4038, rot);      /* lower door */
+    B.box(x + t * qx + px * f, 5.0, z + t * qz + pz * f, 1.5, 2.6, .12, 0x4a4038, rot);      /* upper door */
+    B.box(x + (t + 2.0) * qx + px * f, 1.7, z + (t + 2.0) * qz + pz * f, 1.6, 1.9, .10, C.glass, rot);
+    B.box(x + (t + 2.0) * qx + px * f, 5.1, z + (t + 2.0) * qz + pz * f, 1.6, 1.9, .10, C.glass, rot);
+    /* walkway post */
+    B.box(x + t * qx + px * (d / 2 + 2.7), 1.6, z + t * qz + pz * (d / 2 + 2.7), .18, 3.2, .18, shade(wall, .84), rot);
+  }
+  bPylon(B, x - qx * (w / 2 + 8), z - qz * (w / 2 + 8), accent);
+  addSign(x + px * (d / 2 + .3), h - .8, z + pz * (d / 2 + .3), rot, 9.0, 1.2, 'MOTEL', accent, 0xffffff, 'channel');
+  addSolid(x, z, w / 2, d / 2, h, rot);
+  return { hw:w / 2, hd:d / 2 };
+}
+function bSelfStorage(B, x, z, rot){
+  var w = 40, d = 12, h = 4.0;
+  var wall = jitCol(0xd8dade, .04);
+  var door = jitCol(wpick([0xd68910, 0xb03a2e, 0x1f618d]), .05);
+  var px = Math.cos(rot + Math.PI / 2), pz = Math.sin(rot + Math.PI / 2);
+  var qx = Math.cos(rot), qz = Math.sin(rot);
+  B.box(x, h / 2, z, w, h, d, wall, rot);
+  B.box(x, h + .22, z, w + .5, .44, d + .5, shade(wall, .82), rot);
+  var i, n = 12;
+  for(i = 0; i < n; i++){
+    var t = -w / 2 + (w / n) * (i + .5);
+    B.box(x + t * qx + px * (d / 2 + .05), 1.5, z + t * qz + pz * (d / 2 + .05), w / n * .78, 3.0, .14, door, rot);
+    var j;
+    for(j = 0; j < 5; j++){
+      B.box(x + t * qx + px * (d / 2 + .12), .5 + j * .58, z + t * qz + pz * (d / 2 + .12), w / n * .74, .10, .08, shade(door, .88), rot);
+    }
+  }
+  addSolid(x, z, w / 2, d / 2, h, rot);
+  return { hw:w / 2, hd:d / 2 };
+}
+
+/* ============================================================
+   SIGN MESHES
+   Built once after the world bakes. Textures are cached by content,
+   so a hundred GROCERY signs share one texture.
+   ============================================================ */
+var SIGN_TEX = {}, SIGN_TEX_KEYS = [];
+/* Letters only, on a transparent field, with the board painted as geometry
+   behind it. That way the texture key is just (text, ink) instead of
+   (text, background, ink, style), so a hundred signs share a handful of
+   textures instead of one each. Sizes are kept small on purpose: this runs
+   on a phone. */
+function signTexture(txt, ink){
+  var key = txt + '|' + ink;
+  if(SIGN_TEX[key]) return SIGN_TEX[key];
+  var W = 256, Hh = 64;
+  var cv = makeCanvas(W);
+  cv.height = Hh;
+  var g = cv.getContext('2d');
+  g.clearRect(0, 0, W, Hh);
+  var size = txt.length > 13 ? 24 : (txt.length > 9 ? 31 : 40);
+  g.font = 'bold ' + size + 'px ui-monospace, Menlo, monospace';
+  g.textAlign = 'center';
+  g.textBaseline = 'middle';
+  g.lineWidth = 5;
+  g.strokeStyle = 'rgba(0,0,0,.40)';
+  g.strokeText(txt, W / 2, Hh / 2 + 1);
+  g.fillStyle = '#' + ('000000' + ink.toString(16)).slice(-6);
+  g.fillText(txt, W / 2, Hh / 2);
+  var t = new THREE.CanvasTexture(cv);
+  t.anisotropy = 2;
+  SIGN_TEX[key] = t;
+  SIGN_TEX_KEYS.push(key);
+  return t;
+}
+/* two inks only, chosen for contrast against the board behind */
+function signInk(fg){
+  var r = (fg >> 16) & 255, gg = (fg >> 8) & 255, b = fg & 255;
+  return (r * .299 + gg * .587 + b * .114) > 140 ? 0xf4f4f0 : 0x24282e;
+}
+var signGroup = null;
+function buildSigns(scene){
+  if(signGroup){ scene.remove(signGroup); }
+  signGroup = new THREE.Group();
+  var i;
+  for(i = 0; i < SIGNS.length; i++){
+    var s = SIGNS[i];
+    var tex = signTexture(s.txt, signInk(s.fg));
+    var mat = new THREE.MeshBasicMaterial({ map:tex, transparent:true });
+    var m = new THREE.Mesh(new THREE.PlaneGeometry(s.w, s.h), mat);
+    m.position.set(s.x, s.y, s.z);
+    /* PlaneGeometry faces +Z; the building front normal for rot r is
+       (cos(r+pi/2), sin(r+pi/2)), which a yaw of -r points the plane at.
+       The old +pi/2 term turned every sign 90 degrees sideways. */
+    m.rotation.y = -s.rot;
+    signGroup.add(m);
+  }
+  scene.add(signGroup);
+  return signGroup;
+}
+/* signs are small and numerous, so hide the far ones with the chunks */
+function updateSignVis(px, pz, range){
+  if(!signGroup) return;
+  var i, r2 = range * range;
+  for(i = 0; i < signGroup.children.length; i++){
+    var c = signGroup.children[i];
+    var dx = c.position.x - px, dz = c.position.z - pz;
+    c.visible = (dx * dx + dz * dz) < r2;
+  }
+}
+
+/* ============================================================
+   PARKS, SPORTS AND SCHOOLS
+   The things a North Texas suburb actually has between the strip malls.
+   ============================================================ */
+
+function bBasketball(B, x, z, rot){
+  var w = 15, d = 28;
+  B.plate(x, .05, z, w, d, 0x4a5560, rot);
+  B.plate(x, .07, z, w - 1.4, d - 1.4, 0x5d6a76, rot);
+  var qx = Math.cos(rot), qz = Math.sin(rot);
+  var px = Math.cos(rot + Math.PI / 2), pz = Math.sin(rot + Math.PI / 2);
+  /* centre circle and half line */
+  B.plate(x, .085, z, w - 1.4, .16, C.line, rot);
+  var i;
+  for(i = 0; i < 2; i++){
+    var s = i ? 1 : -1;
+    var hx = x + qx * 0 + px * (d / 2 - 1.6) * s;
+    var hz = z + qz * 0 + pz * (d / 2 - 1.6) * s;
+    /* key */
+    B.plate(hx - px * 2.4 * s, .085, hz - pz * 2.4 * s, 4.9, .16, C.line, rot);
+    /* hoop */
+    B.box(hx, 1.7, hz, .16, 3.4, .16, 0x6e757c, rot);
+    B.box(hx - px * .5 * s, 3.15, hz - pz * .5 * s, 1.8, 1.1, .1, 0xe8e8e4, rot);
+    B.cyl(hx - px * 1.0 * s, 3.05, hz - pz * 1.0 * s, .45, .45, .06, 8, 0xd2622a, 3);
+  }
+  /* fence posts */
+  for(i = 0; i < 8; i++){
+    var t = -d / 2 + (i / 7) * d;
+    B.box(x + px * t + qx * (w / 2), 1.5, z + pz * t + qz * (w / 2), .1, 3.0, .1, 0x7d848c, rot);
+    B.box(x + px * t - qx * (w / 2), 1.5, z + pz * t - qz * (w / 2), .1, 3.0, .1, 0x7d848c, rot);
+  }
+}
+
+function bBaseball(B, x, z, rot){
+  var qx = Math.cos(rot), qz = Math.sin(rot);
+  var px = Math.cos(rot + Math.PI / 2), pz = Math.sin(rot + Math.PI / 2);
+  /* outfield */
+  B.plate(x + px * 26, .04, z + pz * 26, 78, 70, jitCol(0x5f8f3e, .05), rot);
+  /* infield dirt as a diamond of plates */
+  B.plate(x + px * 13, .06, z + pz * 13, 30, 30, jitCol(0xa8845a, .06), rot + Math.PI / 4);
+  /* grass inside the diamond */
+  B.plate(x + px * 15, .075, z + pz * 15, 17, 17, jitCol(0x5f8f3e, .04), rot + Math.PI / 4);
+  /* bases */
+  var bs = [[0, 0], [13, 13], [0, 26], [-13, 13]];
+  var i;
+  for(i = 0; i < bs.length; i++){
+    B.plate(x + qx * bs[i][0] + px * bs[i][1], .09,
+            z + qz * bs[i][0] + pz * bs[i][1], 1.1, 1.1, 0xf0f0ec, rot + Math.PI / 4);
+  }
+  /* mound */
+  B.cyl(x + px * 13, .06, z + pz * 13, 2.7, 2.4, .16, 10, jitCol(0xa8845a, .04), 3);
+  /* backstop */
+  for(i = 0; i < 7; i++){
+    var a = -Math.PI / 2.6 + (i / 6) * (Math.PI / 1.3);
+    B.box(x - px * 6 + Math.cos(a + rot) * 9, 2.0, z - pz * 6 + Math.sin(a + rot) * 9,
+          .12, 4.0, .12, 0x7d848c, rot);
+  }
+  /* dugouts */
+  for(i = 0; i < 2; i++){
+    var s = i ? 1 : -1;
+    B.box(x + qx * 13 * s + px * 3, 1.1, z + qz * 13 * s + pz * 3, 9, 2.2, 2.6, 0xc9c4b8, rot);
+    B.box(x + qx * 13 * s + px * 3, 2.35, z + qz * 13 * s + pz * 3, 9.6, .3, 3.2, 0x6e757c, rot);
+  }
+  /* bleachers */
+  for(i = 0; i < 4; i++){
+    B.box(x - px * 10, .45 + i * .45, z - pz * 10 - 0, 16, .35, 1.0, 0x9aa0a8, rot);
+  }
+}
+
+function bSoccer(B, x, z, rot){
+  var w = 64, d = 100;
+  B.plate(x, .04, z, w, d, jitCol(0x548a38, .04), rot);
+  var qx = Math.cos(rot), qz = Math.sin(rot);
+  var px = Math.cos(rot + Math.PI / 2), pz = Math.sin(rot + Math.PI / 2);
+  /* touchlines */
+  B.plate(x + qx * (w / 2 - .5), .07, z + qz * (w / 2 - .5), .18, d - 1, C.line, rot);
+  B.plate(x - qx * (w / 2 - .5), .07, z - qz * (w / 2 - .5), .18, d - 1, C.line, rot);
+  B.plate(x + px * (d / 2 - .5), .07, z + pz * (d / 2 - .5), w - 1, .18, C.line, rot);
+  B.plate(x - px * (d / 2 - .5), .07, z - pz * (d / 2 - .5), w - 1, .18, C.line, rot);
+  B.plate(x, .07, z, w - 1, .18, C.line, rot);
+  var i;
+  for(i = 0; i < 2; i++){
+    var s = i ? 1 : -1;
+    /* penalty box */
+    B.plate(x + px * (d / 2 - 8) * s, .07, z + pz * (d / 2 - 8) * s, 30, .18, C.line, rot);
+    /* goal */
+    var gx = x + px * (d / 2 - 1) * s, gz = z + pz * (d / 2 - 1) * s;
+    B.box(gx + qx * 3.7, 1.2, gz + qz * 3.7, .14, 2.4, .14, 0xe8e8e4, rot);
+    B.box(gx - qx * 3.7, 1.2, gz - qz * 3.7, .14, 2.4, .14, 0xe8e8e4, rot);
+    B.box(gx, 2.4, gz, 7.5, .14, .14, 0xe8e8e4, rot);
+  }
+}
+
+function bTennis(B, x, z, rot){
+  var w = 12, d = 26;
+  B.plate(x, .05, z, w + 6, d + 8, 0x2f6b4a, rot);
+  B.plate(x, .07, z, w, d, 0x3d7f5a, rot);
+  B.plate(x, .09, z, .16, d, C.line, rot);
+  B.plate(x, .09, z, w, .16, C.line, rot);
+  var i;
+  for(i = 0; i < 2; i++){
+    var s = i ? 1 : -1;
+    B.plate(x, .09, z + Math.sin(rot + Math.PI / 2) * (d / 2 - .3) * s, w, .16, C.line, rot);
+  }
+  /* net */
+  B.box(x, .55, z, w + 1.2, 1.1, .08, 0x2a2f38, rot);
+  for(i = 0; i < 10; i++){
+    var t = -d / 2 - 4 + (i / 9) * (d + 8);
+    B.box(x + Math.cos(rot) * (w / 2 + 3), 1.6, z + Math.sin(rot) * (w / 2 + 3), .09, 3.2, .09, 0x7d848c, rot);
+  }
+}
+
+function bPlayground(B, x, z, rot){
+  B.plate(x, .05, z, 22, 18, jitCol(0xb08a5a, .07), rot);
+  var i;
+  /* swing set */
+  B.box(x - 6, 1.3, z, .14, 2.6, .14, 0x8a3f39, rot);
+  B.box(x - 2, 1.3, z, .14, 2.6, .14, 0x8a3f39, rot);
+  B.box(x - 4, 2.6, z, 4.4, .14, .14, 0x8a3f39, rot);
+  for(i = 0; i < 2; i++){
+    B.box(x - 5 + i * 2, 1.4, z, .06, 1.4, .06, 0x39434d, rot);
+    B.box(x - 5 + i * 2, .72, z, .5, .1, .3, 0x2f5d7a, rot);
+  }
+  /* climbing frame + slide */
+  B.box(x + 4, 1.1, z, 4.0, .18, 4.0, 0x1f618d, rot);
+  for(i = 0; i < 4; i++){
+    B.box(x + 4 + (i % 2 ? 1.8 : -1.8), .55, z + (i > 1 ? 1.8 : -1.8), .14, 1.1, .14, 0x196f3d, rot);
+  }
+  B.box(x + 7.6, .70, z, 3.4, .12, 1.2, 0xd68910, rot + .0);
+  B.box(x + 4, 1.9, z, 4.2, 1.4, .1, 0xd4342c, rot);
+  /* benches and a bin */
+  for(i = 0; i < 2; i++){
+    B.box(x - 8, .42, z + (i ? 6 : -6), 2.2, .12, .6, 0x8d7458, rot);
+    B.box(x - 8, .22, z + (i ? 6 : -6), 2.2, .32, .1, 0x6d5f45, rot);
+  }
+  B.cyl(x + 9, 0, z + 6, .45, .45, 1.0, 8, 0x3f6b48, 3);
+}
+
+function bPark(B, x, z, rot, kind){
+  var i;
+  /* lawn */
+  B.plate(x, .03, z, 120, 120, jitCol(0x5d8a3f, .05), rot);
+  /* footpaths crossing it */
+  B.plate(x, .05, z, 120, 2.6, jitCol(0xb9b2a4, .05), rot);
+  B.plate(x, .05, z, 2.6, 120, jitCol(0xb9b2a4, .05), rot);
+  /* trees round the edge */
+  for(i = 0; i < 26; i++){
+    var a = (i / 26) * TAU;
+    var r = wrng(38, 56);
+    bTree(B, x + Math.cos(a) * r, z + Math.sin(a) * r, wrng(.9, 1.4));
+  }
+  /* pavilion */
+  B.box(x - 30, 2.6, z + 30, 10, .3, 8, jitCol(0x8a6d3b, .05), rot);
+  for(i = 0; i < 4; i++){
+    B.box(x - 30 + (i % 2 ? 4.4 : -4.4), 1.3, z + 30 + (i > 1 ? 3.4 : -3.4), .22, 2.6, .22, 0x6d5f45, rot);
+  }
+  B.box(x - 30, .45, z + 30, 3.0, .12, 1.0, 0x8d7458, rot);
+
+  if(kind === 'sports'){
+    bBasketball(B, x + 34, z - 30, rot);
+    bBaseball(B, x - 26, z - 34, rot + Math.PI);
+    bTennis(B, x + 36, z + 24, rot);
+    bPlayground(B, x - 4, z + 34, rot);
+  } else {
+    bPlayground(B, x + 24, z + 22, rot);
+    bBasketball(B, x - 30, z - 22, rot);
+    /* pond */
+    B.plate(x + 18, .045, z - 26, 40, 30, C.water, rot);
+  }
+  addSolid(x - 30, z + 30, 5, 4, 3, rot);
+}
+
+/* ---- schools ---- */
+function bSchool(B, x, z, rot, level){
+  var w = level === 'high' ? 86 : 56, d = 34, h = level === 'elem' ? 5.2 : 8.4;
+  var wall = jitCol(level === 'elem' ? 0xd9c9a8 : 0xc9b89a, .05);
+  var brick = jitCol(wpick(BRICK), .05);
+  var qx = Math.cos(rot), qz = Math.sin(rot);
+  var px = Math.cos(rot + Math.PI / 2), pz = Math.sin(rot + Math.PI / 2);
+
+  B.box(x, h / 2, z, w, h, d, brick, rot);
+  B.box(x, h + .40, z, w + .8, .80, d + .8, shade(brick, .76), rot);
+  /* entry block */
+  B.box(x, h / 2 + 1.2, z + 0, w * .22, h + 2.4, d * .60, wall, rot);
+  B.box(x + px * (d * .30 + .06), 3.0, z + pz * (d * .30 + .06), w * .16, 5.0, .14, C.glass, rot);
+  /* classroom window bands */
+  var i, fl;
+  for(fl = 0; fl < (level === 'elem' ? 1 : 2); fl++){
+    for(i = 0; i < Math.floor(w / 6); i++){
+      var t = -w / 2 + 3.4 + i * 6;
+      if(Math.abs(t) < w * .13) continue;
+      B.box(x + t * qx + px * (d / 2 + .05), 2.2 + fl * 3.6,
+            z + t * qz + pz * (d / 2 + .05), 3.4, 1.7, .12, C.glass, rot);
+      B.box(x + t * qx - px * (d / 2 + .05), 2.2 + fl * 3.6,
+            z + t * qz - pz * (d / 2 + .05), 3.4, 1.7, .12, C.glass, rot);
+    }
+  }
+  addSign(x + px * (d * .30 + .30), h - .6, z + pz * (d * .30 + .30), rot, 10, 1.4,
+          level === 'high' ? 'HIGH SCHOOL' : (level === 'mid' ? 'MIDDLE SCHOOL' : 'ELEMENTARY'),
+          wall, 0x2a2e34, 'flat');
+  /* bus loop and parking */
+  B.plate(x - px * (d / 2 + 16), .05, z - pz * (d / 2 + 16), w, 22, C.asphaltOld, rot);
+  for(i = 0; i < Math.floor(w / 5.4); i++){
+    B.plate(x + (-w / 2 + 2 + i * 5.4) * qx - px * (d / 2 + 12), .07,
+            z + (-w / 2 + 2 + i * 5.4) * qz - pz * (d / 2 + 12), .16, 9, C.line, rot);
+  }
+  /* buses at an elementary or middle school */
+  if(level !== 'high'){
+    for(i = 0; i < 3; i++){
+      B.box(x + (-w / 4 + i * 11) * qx - px * (d / 2 + 20), 1.7,
+            z + (-w / 4 + i * 11) * qz - pz * (d / 2 + 20), 11, 3.0, 2.5, 0xe8b62c, rot);
+      B.box(x + (-w / 4 + i * 11) * qx - px * (d / 2 + 20), 2.9,
+            z + (-w / 4 + i * 11) * qz - pz * (d / 2 + 20), 10, .9, 2.6, 0x2a2f38, rot);
+    }
+  }
+  /* playfield or track */
+  if(level === 'high'){
+    bTrackAndField(B, x + px * (d / 2 + 58), z + pz * (d / 2 + 58), rot);
+  } else {
+    bPlayground(B, x + px * (d / 2 + 16), z + pz * (d / 2 + 16), rot);
+    bBasketball(B, x + px * (d / 2 + 20) + qx * 30, z + pz * (d / 2 + 20) + qz * 30, rot);
+  }
+  addSolid(x, z, w / 2, d / 2, h, rot);
+  return { hw:w / 2, hd:d / 2 };
+}
+
+function bTrackAndField(B, x, z, rot){
+  /* oval track with a football field inside */
+  var i;
+  B.plate(x, .04, z, 92, 62, jitCol(0x9c4a35, .05), rot);
+  B.plate(x, .06, z, 78, 48, jitCol(0x548a38, .04), rot);
+  /* lane lines */
+  for(i = 1; i < 6; i++){
+    B.plate(x, .05, z, 92 - i * 2.4, .12, C.line, rot);
+  }
+  /* yard lines */
+  for(i = 0; i < 9; i++){
+    var t = -34 + i * 8.5;
+    B.plate(x + Math.cos(rot) * t, .075, z + Math.sin(rot) * t, .18, 28, C.line, rot);
+  }
+  /* goalposts */
+  for(i = 0; i < 2; i++){
+    var s = i ? 1 : -1;
+    var gx = x + Math.cos(rot) * 37 * s, gz = z + Math.sin(rot) * 37 * s;
+    B.box(gx, 1.6, gz, .16, 3.2, .16, 0xd6b83c, rot);
+    B.box(gx, 3.4, gz, .16, .16, 5.6, 0xd6b83c, rot);
+    B.box(gx, 5.0, gz + Math.cos(rot) * 2.8, .14, 3.2, .14, 0xd6b83c, rot);
+    B.box(gx, 5.0, gz - Math.cos(rot) * 2.8, .14, 3.2, .14, 0xd6b83c, rot);
+  }
+  /* bleachers both sides */
+  for(i = 0; i < 6; i++){
+    B.box(x, .5 + i * .5, z + Math.cos(rot) * (32 + i * 1.1), 70, .4, 1.1, 0x9aa0a8, rot);
+    B.box(x, .5 + i * .5, z - Math.cos(rot) * (32 + i * 1.1), 70, .4, 1.1, 0x9aa0a8, rot);
+  }
+}
+
+/* ---- junior college campus ---- */
+function bCollege(B, x, z, rot){
+  var i;
+  var brick = jitCol(0x9c5a3c, .04);
+  var stone = jitCol(0xd8d0be, .04);
+  /* quad lawn */
+  B.plate(x, .03, z, 150, 120, jitCol(0x5d8a3f, .04), rot);
+  B.plate(x, .05, z, 150, 3.2, jitCol(0xb9b2a4, .05), rot);
+  B.plate(x, .05, z, 3.2, 120, jitCol(0xb9b2a4, .05), rot);
+
+  /* main hall with a clock tower */
+  B.box(x, 7.0, z - 52, 62, 14, 26, brick, rot);
+  B.box(x, 14.4, z - 52, 63, .9, 27, shade(brick, .74), rot);
+  B.box(x, 12.0, z - 52, 12, 24, 12, stone, rot);
+  B.box(x, 24.6, z - 52, 13, 1.0, 13, shade(stone, .78), rot);
+  B.cyl(x, 25.1, z - 52, 6.4, .3, 7.0, 4, 0x4a5560, 3);
+  for(i = 0; i < 4; i++){
+    var a = i / 4 * TAU;
+    B.box(x + Math.cos(a) * 6.1, 21.5, z - 52 + Math.sin(a) * 6.1, 2.6, 2.6, .2, 0xf0efe8, rot + a);
+  }
+  /* colonnade */
+  for(i = 0; i < 9; i++){
+    B.cyl(x - 28 + i * 7, 0, z - 38, .8, .8, 8.0, 8, stone, 3);
+  }
+  B.box(x, 8.4, z - 38, 62, .9, 3.0, stone, rot);
+  addSign(x, 11.6, z - 38.4, rot, 22, 2.0, 'BAYARD COLLEGE', brick, 0xf0efe8, 'channel');
+
+  /* science and library wings */
+  B.box(x - 56, 6.0, z + 6, 26, 12, 40, brick, rot);
+  B.box(x - 56, 12.3, z + 6, 27, .8, 41, shade(brick, .76), rot);
+  B.box(x + 56, 5.0, z + 6, 26, 10, 40, stone, rot);
+  B.box(x + 56, 10.3, z + 6, 27, .8, 41, shade(stone, .78), rot);
+  addSign(x - 56 + 13.2, 9.0, z + 6, rot + Math.PI / 2, 12, 1.4, 'SCIENCE', brick, 0xf0efe8, 'channel');
+  addSign(x + 56 - 13.2, 8.0, z + 6, rot - Math.PI / 2, 12, 1.4, 'LIBRARY', stone, 0x3a3f46, 'channel');
+
+  /* student centre */
+  B.box(x, 5.0, z + 46, 44, 10, 22, stone, rot);
+  B.box(x, 10.3, z + 46, 45, .8, 23, shade(stone, .78), rot);
+  B.box(x, 4.0, z + 35.2, 30, 7.0, .5, C.glass, rot);
+  addSign(x, 8.2, z + 34.8, rot, 16, 1.6, 'STUDENT CENTER', stone, 0x3a3f46, 'channel');
+
+  /* quad trees, benches, lamps */
+  for(i = 0; i < 18; i++){
+    var ang2 = (i / 18) * TAU;
+    bTree(B, x + Math.cos(ang2) * wrng(26, 44), z + Math.sin(ang2) * wrng(22, 40), wrng(.9, 1.3));
+  }
+  for(i = 0; i < 8; i++){
+    var t2 = -50 + i * 14;
+    B.box(x + t2, .42, z + 8, 2.4, .12, .7, 0x8d7458, rot);
+    B.box(x + t2, .22, z + 8, 2.4, .32, .1, 0x6d5f45, rot);
+  }
+  /* commuter parking, because it is a junior college */
+  B.plate(x, .05, z + 82, 150, 40, C.asphaltOld, rot);
+  for(i = 0; i < 26; i++){
+    B.plate(x - 72 + i * 5.6, .07, z + 74, .16, 9, C.line, rot);
+    B.plate(x - 72 + i * 5.6, .07, z + 90, .16, 9, C.line, rot);
+  }
+  /* athletics */
+  bTrackAndField(B, x + 120, z + 20, rot + Math.PI / 2);
+  bBaseball(B, x - 130, z + 40, rot);
+
+  addSolid(x, z - 52, 31, 13, 14, rot);
+  addSolid(x - 56, z + 6, 13, 20, 12, rot);
+  addSolid(x + 56, z + 6, 13, 20, 10, rot);
+  addSolid(x, z + 46, 22, 11, 10, rot);
+}
 /* ============================================================
    CHUNK ASSEMBLY
    ============================================================ */
@@ -1835,8 +2755,8 @@ function terrainColor(x, z){
   var d = districtAt(x, z);
   if(inWater(x, z)) return C.water;
   if(d){
-    if(d.kind === 'downtown' || d.kind === 'commercial') return jitCol(C.concrete, .1);
-    if(d.kind === 'industrial') return jitCol(0x8b8880, .1);
+    if(d.kind === 'downtown' || d.kind === 'commercial') return jitCol(0x74797f, .08);
+    if(d.kind === 'industrial') return jitCol(0x7b7871, .1);
     if(d.kind === 'trailer') return jitCol(C.gravel, .12);
     if(d.kind === 'rural') return jitCol(wrand() < .5 ? C.field : C.fieldGreen, .16);
     return jitCol(C.grass, .14);
@@ -1945,6 +2865,64 @@ function buildRoads(){
     }
   }
 
+  /* --- road surface wear: patches, seams and oil down the centre --- */
+  for(i = 0; i < EDGES.length; i++){
+    var re = EDGES[i];
+    if(re.type === 'lot' || re.type === 'dirtrd') continue;
+    var ra = NODES[re.a], rb = NODES[re.b];
+    if((ra.y || 0) > 1 || (rb.y || 0) > 1) continue;
+    var rlen = dist(ra.x, ra.z, rb.x, rb.z);
+    var rang = Math.atan2(rb.z - ra.z, rb.x - ra.x);
+    var rnx = -Math.sin(rang), rnz = Math.cos(rang);
+    var patches = Math.floor(rlen / 26);
+    var q;
+    for(q = 0; q < patches; q++){
+      var tt = (q + .5) / Math.max(1, patches);
+      var mxr = ra.x + (rb.x - ra.x) * tt, mzr = ra.z + (rb.z - ra.z) * tt;
+      if(wrand() < .45){
+        var off2 = wrng(-re.w * .3, re.w * .3);
+        B.plate(mxr + rnx * off2, .075, mzr + rnz * off2,
+                wrng(2.4, 5.5), wrng(1.6, 3.4), jitCol(0x2a2e33, .07), rang);
+      }
+      if(wrand() < .30){
+        B.plate(mxr, .072, mzr, .30, re.w * .82, jitCol(0x40444a, .05), rang);
+      }
+    }
+    /* darker wear strip where the wheels run */
+    if(re.w > 10){
+      B.plate((ra.x + rb.x) / 2 + rnx * re.w * .18, .068, (ra.z + rb.z) / 2 + rnz * re.w * .18,
+              rlen * .96, re.w * .16, shade(RT[re.type].col, .90), rang);
+      B.plate((ra.x + rb.x) / 2 - rnx * re.w * .18, .068, (ra.z + rb.z) / 2 - rnz * re.w * .18,
+              rlen * .96, re.w * .16, shade(RT[re.type].col, .90), rang);
+    }
+  }
+
+  /* --- crosswalks and stop bars at every signalised approach --- */
+  for(i = 0; i < NODES.length; i++){
+    var cn = NODES[i];
+    if(!cn.light || (cn.y || 0) > 1) continue;
+    var cmw = signalMastWidth(cn);
+    var CBn = CB(cn.x, cn.z);
+    var ci;
+    for(ci = 0; ci < cn.e.length; ci++){
+      var ce = EDGES[cn.e[ci]];
+      var co = (NODES[ce.a] === cn) ? NODES[ce.b] : NODES[ce.a];
+      var ca = Math.atan2(co.z - cn.z, co.x - cn.x);
+      var bx2 = cn.x + Math.cos(ca) * (cmw / 2 + 1.0);
+      var bz2 = cn.z + Math.sin(ca) * (cmw / 2 + 1.0);
+      /* stop bar */
+      CBn.plate(bx2, .085, bz2, .55, ce.w * .92, C.line, ca);
+      /* zebra bars */
+      var zb;
+      for(zb = 0; zb < 6; zb++){
+        var zo = -ce.w * .36 + zb * (ce.w * .72 / 5);
+        CBn.plate(bx2 + Math.cos(ca) * 1.9 - Math.sin(ca) * zo, .085,
+                  bz2 + Math.sin(ca) * 1.9 + Math.cos(ca) * zo,
+                  2.4, ce.w * .085, C.line, ca);
+      }
+    }
+  }
+
   /* intersection patches + signals + signs */
   for(i = 0; i < NODES.length; i++){
     var n = NODES[i];
@@ -1956,12 +2934,19 @@ function buildRoads(){
     if(n.light){
       var d;
       for(d = 0; d < 4; d++){
+        var hp = signalHeadPos(n, d);
         var a2 = d / 4 * TAU + Math.PI / 4;
-        var px = n.x + Math.cos(a2) * (mw / 2 + 2.6), pz = n.z + Math.sin(a2) * (mw / 2 + 2.6);
-        B2.cyl(px, 0, pz, .26, .2, 6.6, 6, C.pole, false);
         var ax = Math.cos(a2 + Math.PI), az = Math.sin(a2 + Math.PI);
-        B2.box(px + ax * 2.6, 6.7, pz + az * 2.6, Math.abs(ax) * 5.2 + .2, .2, Math.abs(az) * 5.2 + .2, C.pole, 0);
-        B2.box(px + ax * 4.6, 5.9, pz + az * 4.6, .7, 1.9, .7, 0x22262c, 0);
+        B2.cyl(hp.poleX, 0, hp.poleZ, .26, .2, 6.6, 6, C.pole, 2);
+        /* The arm has to be a long thin box rotated along its own direction.
+           Feeding abs(ax) and abs(az) as separate extents made a 3.9m square
+           slab whenever the arm ran diagonally -- which is all of them. */
+        var armA = Math.atan2(az, ax);
+        B2.box(hp.poleX + ax * 2.4, 6.62, hp.poleZ + az * 2.4, 5.0, .16, .16, C.pole, armA);
+        /* short vertical drop from the arm to the head */
+        B2.box(hp.x, hp.y + 1.25, hp.z, .12, .70, .12, C.pole, 0);
+        /* housing only -- the three lamps are live objects placed at hp */
+        B2.box(hp.x, hp.y, hp.z, .70, 1.90, .70, 0x22262c, 0);
       }
     } else if(n.stop){
       var oa = Math.atan2(NODES[EDGES[n.e[0]].b].z - NODES[EDGES[n.e[0]].a].z, NODES[EDGES[n.e[0]].b].x - NODES[EDGES[n.e[0]].a].x);
@@ -2092,18 +3077,35 @@ function fillBlock(d, bx, bz, w, h){
   }
 
   if(d.kind === 'commercial'){
-    if(wrand() < .28){
-      bBigBox(B, cx, cz, wrand() < .5 ? 0 : Math.PI,
-        'store', wpick([0xb03a2e, 0x1f618d, 0x196f3d, 0xd4ac0d, 0xc0392b]));
-      return;
-    }
+    /* apron of parking in front, building set back at the rear of the block */
     B.plate(cx, .07, cz - bh * .28, bw, bh * .44, C.asphaltOld, 0);
     for(i = 0; i < Math.floor(bw / 5.4); i++){
       B.plate(x0 + 2 + i * 5.4, .1, cz - bh * .28, .16, 9, C.line, 0);
       if(wrand() < .45) bCarPark(B, x0 + 2 + i * 5.4 + 2.7, cz - bh * .28, Math.PI / 2);
     }
-    var sr = bStore(B, cx, cz + bh * .22, 0, Math.min(bw - 8, 70), 22, wrng(5.5, 8), wrand() < .35);
-    addSolid(cx, cz + bh * .22, sr.hw, sr.hd, 8, 0);
+    var bx = cx, bz = cz + bh * .22;
+    var pick2 = wrand();
+    var res;
+    if(pick2 < .30 && bw > 60){
+      res = bStripMall(B, bx, bz, 0, Math.min(bw - 8, 76), 20);
+    } else if(pick2 < .44 && bw > 84){
+      bGrocery(B, bx, bz, 0, wpick(['GROCERY', 'SUPERMARKET', 'FOODS', 'MARKET']),
+               wpick([0xd23b2c, 0x1a7a3c, 0x1f4e9c]));
+      res = { hw:37, hd:23 };
+    } else if(pick2 < .56){
+      res = bAutoRepair(B, bx, bz, 0);
+    } else if(pick2 < .66){
+      res = bBank(B, bx, bz, 0);
+    } else if(pick2 < .78){
+      res = bFastFood(B, bx, bz, 0, wpick(['BURGERS', 'TACOS', 'CHICKEN', 'PIZZA', 'BBQ']));
+    } else if(pick2 < .86 && bw > 56){
+      res = bMotel(B, bx, bz, 0);
+    } else if(pick2 < .92){
+      res = bSelfStorage(B, bx, bz, 0);
+    } else {
+      res = bStore(B, bx, bz, 0, Math.min(bw - 8, 70), 22, wrng(5.5, 8), wrand() < .35);
+      addSolid(bx, bz, res.hw, res.hd, 8, 0);
+    }
     return;
   }
 
@@ -2218,13 +3220,108 @@ function placeLandmarks(){
   bBigBox(CB(430, 640), 430, 640, Math.PI, 'mall', 0xb03a2e);
   LM('Southside Marketplace', 430, 600, 'shop', true);
 
+  /* Gas stations sit where they really do: interchanges, frontage roads,
+     and every crossroads out in the county. */
+  var GASNAMES = ['BLUEBONNET FUEL', 'LONE STAR GAS', 'PECAN STOP', 'DERRICK FUEL',
+                  'BAYARD FUEL', 'CROSSROADS GAS', 'RANCH STOP', 'TWIN BLUFF FUEL',
+                  'FM 157 FUEL', 'CYPRESS FUEL', 'RIVERSIDE GAS', 'GAFNEY FUEL'];
   var gs = [[590, -180, 0], [590, 620, 0], [810, -900, Math.PI], [-980, 120, 0],
-            [1560, 20, 0], [-1420, 1180, 0], [180, -1180, 0], [1120, 900, Math.PI]];
+            [1560, 20, 0], [-1420, 1180, 0], [180, -1180, 0], [1120, 900, Math.PI],
+            [-320, 980, 0], [1380, -640, Math.PI], [-1760, -240, 0], [260, 1560, 0],
+            [-640, -1420, Math.PI], [1880, 560, 0], [-1180, 1760, 0], [880, 1300, Math.PI]];
   var i;
   for(i = 0; i < gs.length; i++){
-    bGasStation(CB(gs[i][0], gs[i][1]), gs[i][0], gs[i][1], gs[i][2],
-      wpick([0xd42027, 0x1a7a3c, 0xe08a1e, 0x1f4e9c]));
-    LM('Fuel Stop', gs[i][0], gs[i][1], 'gas', true);
+    bGasStationV2(CB(gs[i][0], gs[i][1]), gs[i][0], gs[i][1], gs[i][2],
+      wpick([0xd42027, 0x1a7a3c, 0xe08a1e, 0x1f4e9c]), GASNAMES[i % GASNAMES.length]);
+    LM(GASNAMES[i % GASNAMES.length], gs[i][0], gs[i][1], 'gas', true);
+  }
+
+  /* --- named commercial anchors scattered across the county --- */
+  var GROC = [[-1240, -560, 0, 'GROCERY', 0xd23b2c], [760, 380, Math.PI, 'SUPERMARKET', 0x1a7a3c],
+              [1640, -980, 0, 'FOODS', 0x1f4e9c], [-420, 1420, Math.PI, 'MARKET', 0xd23b2c]];
+  for(i = 0; i < GROC.length; i++){
+    bGrocery(CB(GROC[i][0], GROC[i][1]), GROC[i][0], GROC[i][1], GROC[i][2], GROC[i][3], GROC[i][4]);
+    LM(GROC[i][3], GROC[i][0], GROC[i][1], 'shop', true);
+  }
+  var STRIPS = [[-880, 760, 0], [1240, 240, Math.PI], [340, -820, 0], [-1560, 420, Math.PI],
+                [1020, 1560, 0], [-260, -1560, Math.PI], [1760, 1020, 0], [-1900, 980, 0]];
+  for(i = 0; i < STRIPS.length; i++){
+    bStripMall(CB(STRIPS[i][0], STRIPS[i][1]), STRIPS[i][0], STRIPS[i][1], STRIPS[i][2], 70, 20);
+    LM('Shopping Center', STRIPS[i][0], STRIPS[i][1], 'shop', false);
+  }
+  var BANKS = [[120, 140, 0], [-620, 420, Math.PI], [1140, -320, 0], [-1320, -900, 0]];
+  for(i = 0; i < BANKS.length; i++){
+    bBank(CB(BANKS[i][0], BANKS[i][1]), BANKS[i][0], BANKS[i][1], BANKS[i][2]);
+    LM('Bayard Bank & Trust', BANKS[i][0], BANKS[i][1], 'bank', true);
+  }
+  var FOOD = [[420, -320, 0, 'BURGERS'], [-540, 180, Math.PI, 'TACOS'], [960, 700, 0, 'CHICKEN'],
+              [-1080, -180, 0, 'PIZZA'], [1440, 420, Math.PI, 'BBQ'], [-180, 880, 0, 'DONUTS']];
+  for(i = 0; i < FOOD.length; i++){
+    bFastFood(CB(FOOD[i][0], FOOD[i][1]), FOOD[i][0], FOOD[i][1], FOOD[i][2], FOOD[i][3]);
+    LM(FOOD[i][3], FOOD[i][0], FOOD[i][1], 'food', false);
+  }
+  /* --- fast food, thick on the arterials like the real thing --- */
+  var FF = [[420,-320,0,'BURGERS'],[-540,180,Math.PI,'TACOS'],[960,700,0,'CHICKEN'],
+            [-1080,-180,0,'PIZZA'],[1440,420,Math.PI,'BBQ'],[-180,880,0,'DONUTS'],
+            [640,-60,0,'BURGERS'],[-760,-620,Math.PI,'TACOS'],[1180,1080,0,'DONUTS'],
+            [-1340,760,0,'CHICKEN'],[240,-980,Math.PI,'PIZZA'],[1620,-260,0,'BURGERS'],
+            [-420,1180,0,'BBQ'],[820,1420,Math.PI,'TACOS'],[-1680,-780,0,'DONUTS'],
+            [1340,-1180,0,'CHICKEN'],[-960,1460,Math.PI,'BURGERS'],[460,620,0,'SANDWICHES'],
+            [-1520,80,0,'PIZZA'],[1080,-760,Math.PI,'TACOS'],[-260,-640,0,'COFFEE'],
+            [1760,880,0,'COFFEE'],[-1140,-1120,Math.PI,'SANDWICHES'],[600,1760,0,'CHICKEN']];
+  for(i = 0; i < FF.length; i++){
+    bFastFood(CB(FF[i][0], FF[i][1]), FF[i][0], FF[i][1], FF[i][2], FF[i][3]);
+    LM(FF[i][3], FF[i][0], FF[i][1], 'food', false);
+  }
+
+  /* --- parks and sports complexes --- */
+  var PARKS = [[-620, -680, 0, 'sports'], [1180, 340, 0, 'plain'],
+               [-1480, 1060, 0, 'sports'], [520, -1560, 0, 'plain'],
+               [1560, 1480, 0, 'sports'], [-1820, -420, 0, 'plain']];
+  for(i = 0; i < PARKS.length; i++){
+    bPark(CB(PARKS[i][0], PARKS[i][1]), PARKS[i][0], PARKS[i][1], PARKS[i][2], PARKS[i][3]);
+    LM(PARKS[i][3] === 'sports' ? 'Sports Complex' : 'City Park',
+       PARKS[i][0], PARKS[i][1], 'park', true);
+  }
+  var FIELDS = [[880, -520, 0, 'soccer'], [-1240, 240, Math.PI / 2, 'soccer'],
+                [1420, 940, 0, 'baseball'], [-880, -1340, 0, 'baseball'],
+                [260, 1240, Math.PI / 2, 'basketball'], [-1620, 620, 0, 'basketball'],
+                [1700, -880, 0, 'tennis'], [-420, -1180, 0, 'tennis']];
+  for(i = 0; i < FIELDS.length; i++){
+    var FB = CB(FIELDS[i][0], FIELDS[i][1]);
+    if(FIELDS[i][3] === 'soccer') bSoccer(FB, FIELDS[i][0], FIELDS[i][1], FIELDS[i][2]);
+    else if(FIELDS[i][3] === 'baseball') bBaseball(FB, FIELDS[i][0], FIELDS[i][1], FIELDS[i][2]);
+    else if(FIELDS[i][3] === 'tennis') bTennis(FB, FIELDS[i][0], FIELDS[i][1], FIELDS[i][2]);
+    else bBasketball(FB, FIELDS[i][0], FIELDS[i][1], FIELDS[i][2]);
+    LM('Athletic Field', FIELDS[i][0], FIELDS[i][1], 'park', false);
+  }
+
+  /* --- schools --- */
+  var SCHOOLS = [[-980, 620, 0, 'high', 'Cypress Falls High School'],
+                 [700, -1020, Math.PI, 'mid', 'Bayard Middle School'],
+                 [-320, 1020, 0, 'elem', 'Live Oak Elementary'],
+                 [1320, 620, Math.PI, 'elem', 'Pecan Grove Elementary'],
+                 [-1560, -900, 0, 'mid', 'West Bayard Middle School'],
+                 [1720, 220, 0, 'high', 'Gafney High School']];
+  for(i = 0; i < SCHOOLS.length; i++){
+    bSchool(CB(SCHOOLS[i][0], SCHOOLS[i][1]), SCHOOLS[i][0], SCHOOLS[i][1], SCHOOLS[i][2], SCHOOLS[i][3]);
+    LM(SCHOOLS[i][4], SCHOOLS[i][0], SCHOOLS[i][1], 'school', true);
+  }
+
+  /* --- junior college campus --- */
+  bCollege(CB(-1750, 1500), -1750, 1500, 0);
+  LM('Bayard County College', -1750, 1500, 'school', true);
+
+  var SHOPSV = [[680, -1240, 0, 'auto'], [-1640, 640, Math.PI, 'auto'], [1520, 1340, 0, 'auto'],
+                [-760, 1240, 0, 'storage'], [1300, -1420, Math.PI, 'storage'],
+                [-1480, -1320, 0, 'church'], [520, 1180, Math.PI, 'church'], [1720, -420, 0, 'church'],
+                [-1120, 1560, 0, 'motel'], [1640, 720, Math.PI, 'motel']];
+  for(i = 0; i < SHOPSV.length; i++){
+    var sv = SHOPSV[i], BB = CB(sv[0], sv[1]);
+    if(sv[3] === 'auto'){ bAutoRepair(BB, sv[0], sv[1], sv[2]); LM('Auto Repair', sv[0], sv[1], 'shop', false); }
+    else if(sv[3] === 'storage'){ bSelfStorage(BB, sv[0], sv[1], sv[2]); LM('Self Storage', sv[0], sv[1], 'shop', false); }
+    else if(sv[3] === 'church'){ bChurch(BB, sv[0], sv[1], sv[2]); LM('Church', sv[0], sv[1], 'church', false); }
+    else { bMotel(BB, sv[0], sv[1], sv[2]); LM('Motel', sv[0], sv[1], 'shop', false); }
   }
 
   bAirport(CB(0, -2000), 0, -2000);
@@ -2365,27 +3462,37 @@ function noiseField(size, cells, seed){
 /* The one grain texture that multiplies over the whole world. It is centred
    on mid-grey so it darkens and lightens rather than tinting. */
 function buildGrainTexture(){
-  var S = 256;
+  var S = 512;
   var cv = makeCanvas(S), g = cv.getContext('2d');
   var img = g.createImageData(S, S), d = img.data;
-  var n1 = noiseField(S, 64, 1337);
-  var n2 = noiseField(S, 16, 991);
-  var n3 = noiseField(S, 128, 55);
+  /* Several octaves so the surface reads at both walking distance and from
+     a moving car. This one texture multiplies over everything, so it has to
+     carry asphalt aggregate, grass clumping and concrete mottle at once. */
+  var n1 = noiseField(S, 128, 1337);
+  var n2 = noiseField(S, 32, 991);
+  var n3 = noiseField(S, 256, 55);
+  var n4 = noiseField(S, 8, 404);
   var i, j;
   for(i = 0; i < S; i++){
     for(j = 0; j < S; j++){
       var k = i * S + j;
-      var v = n1[k] * .42 + n2[k] * .30 + n3[k] * .28;
-      /* a little contrast so asphalt reads as aggregate */
-      v = .5 + (v - .5) * 1.5;
-      var c = clamp(Math.round(170 + (v - .5) * 150), 90, 255);
+      var v = n1[k] * .34 + n2[k] * .26 + n3[k] * .28 + n4[k] * .12;
+      /* stronger contrast than before -- the old curve was so flat the
+         surfaces read as untextured colour fields */
+      v = .5 + (v - .5) * 2.35;
+      /* speckle for aggregate */
+      if(n3[k] > .78) v += .16;
+      if(n3[k] < .19) v -= .14;
+      var c = clamp(Math.round(168 + (v - .5) * 210), 56, 255);
       var o = k * 4;
       d[o] = d[o + 1] = d[o + 2] = c;
       d[o + 3] = 255;
     }
   }
   g.putImageData(img, 0, 0);
-  return texFromCanvas(cv);
+  var t = texFromCanvas(cv);
+  t.anisotropy = 8;
+  return t;
 }
 
 /* Cloud dome texture: soft banded cumulus that reads from below. */
@@ -2480,27 +3587,219 @@ function buildSky(scene){
 }
 
 /* cloud layer sits just inside the dome */
+/* Two counter-drifting cloud shells read as depth rather than one flat decal.
+   The lower deck is denser and moves faster, which sells wind. */
 function buildClouds(scene, tex){
-  var geo = new THREE.SphereGeometry(2200, 24, 12);
-  var mat = new THREE.MeshBasicMaterial({
-    map: tex, transparent: true, opacity: .0,
-    side: THREE.BackSide, depthWrite: false, fog: false
-  });
-  var m = new THREE.Mesh(geo, mat);
-  m.frustumCulled = false;
-  m.renderOrder = -999;
-  scene.add(m);
-  return m;
+  var g = new THREE.Group();
+  var i;
+  for(i = 0; i < 2; i++){
+    var geo = new THREE.SphereGeometry(i ? 2050 : 2210, 24, 12);
+    /* the lower deck tiles tighter; fall back to sharing if clone is absent */
+    var t2 = tex;
+    if(i && tex.clone){
+      t2 = tex.clone();
+      t2.needsUpdate = true;
+      if(t2.repeat && t2.repeat.set) t2.repeat.set(2, 2);
+    }
+    var mat = new THREE.MeshBasicMaterial({
+      map: t2, transparent: true, opacity: 0,
+      side: THREE.BackSide, depthWrite: false, fog: false
+    });
+    var m = new THREE.Mesh(geo, mat);
+    m.frustumCulled = false;
+    m.renderOrder = -999 + i;
+    m.userData.deck = i;
+    g.add(m);
+  }
+  g.frustumCulled = false;
+  scene.add(g);
+  return g;
 }
 
 /* ---- palettes per weather + time of day --------------------- */
 var SKY_KEYS = {
-  clear: { zen:0x2a68c0, hor:0xc2d8ee, gnd:0x8d8578, sun:0xfff2d2, cloud:.12 },
+  clear: { zen:0x1f5ab8, hor:0x9cc2e2, gnd:0x837a6a, sun:0xfff2d2, cloud:.12 },
   cloud: { zen:0x63758c, hor:0xb3bcc7, gnd:0x7c8088, sun:0xdfe3e8, cloud:.55 },
   rain:  { zen:0x3f4a58, hor:0x808a96, gnd:0x5f666e, sun:0x9aa4b0, cloud:.80 },
   storm: { zen:0x252c36, hor:0x545d6a, gnd:0x3d434b, sun:0x6e7681, cloud:.95 },
   fog:   { zen:0x9aa2ac, hor:0xc3c8cd, gnd:0xa2a7ac, sun:0xd0d4d8, cloud:.70 }
 };
+
+/* ============================================================
+   LICENCE PLATES
+   A real texture per plate so what you read off the back of a car is
+   the same string the MDT and the ALPR will return. Textures are
+   cached and the cache is capped, since traffic churns constantly.
+   ============================================================ */
+var PLATE_TEX = {}, PLATE_ORDER = [], PLATE_TEX_MAX = 70;
+function buildPlateTexture(txt){
+  if(PLATE_TEX[txt]) return PLATE_TEX[txt];
+  var W = 256, Hh = 128;
+  var cv = makeCanvas(W);
+  cv.height = Hh;
+  var g = cv.getContext('2d');
+  /* plate body */
+  g.fillStyle = '#f2f2ee';
+  g.fillRect(0, 0, W, Hh);
+  /* faint blue wash at the top like a Texas plate */
+  var grd = g.createLinearGradient(0, 0, 0, Hh);
+  grd.addColorStop(0, 'rgba(190,210,230,.85)');
+  grd.addColorStop(.34, 'rgba(242,242,238,0)');
+  g.fillStyle = grd;
+  g.fillRect(0, 0, W, Hh);
+  /* border */
+  g.strokeStyle = '#20242a';
+  g.lineWidth = 6;
+  g.strokeRect(3, 3, W - 6, Hh - 6);
+  /* state name */
+  g.fillStyle = '#243a5e';
+  g.font = 'bold 21px ui-monospace, Menlo, monospace';
+  g.textAlign = 'center';
+  g.textBaseline = 'middle';
+  g.fillText('TEXAS', W / 2, 22);
+  /* the number */
+  g.fillStyle = '#14181d';
+  g.font = 'bold 54px ui-monospace, Menlo, monospace';
+  g.fillText(txt, W / 2, Hh / 2 + 14);
+  /* month/year tabs */
+  g.fillStyle = '#8d1f2b';
+  g.fillRect(14, Hh - 30, 30, 20);
+  g.fillStyle = '#1d5c3a';
+  g.fillRect(W - 44, Hh - 30, 30, 20);
+
+  var t = new THREE.CanvasTexture(cv);
+  t.anisotropy = 4;
+  PLATE_TEX[txt] = t;
+  PLATE_ORDER.push(txt);
+  while(PLATE_ORDER.length > PLATE_TEX_MAX){
+    var old = PLATE_ORDER.shift();
+    if(PLATE_TEX[old]){
+      if(PLATE_TEX[old].dispose) PLATE_TEX[old].dispose();
+      delete PLATE_TEX[old];
+    }
+  }
+  return t;
+}
+/* front and rear plates, sized and positioned off the body profile */
+function attachPlates(grp, P, plateTxt, marked){
+  var tex = buildPlateTexture(plateTxt);
+  var mat = new THREE.MeshBasicMaterial({ map:tex });
+  var w = Math.min(.52, P.wid * .30), h = w * .5;
+  var geo = new THREE.PlaneGeometry(w, h);
+  var y = P.sill + .30;
+
+  var rear = new THREE.Mesh(geo, mat);
+  rear.position.set(P.tail - .015, y, 0);
+  rear.rotation.y = -Math.PI / 2;
+  grp.add(rear);
+
+  if(!P.bike){
+    var front = new THREE.Mesh(geo, mat);
+    front.position.set(P.nose + .015, y, 0);
+    front.rotation.y = Math.PI / 2;
+    grp.add(front);
+  }
+  return grp;
+}
+
+/* ============================================================
+   AGENCY DOOR LETTERING
+   Same approach as the plates: one small canvas texture per unique
+   decal, applied as thin planes on both flanks. Agency names are the
+   game's own fictional departments.
+   ============================================================ */
+var DOOR_TEX = {};
+function doorTexture(top, big, ink, field){
+  var key = top + '|' + big + '|' + ink + '|' + field;
+  if(DOOR_TEX[key]) return DOOR_TEX[key];
+  var W = 512, Hh = 192;
+  var cv = makeCanvas(W); cv.height = Hh;
+  var g = cv.getContext('2d');
+  g.clearRect(0, 0, W, Hh);
+  if(field !== null && field !== undefined){
+    g.fillStyle = '#' + ('000000' + field.toString(16)).slice(-6);
+    g.fillRect(0, 0, W, Hh);
+  }
+  g.textAlign = 'center';
+  g.fillStyle = '#' + ('000000' + ink.toString(16)).slice(-6);
+  if(top){
+    g.font = 'bold 34px ui-monospace, Menlo, monospace';
+    g.textBaseline = 'middle';
+    g.fillText(top, W / 2, 46);
+  }
+  g.font = 'bold ' + (big.length > 8 ? 66 : 84) + 'px ui-monospace, Menlo, monospace';
+  g.textBaseline = 'middle';
+  g.fillText(big, W / 2, top ? 126 : Hh / 2);
+  var t = new THREE.CanvasTexture(cv);
+  t.anisotropy = 4;
+  DOOR_TEX[key] = t;
+  return t;
+}
+/* small gold shield decal for the rear quarter */
+function shieldTexture(){
+  if(DOOR_TEX.__shield) return DOOR_TEX.__shield;
+  var S = 64, cv = makeCanvas(S);
+  var g = cv.getContext('2d');
+  g.clearRect(0, 0, S, S);
+  g.fillStyle = '#d9be5e';
+  g.beginPath();
+  g.moveTo(S * .5, S * .06);
+  g.quadraticCurveTo(S * .88, S * .16, S * .88, S * .40);
+  g.quadraticCurveTo(S * .88, S * .74, S * .5, S * .94);
+  g.quadraticCurveTo(S * .12, S * .74, S * .12, S * .40);
+  g.quadraticCurveTo(S * .12, S * .16, S * .5, S * .06);
+  g.fill();
+  g.strokeStyle = 'rgba(40,30,5,.65)';
+  g.lineWidth = 3;
+  g.stroke();
+  var t = new THREE.CanvasTexture(cv);
+  DOOR_TEX.__shield = t;
+  return t;
+}
+var LIVERY_DECALS = {
+  pd:  { top:'CYPRESS FALLS', big:'POLICE',  ink:0x1b2a44, shield:true },
+  so:  { top:'BAYARD COUNTY', big:'SHERIFF', ink:0x3b2d20, shield:true },
+  dps: { top:'HIGHWAY PATROL', big:'STATE TROOPER', ink:0x14181d, shield:false },
+  ctso:{ top:'PRECINCT 4', big:'CONSTABLE', ink:0x1d4a30, shield:true }
+};
+function attachDoorText(grp, P, liv){
+  var d = LIVERY_DECALS[liv];
+  if(!d || P.bike) return;
+  var tex = doorTexture(d.top, d.big, d.ink, null);
+  var mat = new THREE.MeshBasicMaterial({ map:tex, transparent:true });
+  /* sized to the door blade the livery painter already laid down */
+  var doorX = P.cabin ? (P.cabin[0][0] + P.cabin[3][0]) / 2 - .10 : 0;
+  var doorY = (P.sill + P.beltY) / 2 + .12;
+  var w = Math.min(1.9, P.len * .34), h = w * .375;
+  var hw = P.wid / 2 + .028;
+  var geo = new THREE.PlaneGeometry(w, h);
+  var L = new THREE.Mesh(geo, mat);
+  L.position.set(doorX, doorY, hw);
+  grp.add(L);
+  var R = new THREE.Mesh(geo, mat);
+  R.position.set(doorX, doorY, -hw);
+  R.rotation.y = Math.PI;
+  grp.add(R);
+  /* tailgate / rear text */
+  var rt = doorTexture(null, d.big, d.ink === 0x14181d ? 0xe8eef2 : d.ink, null);
+  var rmat = new THREE.MeshBasicMaterial({ map:rt, transparent:true });
+  var rg = new THREE.Mesh(new THREE.PlaneGeometry(w * .72, h * .5), rmat);
+  rg.position.set(P.tail - .028, P.beltY - .16, 0);
+  rg.rotation.y = -Math.PI / 2;
+  grp.add(rg);
+  if(d.shield){
+    var smat = new THREE.MeshBasicMaterial({ map:shieldTexture(), transparent:true });
+    var qx = P.cabin ? P.cabin[0][0] - .55 : -1.4;
+    var sgeo = new THREE.PlaneGeometry(.30, .30);
+    var SL = new THREE.Mesh(sgeo, smat);
+    SL.position.set(qx, doorY + .08, hw);
+    grp.add(SL);
+    var SR = new THREE.Mesh(sgeo, smat);
+    SR.position.set(qx, doorY + .08, -hw);
+    SR.rotation.y = Math.PI;
+    grp.add(SR);
+  }
+}
 /* ============================================================
    VEHICLES -- bodies, wheels, liveries, lighting, physics
    Rewritten: silhouette-driven bodies, correct wheel axis,
@@ -3135,6 +4434,9 @@ function Vehicle(defId, liv, x, z, h, kind, civDef){
   this.headlights = false;
   this.plate = makePlate();
   this.rec = getVehRecord(this.plate, this);
+  /* the plate you can read off the bumper is the one the MDT will return */
+  attachPlates(this.mesh, this.P, this.plate, this.liv !== 'civ');
+  attachDoorText(this.mesh, this.P, this.liv);
   this.driver = DB.people[this.rec.ownerId] || makePerson({ minA:18 });
   this.alive = true;
   this.mesh.position.set(x, 0, z);
@@ -3543,87 +4845,7 @@ var SKIN = [0xf0c8a0, 0xd9a878, 0xb98354, 0x8d5a34, 0x63402a, 0xf7d9bd, 0xa8703f
 var SHIRT = [0x2f4f7a, 0x7a2f2f, 0x2f7a4f, 0xd8d8d8, 0x30343a, 0x8a6a2f, 0x6a2f7a, 0xc8a83a, 0x3a3a3a, 0xa83a5a];
 var PANTS = [0x2a3a56, 0x3a3a3a, 0x5a4a3a, 0x1e2a3a, 0x6a6a68, 0x2a2a2a];
 
-function buildPerson(opts){
-  opts = opts || {};
-  var B = new Builder();
-  var skin = opts.skin || pick(SKIN);
-  var shirt = opts.shirt || pick(SHIRT);
-  var pants = opts.pants || pick(PANTS);
-  var scale = opts.child ? .62 : 1;
-  if(opts.female) scale *= .955;
-  var bulk = 1 + ((opts.build === 2) ? .17 : ((opts.build === 0) ? -.09 : ((opts.build === 3) ? .06 : 0)));
-  var hipY = 0.86 * scale;
-
-  /* legs */
-  B.box(-0.11 * scale, hipY * .5, 0, .18 * scale, hipY, .20 * scale, pants, 0);
-  B.box( 0.11 * scale, hipY * .5, 0, .18 * scale, hipY, .20 * scale, pants, 0);
-  B.box(-0.11 * scale, .04 * scale, .04 * scale, .20 * scale, .09 * scale, .30 * scale, 0x1a1a1c, 0);
-  B.box( 0.11 * scale, .04 * scale, .04 * scale, .20 * scale, .09 * scale, .30 * scale, 0x1a1a1c, 0);
-  /* torso */
-  var tH = .58 * scale;
-  B.box(0, hipY + tH * .5, 0, .44 * scale * bulk, tH, .25 * scale * bulk, shirt, 0);
-  if(opts.cop){
-    /* body armor carrier */
-    if(opts.vest === 'outer'){
-      B.box(0, hipY + tH * .56, 0, .48 * scale * bulk, tH * .74, .29 * scale * bulk, shade(shirt, .74), 0);
-      B.box(0, hipY + tH * .30, .148 * scale * bulk, .16 * scale, .07 * scale, .03 * scale, 0x2a2f36, 0);
-    } else if(opts.vest === 'plate'){
-      B.box(0, hipY + tH * .58, 0, .50 * scale * bulk, tH * .78, .32 * scale * bulk, 0x2a2f27, 0);
-      B.box(-.13 * scale, hipY + tH * .30, .17 * scale * bulk, .10 * scale, .10 * scale, .04 * scale, 0x1c2019, 0);
-      B.box( .13 * scale, hipY + tH * .30, .17 * scale * bulk, .10 * scale, .10 * scale, .04 * scale, 0x1c2019, 0);
-      B.box(0, hipY + tH * .62, .17 * scale * bulk, .30 * scale, .09 * scale, .04 * scale, 0x1c2019, 0);
-    }
-    B.box(0, hipY + .06 * scale, 0, .47 * scale, .11 * scale, .28 * scale, 0x14161a, 0);   /* duty belt */
-    B.box(.20 * scale, hipY + .02 * scale, .04 * scale, .09 * scale, .18 * scale, .07 * scale, 0x14161a, 0); /* holster */
-    B.box(-.20 * scale, hipY + .04 * scale, 0, .07 * scale, .12 * scale, .07 * scale, 0x2a2f36, 0);
-    B.box(-.14 * scale, hipY + tH * .82, .13 * scale, .10 * scale, .12 * scale, .03 * scale, 0xc9a227, 0); /* badge */
-    B.box(0, hipY + tH * .34, .13 * scale, .40 * scale, .30 * scale, .03 * scale, shade(shirt, .82), 0);
-    B.box(.16 * scale, hipY + tH * .90, .13 * scale, .10 * scale, .04 * scale, .03 * scale, 0xd8d8d8, 0);
-    B.box(0, hipY + tH * .78, -.14 * scale, .30 * scale, .10 * scale, .03 * scale, 0xf0f2f4, 0);
-  }
-  /* arms */
-  B.box(-0.29 * scale, hipY + tH * .58, 0, .13 * scale, .48 * scale, .15 * scale, shirt, 0);
-  B.box( 0.29 * scale, hipY + tH * .58, 0, .13 * scale, .48 * scale, .15 * scale, shirt, 0);
-  var handCol = opts.gloves && opts.gloves !== 'none' ? 0x18191c : skin;
-  B.box(-0.29 * scale, hipY + tH * .20, 0, .11 * scale, .12 * scale, .12 * scale, handCol, 0);
-  B.box( 0.29 * scale, hipY + tH * .20, 0, .11 * scale, .12 * scale, .12 * scale, handCol, 0);
-  /* head */
-  var hy = hipY + tH + .13 * scale;
-  B.box(0, hy, 0, .16 * scale, .10 * scale, .14 * scale, skin, 0);
-  B.box(0, hy + .13 * scale, 0, .23 * scale, .26 * scale, .22 * scale, skin, 0);
-  var hair = opts.cop ? 0x2a2018 : pick([0x2a2018, 0x5a3a20, 0x8a7a48, 0x1a1a1a, 0x8a8a88, 0x6a3520]);
-  var hs = (opts.hair === undefined) ? 1 : opts.hair;
-  if(hs !== 5){
-    var hh = (hs === 0) ? .045 : ((hs === 2) ? .06 : .09);
-    B.box(0, hy + .245 * scale, -.01 * scale, .245 * scale, hh * scale, .235 * scale, hair, 0);
-    if(hs === 2) B.box(0, hy + .19 * scale, -.10 * scale, .245 * scale, .10 * scale, .05 * scale, hair, 0);
-    if(hs === 3) B.box(0, hy + .14 * scale, -.16 * scale, .10 * scale, .24 * scale, .09 * scale, hair, 0);
-    if(hs === 4) B.box(0, hy + .30 * scale, -.11 * scale, .13 * scale, .12 * scale, .12 * scale, hair, 0);
-  }
-  if(opts.glasses){
-    B.box(0, hy + .155 * scale, .115 * scale, .215 * scale, .045 * scale, .03 * scale, 0x101216, 0);
-  }
-  if(opts.cop && opts.hat && opts.hat !== 'none'){
-    if(opts.hat === 'campaign'){
-      B.box(0, hy + .295 * scale, 0, .46 * scale, .028 * scale, .46 * scale, 0x2b2118, 0);
-      B.box(0, hy + .345 * scale, 0, .21 * scale, .13 * scale, .21 * scale, 0x2b2118, 0);
-      B.box(0, hy + .315 * scale, 0, .225 * scale, .026 * scale, .225 * scale, 0x14161a, 0);
-    } else if(opts.hat === 'eight'){
-      B.box(0, hy + .305 * scale, 0, .30 * scale, .075 * scale, .30 * scale, 0x14161a, 0);
-      B.box(0, hy + .355 * scale, 0, .245 * scale, .055 * scale, .245 * scale, 0x14161a, 0);
-      B.box(0, hy + .285 * scale, .17 * scale, .24 * scale, .026 * scale, .11 * scale, 0x0d0f12, 0);
-      B.box(0, hy + .335 * scale, .155 * scale, .11 * scale, .05 * scale, .03 * scale, 0xc9a227, 0);
-    } else {
-      B.box(0, hy + .30 * scale, 0, .27 * scale, .06 * scale, .27 * scale, 0x14161a, 0);
-      B.box(0, hy + .35 * scale, 0, .22 * scale, .07 * scale, .22 * scale, 0x14161a, 0);
-      B.box(0, hy + .30 * scale, .16 * scale, .22 * scale, .03 * scale, .10 * scale, 0x0d0f12, 0);
-    }
-  }
-  if(opts.hoodie){
-    B.box(0, hy + .10 * scale, -.14 * scale, .26 * scale, .22 * scale, .10 * scale, shade(shirt, .85), 0);
-  }
-  return new THREE.Mesh(B.geo(), new THREE.MeshLambertMaterial({ vertexColors:true }));
-}
+/* buildPerson now lives in the people module as a rigged, animated body. */
 
 function Ped(x, z, opts){
   opts = opts || {};
@@ -3647,14 +4869,25 @@ function Ped(x, z, opts){
   this.stunT = 0;
 }
 Ped.prototype.setState = function(s){ this.state = s; this.t = 0; };
+Ped.prototype.pose = function(dt){
+  /* cap the stride rate: fleeing peds move at 5+ m/s and an uncapped
+     phase made their legs blur comically */
+  this.anim = (this.anim || 0) + (this.spd > .15 ? Math.min(this.spd, 2.3) * 4.4 : .9) * dt;
+  animatePerson(this.mesh, {
+    spd:this.spd, anim:this.anim, y:this.y || 0,
+    down:this.down, cuffed:this.cuffed, hands:this.hands,
+    fight:(this.state === 'fight')
+  }, dt);
+};
 Ped.prototype.update = function(dt){
   var p = this;
   this.t += dt;
   if(this.stunT > 0){
     this.stunT -= dt; this.down = true; this.spd = 0;
-    this.mesh.rotation.x = -Math.PI / 2.2;
-    this.mesh.position.set(this.x, .3, this.z);
+    this.mesh.position.set(this.x, this.y || 0, this.z);
     this.mesh.rotation.y = -this.h;
+    this.pose(dt);
+    if(this.stunT <= 0) this.down = false;
     return;
   }
   this.mesh.rotation.x = 0;
@@ -3668,6 +4901,38 @@ Ped.prototype.update = function(dt){
   var px = G.player.x, pz = G.player.z;
   var dToP = dist(this.x, this.z, px, pz);
 
+  if(this.state === 'kerb'){
+    /* face the crossing and wait */
+    this.spd = 0;
+    var nd = this.pendingNode, ne = this.pendingEdge;
+    if(!nd || !ne){ this.setState('walk'); return; }
+    this.h = Math.atan2(nd.z - this.z, nd.x - this.x);
+    var clear = true;
+    if(nd.light){
+      /* cross when the traffic on the street you are stepping into is stopped */
+      clear = !lightGreen(nd, ne);
+    }
+    if(clear){
+      /* still look both ways: no crossing in front of a close, fast car */
+      var q;
+      for(q = 0; q < G.traffic.length; q++){
+        var tv2 = G.traffic[q];
+        if(Math.abs(tv2.spd) < 2) continue;
+        if(dist(tv2.x, tv2.z, nd.x, nd.z) < 16 + Math.abs(tv2.spd) * 1.2){ clear = false; break; }
+      }
+    }
+    if(clear && this.t > .35){
+      this.crossOK = true;
+      this.tt = 1;
+      this.setState('walk');
+    } else if(this.t > 26){
+      /* never let someone be stuck at a kerb forever */
+      this.crossOK = true;
+      this.tt = 1;
+      this.setState('walk');
+    }
+    return;
+  }
   if(this.state === 'walk'){
     this.spd = this.wspd;
     if(!this.edge || this.tt > 1){ this.pickEdge(); }
@@ -3709,6 +4974,7 @@ Ped.prototype.update = function(dt){
   this.mesh.position.set(this.x, this.y + Math.abs(Math.sin(this.anim)) * .045, this.z);
   this.mesh.rotation.y = -this.h + Math.PI / 2;
   this.mesh.rotation.z = Math.sin(this.anim) * .05;
+  this.pose(dt);
 };
 Ped.prototype.step = function(dt){
   var nx = this.x + Math.cos(this.h) * this.spd * dt;
@@ -3737,7 +5003,20 @@ Ped.prototype.followEdge = function(dt, spdF){
     var nn = b, opts = [], i;
     for(i = 0; i < nn.e.length; i++) if(nn.e[i] !== e.i) opts.push(nn.e[i]);
     if(opts.length === 0) { this.dir *= -1; this.tt = 0; return; }
-    this.edge = EDGES[pick(opts)];
+    var next = EDGES[pick(opts)];
+    /* Turning onto a different street means stepping off the kerb. At a
+       signal, wait for the light; at anything else, wait for a gap. This is
+       what stops people strolling straight through moving traffic. */
+    var mustCross = (next.i !== e.i) && (nn.light || nn.stop || next.w > 10);
+    if(mustCross && !this.crossOK){
+      this.pendingEdge = next;
+      this.pendingNode = nn;
+      this.setState('kerb');
+      this.spd = 0;
+      return;
+    }
+    this.crossOK = false;
+    this.edge = next;
     this.dir = (NODES[this.edge.a].i === nn.i) ? 1 : -1;
     this.tt = 0;
     if(chance(.12)) this.setState('idle');
@@ -3792,6 +5071,7 @@ function trafficUpdate(v, dt){
   var ang = Math.atan2(b.z - a.z, b.x - a.x);
 
   v.brakeReason = null;
+  if(v.stopNode !== undefined && v.stopCleared && v.t < .2) v.stopNode = -1;
   updateStuck(v, dt);
   if(v.pulled){ v.throttle = 0; v.brake = 1; v.steer = 0; return; }
 
@@ -3859,6 +5139,39 @@ function trafficUpdate(v, dt){
       if(b.light && !signalAllows(b, e, distToEnd, v.spd)){
         tgt = Math.min(tgt, Math.max(0, (distToEnd - 7) * .5));
         v.brakeReason = 'signal';
+      }
+      /* Stop signs: come to an actual halt at the line, wait your turn, then
+         go. Previously these were scenery. */
+      else if(b.stop){
+        if(v.stopNode !== b.i){
+          v.stopNode = b.i;
+          v.stopWait = 0;
+          v.stopCleared = false;
+        }
+        if(!v.stopCleared){
+          if(distToEnd > 9){
+            tgt = Math.min(tgt, Math.max(1.5, (distToEnd - 8) * .55));
+            v.brakeReason = 'stopsign';
+          } else if(Math.abs(v.spd) > .5){
+            tgt = 0;
+            v.brakeReason = 'stopsign';
+          } else {
+            /* stopped at the line: yield to anyone already waiting or crossing */
+            v.stopWait += dt;
+            var yielding = false, q2;
+            for(q2 = 0; q2 < G.traffic.length; q2++){
+              var ov = G.traffic[q2];
+              if(ov === v) continue;
+              if(dist(ov.x, ov.z, b.x, b.z) > 16) continue;
+              /* someone already in the box, or waiting longer than you */
+              if(dist(ov.x, ov.z, b.x, b.z) < 8 && Math.abs(ov.spd) > 1){ yielding = true; break; }
+              if(ov.stopNode === b.i && !ov.stopCleared && (ov.stopWait || 0) > v.stopWait){ yielding = true; break; }
+            }
+            if(yielding){ tgt = 0; v.brakeReason = 'stopsign'; }
+            else if(v.stopWait > .9){ v.stopCleared = true; }
+            else { tgt = 0; v.brakeReason = 'stopsign'; }
+          }
+        }
       }
       else if(b.stop && distToEnd < 16){
         if(v.stopTimer < 1.4){ tgt = Math.min(tgt, Math.max(0, (distToEnd - 6) * .5)); if(distToEnd < 8) v.stopTimer += dt; }
@@ -4045,6 +5358,272 @@ function updateSpikes(dt){
     }
     if(s.t > 180){ G.scene.remove(s.mesh); Pursuit.spikes.splice(i, 1); }
   }
+}
+/* ============================================================
+   PEOPLE -- segmented, animated
+   The old builder merged everything into one static mesh, so nobody
+   could move. Bodies are now a Group of named parts and the walk /
+   idle / flee / hands-up poses drive limb rotations directly.
+   ============================================================ */
+
+var SKINS = [0xf2c9a0, 0xe8b98c, 0xd39a6f, 0xa9714a, 0x7d4f31, 0x5a3722];
+var HAIRS = [0x1c1512, 0x2f2118, 0x5a3a20, 0x8a7a48, 0x9a9a98, 0x6a3520, 0x3d2a1c];
+var SHIRTS = [0x3c4652, 0x8a3f39, 0x2f5d7a, 0x3f6b48, 0xb5b0a6, 0x6b5a7a, 0xd8d3c8,
+              0x2a2f38, 0xa8763f, 0x4a5a3a, 0xc26a3a, 0x7a8b96];
+var PANTS = [0x35476b, 0x2a2f38, 0x4a4438, 0x5a6472, 0x2f3a4a, 0x6b6154];
+var SHOES = [0x22262c, 0x3a2a20, 0xe8e8e4, 0x4a3a2a];
+
+function mkPart(B, mat){
+  return new THREE.Mesh(B.geo(), mat);
+}
+/* one shared material keeps these cheap; colour lives in the vertices */
+var PERSON_MAT = null;
+function personMat(){
+  if(!PERSON_MAT) PERSON_MAT = new THREE.MeshLambertMaterial({ vertexColors:true });
+  return PERSON_MAT;
+}
+
+/* Build a person as a rig. Every limb is its own mesh parented to a pivot
+   so rotations happen at the shoulder and hip rather than the mesh origin. */
+function buildPerson(opts){
+  opts = opts || {};
+  var child = !!opts.child;
+  var female = !!opts.female;
+  var S = child ? .62 : (female ? .955 : 1);
+  var bulk = 1 + ((opts.build === 2) ? .18 : ((opts.build === 0) ? -.08 : ((opts.build === 3) ? .07 : 0)));
+
+  var skin = opts.skin !== undefined ? opts.skin : pick(SKINS);
+  var hair = opts.hairCol !== undefined ? opts.hairCol : pick(HAIRS);
+  var shirt = opts.shirt !== undefined ? opts.shirt : pick(SHIRTS);
+  var pants = opts.pants !== undefined ? opts.pants : pick(PANTS);
+  var shoe = opts.shoe !== undefined ? opts.shoe : pick(SHOES);
+  var cop = !!opts.cop;
+  var glove = (opts.gloves && opts.gloves !== 'none') ? 0x18191c : skin;
+
+  var g = new THREE.Group();
+  var mat = personMat();
+
+  /* --- proportions --- */
+  var hipY = .88 * S;
+  var torsoH = .60 * S;
+  var shoulderY = hipY + torsoH;
+  var headR = .13 * S;
+  var torsoW = .42 * S * bulk;
+  var torsoD = .24 * S * bulk;
+
+  /* ---- torso ---- */
+  var T = new Builder();
+  T.box(0, torsoH * .5, 0, torsoW, torsoH, torsoD, shirt, 0);
+  /* collar */
+  T.box(0, torsoH - .03 * S, 0, torsoW * .52, .07 * S, torsoD * 1.06, shade(shirt, 1.12), 0);
+  /* placket / button line */
+  T.box(0, torsoH * .48, torsoD * .52, .035 * S, torsoH * .74, .02 * S, shade(shirt, .84), 0);
+  if(cop){
+    /* pockets and epaulettes read as police at a glance */
+    T.box(-torsoW * .26, torsoH * .60, torsoD * .52, torsoW * .30, .13 * S, .02 * S, shade(shirt, .88), 0);
+    T.box( torsoW * .26, torsoH * .60, torsoD * .52, torsoW * .30, .13 * S, .02 * S, shade(shirt, .88), 0);
+    T.box(-torsoW * .40, torsoH - .05 * S, 0, torsoW * .22, .05 * S, torsoD * .92, shade(shirt, .90), 0);
+    T.box( torsoW * .40, torsoH - .05 * S, 0, torsoW * .22, .05 * S, torsoD * .92, shade(shirt, .90), 0);
+    /* badge */
+    T.box(-torsoW * .27, torsoH * .74, torsoD * .55, .085 * S, .10 * S, .02 * S, 0xd9be5e, 0);
+    /* name bar */
+    T.box( torsoW * .27, torsoH * .78, torsoD * .55, .13 * S, .035 * S, .02 * S, 0xd9be5e, 0);
+    /* body armour */
+    if(opts.vest === 'outer' || opts.vest === 'plate'){
+      var vc = opts.vest === 'plate' ? 0x2a2f27 : shade(shirt, .72);
+      T.box(0, torsoH * .54, 0, torsoW * 1.10, torsoH * .76, torsoD * 1.20, vc, 0);
+      T.box(0, torsoH * .30, torsoD * .62, torsoW * .34, .06 * S, .025 * S, shade(vc, .8), 0);
+    }
+    /* shoulder mic on the left */
+    T.box(-torsoW * .46, torsoH * .82, torsoD * .30, .05 * S, .12 * S, .05 * S, 0x1a1d22, 0);
+  } else if(opts.plaid){
+    /* a little pattern variety for the rural crowd */
+    var i2;
+    for(i2 = 0; i2 < 3; i2++){
+      T.box(0, torsoH * (.24 + i2 * .24), torsoD * .52, torsoW * 1.002, .05 * S, .012 * S, shade(shirt, .82), 0);
+    }
+  }
+  var torso = mkPart(T, mat);
+  torso.position.y = hipY;
+  g.add(torso);
+
+  /* ---- duty belt / waist ---- */
+  var W = new Builder();
+  W.box(0, 0, 0, torsoW * 1.03, .09 * S, torsoD * 1.05, cop ? 0x16181c : shade(pants, .8), 0);
+  if(cop){
+    W.box(0, 0, torsoD * .55, .09 * S, .07 * S, .02 * S, 0xc9ccd2, 0);           /* buckle */
+    W.box(-torsoW * .52, -.02 * S, .02 * S, .07 * S, .16 * S, .09 * S, 0x14161a, 0); /* holster */
+    W.box(-torsoW * .52, -.10 * S, .02 * S, .05 * S, .12 * S, .05 * S, 0x2a2e34, 0); /* grip */
+    W.box( torsoW * .50, -.01 * S, .01 * S, .07 * S, .10 * S, .08 * S, 0x14161a, 0); /* mag pouch */
+    W.box( torsoW * .30, -.01 * S, -torsoD * .50, .07 * S, .09 * S, .07 * S, 0xc9ccd2, 0); /* cuffs */
+    W.box(-torsoW * .22, -.01 * S, -torsoD * .50, .06 * S, .11 * S, .06 * S, 0x14161a, 0); /* radio */
+  }
+  var belt = mkPart(W, mat);
+  belt.position.y = hipY;
+  g.add(belt);
+
+  /* ---- head ---- */
+  var H = new Builder();
+  var hh = headR * 2.0;
+  H.box(0, 0, 0, headR * 1.85, hh, headR * 1.75, skin, 0);
+  /* brow ridge + eyes, the flat-shaded look from the references */
+  H.box(-headR * .42, headR * .18, headR * .90, headR * .40, headR * .12, .02 * S, 0x1a1512, 0);
+  H.box( headR * .42, headR * .18, headR * .90, headR * .40, headR * .12, .02 * S, 0x1a1512, 0);
+  H.box(-headR * .42, headR * .02, headR * .90, headR * .30, headR * .22, .02 * S, 0x15120f, 0);
+  H.box( headR * .42, headR * .02, headR * .90, headR * .30, headR * .22, .02 * S, 0x15120f, 0);
+  /* nose */
+  H.box(0, -headR * .12, headR * 1.00, headR * .26, headR * .40, headR * .28, shade(skin, .96), 0);
+  /* mouth */
+  H.box(0, -headR * .52, headR * .90, headR * .50, headR * .07, .02 * S, shade(skin, .72), 0);
+  /* ears */
+  H.box(-headR * .95, -headR * .05, 0, headR * .12, headR * .38, headR * .30, shade(skin, .94), 0);
+  H.box( headR * .95, -headR * .05, 0, headR * .12, headR * .38, headR * .30, shade(skin, .94), 0);
+  /* hair */
+  var hs = opts.hair === undefined ? ri(0, 4) : opts.hair;
+  if(hs !== 5){
+    var top = headR * .96;
+    var thick = (hs === 0) ? .16 : ((hs === 2) ? .22 : .34);
+    H.box(0, top + headR * thick * .5, -headR * .06, headR * 1.90, headR * thick, headR * 1.80, hair, 0);
+    /* sideburns / fringe */
+    H.box(-headR * .88, headR * .38, headR * .10, headR * .18, headR * .55, headR * 1.5, hair, 0);
+    H.box( headR * .88, headR * .38, headR * .10, headR * .18, headR * .55, headR * 1.5, hair, 0);
+    if(hs === 3) H.box(0, -headR * .10, -headR * 1.10, headR * .55, headR * 1.20, headR * .45, hair, 0); /* ponytail */
+    if(hs === 4) H.box(0, top + headR * .55, -headR * .70, headR * .70, headR * .60, headR * .60, hair, 0); /* bun */
+  }
+  if(opts.glasses){
+    H.box(0, headR * .06, headR * .96, headR * 1.60, headR * .30, .025 * S, 0x101216, 0);
+  }
+  var hat = opts.hat;
+  if(hat && hat !== 'none'){
+    if(hat === 'campaign' || hat === 'cowboy'){
+      var hc = hat === 'cowboy' ? 0x8a6b45 : 0x2b2118;
+      H.cyl(0, headR * 1.02, 0, headR * 2.55, headR * 2.45, .05 * S, 8, hc, 3);
+      H.cyl(0, headR * 1.06, 0, headR * 1.15, headR * 1.02, headR * 1.30, 8, hc, 3);
+      H.box(0, headR * 1.18, 0, headR * 2.36, .045 * S, headR * 2.30, shade(hc, .78), 0);
+    } else if(hat === 'eight'){
+      H.cyl(0, headR * 1.02, 0, headR * 1.42, headR * 1.42, headR * .55, 8, 0x14161a, 3);
+      H.box(0, headR * 1.05, headR * 1.30, headR * 1.70, .05 * S, headR * .95, 0x0d0f12, 0);
+      H.box(0, headR * 1.30, headR * .90, headR * .70, .06 * S, .03 * S, 0xc9a227, 0);
+    } else {
+      H.cyl(0, headR * 1.00, 0, headR * 1.36, headR * 1.28, headR * .62, 8, 0x14161a, 3);
+      H.box(0, headR * 1.02, headR * 1.24, headR * 1.55, .05 * S, headR * .85, 0x0d0f12, 0);
+    }
+  }
+  var neck = new THREE.Group();
+  neck.position.y = shoulderY + headR * .28;
+  var head = mkPart(H, mat);
+  neck.add(head);
+  g.add(neck);
+  /* neck stub */
+  var NK = new Builder();
+  NK.box(0, 0, 0, headR * .78, .10 * S, headR * .78, shade(skin, .90), 0);
+  var nk = mkPart(NK, mat);
+  nk.position.y = shoulderY + .02 * S;
+  g.add(nk);
+
+  /* ---- limbs ----
+     Each is a pivot Group at the joint with the mesh hung below it, so a
+     rotation on the pivot swings the limb the way a joint would. */
+  function limb(len, thick, colUpper, colLower, lowerFrac, endCol, endSize){
+    var pivot = new THREE.Group();
+    var LB = new Builder();
+    var split = len * lowerFrac;
+    LB.box(0, -split * .5, 0, thick, split, thick, colUpper, 0);
+    LB.box(0, -split - (len - split) * .5, 0, thick * .92, len - split, thick * .92, colLower, 0);
+    if(endCol !== undefined){
+      LB.box(0, -len - endSize * .40, endSize * .22, thick * 1.12, endSize * .8, thick * 1.9, endCol, 0);
+    }
+    pivot.add(mkPart(LB, mat));
+    return pivot;
+  }
+  var armLen = .56 * S, armT = .105 * S * bulk;
+  var legLen = .86 * S, legT = .145 * S * bulk;
+
+  var armL = limb(armLen, armT, shirt, glove, .60);
+  armL.position.set(-torsoW * .60, shoulderY - .04 * S, 0);
+  g.add(armL);
+  var armR = limb(armLen, armT, shirt, glove, .60);
+  armR.position.set(torsoW * .60, shoulderY - .04 * S, 0);
+  g.add(armR);
+
+  var legL = limb(legLen, legT, pants, pants, .55, shoe, .13 * S);
+  legL.position.set(-torsoW * .26, hipY, 0);
+  g.add(legL);
+  var legR = limb(legLen, legT, pants, pants, .55, shoe, .13 * S);
+  legR.position.set(torsoW * .26, hipY, 0);
+  g.add(legR);
+
+  g.userData.rig = { torso:torso, belt:belt, neck:neck, head:head, nk:nk,
+                     armL:armL, armR:armR, legL:legL, legR:legR,
+                     hipY:hipY, S:S };
+  return g;
+}
+
+/* ============================================================
+   ANIMATION
+   ============================================================ */
+function animatePerson(mesh, st, dt){
+  if(!mesh || !mesh.userData || !mesh.userData.rig) return;
+  var r = mesh.userData.rig;
+  var S = r.S;
+
+  if(st.down){
+    r.torso.rotation.x = -1.35;
+    r.neck.rotation.x = .5;
+    r.armL.rotation.x = -2.1; r.armR.rotation.x = -1.9;
+    r.armL.rotation.z = .5;   r.armR.rotation.z = -.5;
+    r.legL.rotation.x = -.35; r.legR.rotation.x = -.15;
+    r.torso.position.y = r.hipY - .55 * S;
+    return;
+  }
+  r.torso.position.y = r.hipY;
+
+  var spd = st.spd || 0;
+  var moving = spd > .15;
+  var phase = st.anim || 0;
+
+  if(st.cuffed){
+    /* hands behind the back, short choppy steps */
+    r.armL.rotation.x = .35; r.armR.rotation.x = .35;
+    r.armL.rotation.z = -.42; r.armR.rotation.z = .42;
+    r.torso.rotation.x = .10;
+    r.neck.rotation.x = .12;
+  } else if(st.hands){
+    /* hands up, elbows out */
+    r.armL.rotation.x = -2.55; r.armR.rotation.x = -2.55;
+    r.armL.rotation.z = -.34;  r.armR.rotation.z = .34;
+    r.torso.rotation.x = 0;
+    r.neck.rotation.x = -.05;
+  } else if(st.fight){
+    var jab = Math.sin(phase * 9) * .8;
+    r.armL.rotation.x = -1.5 + jab; r.armR.rotation.x = -1.5 - jab;
+    r.armL.rotation.z = -.30; r.armR.rotation.z = .30;
+    r.torso.rotation.x = .12;
+    r.torso.rotation.y = Math.sin(phase * 9) * .18;
+  } else {
+    /* walk / run swing */
+    var amp = moving ? Math.min(.95, .32 + spd * .26) : 0;
+    var sw = Math.sin(phase);
+    var sw2 = Math.sin(phase + Math.PI);
+    r.armL.rotation.x = sw * amp * .85;
+    r.armR.rotation.x = sw2 * amp * .85;
+    r.armL.rotation.z = -.055 - amp * .05;
+    r.armR.rotation.z = .055 + amp * .05;
+    r.torso.rotation.x = moving ? .04 + spd * .022 : 0;
+    r.torso.rotation.y = -sw * amp * .10;
+    r.neck.rotation.x = moving ? -.03 : Math.sin(phase * .35) * .04;
+    r.neck.rotation.y = moving ? 0 : Math.sin(phase * .22) * .30;
+  }
+
+  /* legs always stride when moving, regardless of what the arms are doing */
+  var lamp = moving ? Math.min(1.05, .34 + spd * .28) : 0;
+  var ls = Math.sin(phase);
+  r.legL.rotation.x = ls * lamp;
+  r.legR.rotation.x = -ls * lamp;
+  r.legL.rotation.z = 0; r.legR.rotation.z = 0;
+
+  /* a small vertical bob sells the step */
+  mesh.position.y = (st.y || 0) + (moving ? Math.abs(Math.sin(phase)) * .035 * S : 0);
 }
 /* ============================================================
    TRAFFIC PHYSICALITY + LIVE SIGNALS
@@ -4256,14 +5835,14 @@ var SIG_R = 0xd83a2a, SIG_A = 0xe0a326, SIG_G = 0x3fbf5a, SIG_OFF = 0x1a1d22;
 function initSignals(scene){
   sigGroup = new THREE.Group();
   sigGroup.frustumCulled = false;
-  var geo = new THREE.SphereGeometry(.30, 6, 5);
+  var geo = new THREE.SphereGeometry(.24, 6, 5);
   var i, j;
   for(i = 0; i < SIGMAX; i++){
     var g = new THREE.Group();
     var lamps = [];
     for(j = 0; j < 3; j++){
       var m = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ color:SIG_OFF }));
-      m.position.set(0, 1.0 - j * .52, 0);
+      m.position.set(0, .62 - j * .58, .40);
       g.add(m); lamps.push(m);
     }
     g.visible = false;
@@ -4281,22 +5860,26 @@ function updateSignals(dt){
   for(i = 0; i < NODES.length && used < SIGMAX; i++){
     var n = NODES[i];
     if(!n.light) continue;
-    if(Math.abs(n.x - px) > 150 || Math.abs(n.z - pz) > 150) continue;
-    /* one head per approach, up to four */
-    for(j = 0; j < n.e.length && used < SIGMAX; j++){
-      var e = EDGES[n.e[j]];
-      var other = NODES[e.a].i === n.i ? NODES[e.b] : NODES[e.a];
-      var ang = Math.atan2(other.z - n.z, other.x - n.x);
+    if(Math.abs(n.x - px) > 130 || Math.abs(n.z - pz) > 130) continue;
+    for(j = 0; j < 4 && used < SIGMAX; j++){
+      /* same placement the baked mast arm used, so the lamps sit inside
+         their housings instead of hovering near them */
+      var hp = signalHeadPos(n, j);
       var g = SIGPOOL[used++];
-      /* head hangs over the approach lane, facing oncoming traffic */
-      var off = e.w * .5 + 1.0;
-      g.position.set(n.x + Math.cos(ang) * off * 1.6 - Math.sin(ang) * (e.w * .25),
-                     (n.y || 0) + 5.4,
-                     n.z + Math.sin(ang) * off * 1.6 + Math.cos(ang) * (e.w * .25));
-      g.rotation.y = -ang;
+      g.position.set(hp.x, hp.y, hp.z);
+      g.rotation.y = -hp.face;
       g.visible = true;
-      var green = lightGreen(n, e);
-      var amber = n.light.amber && green;
+      /* the approach this head governs is the edge it points back down */
+      var best = null, bestDot = -2, k;
+      for(k = 0; k < n.e.length; k++){
+        var e = EDGES[n.e[k]];
+        var o = (NODES[e.a] === n) ? NODES[e.b] : NODES[e.a];
+        var ea = Math.atan2(o.z - n.z, o.x - n.x);
+        var dot = Math.cos(ea - hp.face);
+        if(dot > bestDot){ bestDot = dot; best = e; }
+      }
+      var green = best ? lightGreen(n, best) : false;
+      var amber = !!(n.light.amber && green);
       var lamps = g.userData.lamps;
       lamps[0].material.color.setHex(!green ? SIG_R : SIG_OFF);
       lamps[1].material.color.setHex(amber ? SIG_A : SIG_OFF);
@@ -4315,6 +5898,221 @@ function signalAllows(node, edge, distToLine, spd){
   if(!node.light.amber) return true;
   /* amber: commit only if stopping would mean slamming the brakes */
   return distToLine < Math.max(6, spd * 1.1);
+}
+
+/* ============================================================
+   VEHICLE vs PEDESTRIAN
+   Peds dive out of the way of anything bearing down on them; if a
+   vehicle connects, they go down. An officer striking a pedestrian is
+   a career-defining problem, and it should feel like one.
+   ============================================================ */
+function updatePedVehicle(dt){
+  var i, j;
+  var pv = G.veh || G.cruiser;
+  for(i = 0; i < G.peds.length; i++){
+    var p = G.peds[i];
+    if(!p.alive || p.down) continue;
+
+    /* dive away from fast oncoming vehicles */
+    var threat = null, td = 1e9;
+    function consider(v){
+      if(!v || Math.abs(v.spd) < 4) return;
+      var dx = p.x - v.x, dz = p.z - v.z;
+      var d = Math.sqrt(dx * dx + dz * dz);
+      if(d > 14) return;
+      /* is the ped roughly in the vehicle path? */
+      var fx = Math.cos(v.h) * (v.spd > 0 ? 1 : -1);
+      var fz = Math.sin(v.h) * (v.spd > 0 ? 1 : -1);
+      var dot = (dx * fx + dz * fz) / Math.max(d, .01);
+      if(dot > .70 && d < td){ td = d; threat = v; }
+    }
+    if(pv) consider(pv);
+    for(j = 0; j < G.traffic.length; j++) consider(G.traffic[j]);
+    if(threat && !p.cuffed && p.state !== 'comply' && p.stunT <= 0){
+      /* jump aside, perpendicular to the vehicle heading, away from it */
+      var side = Math.sin(threat.h) * (p.x - threat.x) - Math.cos(threat.h) * (p.z - threat.z);
+      p.h = threat.h + (side > 0 ? -1 : 1) * Math.PI / 2;
+      p.setState('panic');
+      p.spd = 3.4;
+    }
+
+    /* contact */
+    function contact(v, isPlayer){
+      var dx = p.x - v.x, dz = p.z - v.z;
+      var d = Math.sqrt(dx * dx + dz * dz);
+      var r = (v.P ? v.P.wid : 1.9) * .5 + .35;
+      /* long axis */
+      var lx = Math.cos(v.h), lz = Math.sin(v.h);
+      var along = Math.abs(dx * lx + dz * lz);
+      var across = Math.abs(-dx * lz + dz * lx);
+      var hl = (v.P ? v.P.len : 4.8) * .5;
+      if(along > hl + .3 || across > r) return false;
+      var impact = Math.abs(v.spd);
+      if(impact < 1.2){
+        /* just shove them clear at parking speed */
+        var push = (r - across) + .05;
+        var nx = dx - lx * (dx * lx + dz * lz), nz = dz - lz * (dx * lx + dz * lz);
+        var nl = Math.sqrt(nx * nx + nz * nz) || 1;
+        p.x += nx / nl * push; p.z += nz / nl * push;
+        return false;
+      }
+      /* struck */
+      p.down = true;
+      p.stunT = clamp(impact * .8, 4, 20);
+      p.setState('down');
+      v.spd *= .72;
+      Audio_crash(clamp(impact / 24, .15, .7));
+      if(isPlayer){
+        shakeCam(.4);
+        v.dmg = clamp(v.dmg + .04, 0, 1);
+        if(G.onDuty){
+          toast('PEDESTRIAN STRUCK \u2014 CRITICAL INCIDENT', 'bad');
+          dispatchSay('Any unit, we have a report of an auto-pedestrian involving a patrol unit. Start EMS and a supervisor.', 1);
+          addXP(-300, 'Struck a pedestrian');
+          G.conduct = clamp(G.conduct - .35, 0, 1);
+          G.rep = clamp(G.rep - .18, 0, 1);
+          addMoney(-1500, 'Liability');
+        } else {
+          toast('PEDESTRIAN STRUCK', 'bad');
+          G.rep = clamp(G.rep - .10, 0, 1);
+        }
+        panicNearby(24);
+      }
+      return true;
+    }
+    if(pv && contact(pv, true)) continue;
+    for(j = 0; j < G.traffic.length; j++){
+      var tv = G.traffic[j];
+      if(Math.abs(tv.spd) < 1.2) continue;
+      var q = (p.x - tv.x) * (p.x - tv.x) + (p.z - tv.z) * (p.z - tv.z);
+      if(q > 36) continue;
+      if(contact(tv, false)){
+        /* civilian hit-and-run becomes work for the player */
+        if(G.onDuty && Math.random() < .5 && dist(p.x, p.z, G.player.x, G.player.z) < 90){
+          dispatchSay('Auto-pedestrian just occurred near your location. Vehicle failed to stop.', 1);
+        }
+        break;
+      }
+    }
+  }
+}
+
+/* ============================================================
+   COMMANDEERING / STEALING CARS
+   ============================================================ */
+function takeVehicle(v){
+  if(!v || v.kind === 'player') { enterVehicle(v); return; }
+  var wasParked = (v.kind === 'parked');
+  var i;
+  for(i = 0; i < G.traffic.length; i++) if(G.traffic[i] === v){ G.traffic.splice(i, 1); break; }
+  if(G.parked) for(i = 0; i < G.parked.length; i++) if(G.parked[i] === v){ G.parked.splice(i, 1); break; }
+  if(Pursuit.target === v) Pursuit.end('Pursuit terminated, unit has taken the vehicle.', false);
+  v.kind = 'player';
+  v.beingStopped = false; v.pulled = false; v.pulling = false; v.fleeing = false;
+  v.throttle = 0; v.brake = 0;
+  G.vehicles.push(v);
+
+  v.engineOn = true;
+  /* an empty parked car has nobody to object -- it is just theft */
+  if(!wasParked && v.driver && !v.driverEjected){
+    v.driverEjected = true;
+    var side = 1;
+    var pd = new Ped(v.x - Math.sin(v.h) * 1.6 * side, v.z + Math.cos(v.h) * 1.6 * side, { rec:v.driver });
+    pd.y = roadHeightAt(pd.x, pd.z);
+    pd.setState('panic');
+    addPed(pd);
+    toast(pd.name.toUpperCase() + ': \u201C' +
+      pick(['HEY! THAT\u2019S MY TRUCK!', 'WHAT ARE YOU DOING?!', 'THAT\u2019S MINE!',
+            'YOU CAN\u2019T JUST TAKE THAT!']) + '\u201D', 'bad');
+  }
+  enterVehicle(v);
+  G.cruiserParked = G.cruiser;   /* your unit stays where you left it */
+
+  if(G.onDuty){
+    toast(wasParked ? 'PARKED VEHICLE TAKEN \u2014 EXIGENT USE ONLY'
+                    : 'VEHICLE COMMANDEERED \u2014 EXIGENT USE ONLY', 'bad');
+    G.conduct = clamp(G.conduct - (Pursuit.active ? .01 : .10), 0, 1);
+    if(!Pursuit.active) addXP(-60, 'Commandeered a vehicle without cause');
+  } else {
+    toast('VEHICLE TAKEN', 'bad');
+    G.rep = clamp(G.rep - .06, 0, 1);
+    dispatchSay('Units, report of a vehicle taken from its owner' +
+      (G.player ? ' near ' + streetAt(G.player.x, G.player.z).name : '') + '.', 1);
+  }
+}
+
+/* ============================================================
+   PARKED VEHICLES
+   The baked kerbside blobs were three boxes and could not be taken. These
+   are real vehicles from the civilian fleet, streamed in around the player,
+   so anything you can see parked you can also get into.
+   ============================================================ */
+var PARKED_MAX = 26, PARK_T = 0;
+function parkSpotsNear(px, pz, out){
+  var near = edgesNear(px, pz), i;
+  for(i = 0; i < near.length; i++){
+    var e = EDGES[near[i]];
+    if(e.type === 'freeway' || e.type === 'ramp' || e.type === 'highway') continue;
+    if(e.w < 8) continue;
+    out.push(e);
+  }
+  return out;
+}
+function updateParked(dt){
+  if(!G.parked) G.parked = [];
+  var px = G.player.x, pz = G.player.z, i;
+
+  /* retire the ones behind you */
+  for(i = G.parked.length - 1; i >= 0; i--){
+    var pv = G.parked[i];
+    if(pv.kind !== 'parked'){ G.parked.splice(i, 1); continue; }   /* stolen */
+    if(dist(pv.x, pv.z, px, pz) > 220){
+      scene.remove(pv.mesh);
+      disposeVehicle(pv);
+      G.parked.splice(i, 1);
+    }
+  }
+
+  PARK_T += dt;
+  if(PARK_T < .4 || G.parked.length >= PARKED_MAX) return;
+  PARK_T = 0;
+
+  var cands = parkSpotsNear(px, pz, []);
+  if(!cands.length) return;
+  var e = cands[ri(0, cands.length - 1)];
+  var a = NODES[e.a], b = NODES[e.b];
+  if((a.y || 0) > 1 || (b.y || 0) > 1) return;
+  var t = rng(.12, .88);
+  var dir = chance(.5) ? 1 : -1;
+  var ang = Math.atan2(b.z - a.z, b.x - a.x);
+  /* sit against the kerb, just outside the running lane */
+  var off = (e.w * .5 + 1.15) * (dir > 0 ? -1 : 1);
+  var x = a.x + (b.x - a.x) * t - Math.sin(ang) * off;
+  var z = a.z + (b.z - a.z) * t + Math.cos(ang) * off;
+  var d = dist(x, z, px, pz);
+  if(d < 40 || d > 190) return;
+  if(!laneFree(x, z, 8)) return;
+  if(!G.parked.every ? false : false){ /* noop for ES5 clarity */ }
+  var q;
+  for(q = 0; q < G.parked.length; q++) if(dist(x, z, G.parked[q].x, G.parked[q].z) < 9) return;
+
+  var cd = pickCivDef();
+  if(cd.body === 'semi' || cd.body === 'bus' || cd.body === 'boxtruck') cd = CIV_FLEET[0];
+  var v = new Vehicle(null, 'civ', x, z, dir > 0 ? ang : ang + Math.PI, 'parked', cd);
+  v.spd = 0; v.engineOn = false; v.parkedAt = { x:x, z:z };
+  scene.add(v.mesh);
+  v.sync();
+  G.parked.push(v);
+}
+function disposeVehicle(v){
+  /* geometry is shared through the caches, so only the per-car extras go */
+  if(v.mesh && v.mesh.children){
+    var i;
+    for(i = 0; i < v.mesh.children.length; i++){
+      var c = v.mesh.children[i];
+      if(c.material && c.material.map && c.material.map.dispose && c.material.__plate) c.material.map.dispose();
+    }
+  }
 }
 /* ============================================================
    RADAR / LIDAR
@@ -5005,6 +6803,269 @@ function bookPrisoner(){
   setStatus(G.onCall ? '10-97 ON SCENE' : '10-8 AVAILABLE', G.onCall ? 'busy' : '');
   dispatchSay(G.callsign + ' is clear of the jail, 10-8.', 2);
   toast('PRISONER BOOKED \u2014 ' + fmtMoney(pay), 'good');
+}
+
+/* ============================================================
+   BACKUP UNITS, AIR SUPPORT AND THE PIT MANEUVER
+   You are not the only car working the county.
+   ============================================================ */
+
+var BACKUP_MAX = 3;
+var BACKUP_CALLSIGNS = ['2-ADAM-14', '3-ADAM-08', '1-LINCOLN-21', '4-ADAM-06',
+                        '2-LINCOLN-11', 'BAYARD-410', 'BAYARD-233', 'DPS-7-12'];
+
+function backupInUse(cs){
+  var i;
+  for(i = 0; i < G.backup.length; i++) if(G.backup[i].callsign === cs) return true;
+  return false;
+}
+function spawnBackupUnit(purpose, tx, tz){
+  if(G.backup.length >= BACKUP_MAX) return null;
+  var cs = null, tries = 0;
+  while(tries++ < 20){
+    var c = pick(BACKUP_CALLSIGNS);
+    if(!backupInUse(c)){ cs = c; break; }
+  }
+  if(!cs) return null;
+
+  /* come in from a road well behind the player so they visibly arrive */
+  var ang = rng(0, TAU);
+  var sx = G.player.x + Math.cos(ang) * rng(180, 300);
+  var sz = G.player.z + Math.sin(ang) * rng(180, 300);
+  var n = nearestEdge(sx, sz);
+  if(n.e < 0) return null;
+
+  var liv = cs.indexOf('BAYARD') === 0 ? 'so' : (cs.indexOf('DPS') === 0 ? 'dps' : 'pd');
+  var defId = pick(['vanguard', 'interceptor', 'sentinel']);
+  var v = new Vehicle(defId, liv, n.px, n.pz, 0, 'backup');
+  v.emerg = 1;
+  v.pattern = ri(0, PATTERNS.length - 1);
+  v.callsign = cs;
+  v.purpose = purpose;
+  v.tx = tx; v.tz = tz;
+  v.arrived = false;
+  v.lifetime = 0;
+  scene.add(v.mesh);
+  G.backup.push(v);
+  return v;
+}
+
+function requestBackup(kind){
+  var reason = kind || 'general';
+  if(G.backup.length >= BACKUP_MAX){
+    toast('NO UNITS AVAILABLE \u2014 ALL ASSIGNED', 'bad');
+    return;
+  }
+  var tx = G.player.x, tz = G.player.z;
+  if(reason === 'pursuit' && Pursuit.active && Pursuit.target){
+    tx = Pursuit.target.x; tz = Pursuit.target.z;
+  }
+  var u = spawnBackupUnit(reason, tx, tz);
+  if(!u){ toast('NO UNITS AVAILABLE', 'bad'); return; }
+  var street = streetAt(tx, tz).name;
+  dispatchSay(u.callsign + ', respond to assist ' + G.callsign + ' on ' + street + '.', 1);
+  setTimeout(function(){
+    dispatchSay(u.callsign + ' en route.', 2);
+  }, 2200);
+  toast(u.callsign + ' RESPONDING', 'good');
+}
+
+function requestAir(){
+  if(G.air){ toast('AIR UNIT IS ALREADY UP', ''); return; }
+  if(!Pursuit.active){ toast('AIR SUPPORT IS FOR ACTIVE PURSUITS', 'bad'); return; }
+  var b = new Builder();
+  /* light utility helicopter */
+  b.box(0, 0, 0, 4.6, 1.5, 1.6, 0x1b2a44, 0);
+  b.box(2.0, .15, 0, 1.4, 1.0, 1.3, 0x2a3f52, 0);
+  b.box(-3.4, .25, 0, 3.2, .40, .40, 0x1b2a44, 0);
+  b.box(-4.6, .75, 0, .30, 1.3, .30, 0x1b2a44, 0);
+  b.box(-4.6, .95, 0, .25, .25, 1.5, 0x8a9096, 0);
+  b.box(0, -1.0, .9, 3.0, .16, .16, 0x39434d, 0);
+  b.box(0, -1.0, -.9, 3.0, .16, .16, 0x39434d, 0);
+  b.box(0, -.5, .9, .16, .9, .16, 0x39434d, 0);
+  b.box(0, -.5, -.9, .16, .9, .16, 0x39434d, 0);
+  var g = new THREE.Group();
+  g.add(new THREE.Mesh(b.geo(), new THREE.MeshLambertMaterial({ vertexColors:true })));
+  /* rotor discs */
+  var rb = new Builder();
+  rb.box(0, 0, 0, 11.0, .07, .5, 0x2a2f38, 0);
+  rb.box(0, 0, 0, .5, .07, 11.0, 0x2a2f38, 0);
+  var rotor = new THREE.Mesh(rb.geo(), new THREE.MeshLambertMaterial({ vertexColors:true }));
+  rotor.position.y = 1.1;
+  g.add(rotor);
+  /* searchlight cone */
+  var lightGeo = new THREE.CylinderGeometry(.3, 9, 40, 10, 1, true);
+  var lightMat2 = new THREE.MeshBasicMaterial({ color:0xfff2cc, transparent:true, opacity:.10, side:THREE.DoubleSide, depthWrite:false });
+  var beam = new THREE.Mesh(lightGeo, lightMat2);
+  beam.position.y = -20;
+  g.add(beam);
+
+  G.air = { mesh:g, rotor:rotor, beam:beam, x:G.player.x, z:G.player.z, y:70, t:0, fuel:210 };
+  scene.add(g);
+  dispatchSay('Air One is up and en route to your pursuit.', 1);
+  toast('AIR ONE RESPONDING', 'good');
+}
+
+function updateAir(dt){
+  if(!G.air) return;
+  var a = G.air;
+  a.t += dt;
+  a.fuel -= dt;
+  a.rotor.rotation.y += dt * 26;
+
+  var tgt = (Pursuit.active && Pursuit.target) ? Pursuit.target : null;
+  var tx = tgt ? tgt.x : G.player.x, tz = tgt ? tgt.z : G.player.z;
+  /* orbit the target */
+  var orbit = 34;
+  var ox = tx + Math.cos(a.t * .55) * orbit;
+  var oz = tz + Math.sin(a.t * .55) * orbit;
+  a.x = lerp(a.x, ox, 1 - Math.pow(.28, dt));
+  a.z = lerp(a.z, oz, 1 - Math.pow(.28, dt));
+  a.y = lerp(a.y, tgt ? 52 : 80, 1 - Math.pow(.5, dt));
+  a.mesh.position.set(a.x, a.y, a.z);
+  a.mesh.rotation.y = -Math.atan2(tz - a.z, tx - a.x);
+  a.mesh.rotation.z = .16;
+  a.beam.visible = !!tgt && G.night;
+
+  /* the spotter keeps you updated and stops the suspect vanishing */
+  if(tgt){
+    Pursuit.lastSeen = a.t;
+    if(a.t - (a.lastCall || 0) > 9){
+      a.lastCall = a.t;
+      var st = streetAt(tgt.x, tgt.z);
+      dispatchSay('Air One has the vehicle ' + compassFrom(G.player.x, G.player.z, tgt.x, tgt.z) +
+                  'bound on ' + st.name + '.', 2);
+    }
+  }
+  if(a.fuel <= 0 || (!Pursuit.active && a.t > 20)){
+    scene.remove(a.mesh);
+    G.air = null;
+    dispatchSay('Air One is returning to the pad.', 2);
+  }
+}
+function compassFrom(px, pz, tx, tz){
+  var dx = tx - px, dz = tz - pz;
+  if(Math.abs(dx) > Math.abs(dz)) return dx > 0 ? 'east' : 'west';
+  return dz > 0 ? 'south' : 'north';
+}
+
+/* ---- backup unit driving ---- */
+function updateBackup(dt){
+  var i;
+  for(i = G.backup.length - 1; i >= 0; i--){
+    var u = G.backup[i];
+    u.lifetime += dt;
+    var tx = u.tx, tz = u.tz;
+    if(u.purpose === 'pursuit' && Pursuit.active && Pursuit.target){
+      tx = Pursuit.target.x; tz = Pursuit.target.z;
+    } else if(u.purpose !== 'pursuit'){
+      tx = G.player.x; tz = G.player.z;
+    }
+    var d = dist(u.x, u.z, tx, tz);
+
+    /* drive it with the same steering the civilians use, but toward a target */
+    var want = Math.atan2(tz - u.z, tx - u.x);
+    var turn = angDiff(want, u.h);
+    u.steer = clamp(turn * 1.5, -1, 1);
+    var top = u.purpose === 'pursuit' ? 34 : 22;
+    if(d < 14){
+      u.throttle = 0; u.brake = 1;
+      if(!u.arrived){
+        u.arrived = true;
+        dispatchSay(u.callsign + ' is 10-97 with ' + G.callsign + '.', 2);
+        toast(u.callsign + ' ON SCENE', 'good');
+        /* a second unit on a stop makes the driver much more cooperative */
+        if(G.stopVeh && G.stopVeh.driver){
+          G.stopVeh.driver.cooperation = clamp(G.stopVeh.driver.cooperation + .35, 0, 1);
+          G.stopVeh.fleeChance = (G.stopVeh.fleeChance || 0) * .3;
+        }
+      }
+    } else {
+      u.throttle = clamp((d - 10) / 40, .25, 1);
+      u.brake = Math.abs(turn) > 1.1 ? .35 : 0;
+      if(u.spd > top) u.throttle = 0;
+    }
+    u.physics(dt);
+    u.y = roadHeightAt(u.x, u.z);
+    u.sync();
+    u.updateLights(dt, G.night);
+
+    /* clear once the work is done */
+    var done = (u.purpose === 'pursuit' && !Pursuit.active) ||
+               (u.purpose !== 'pursuit' && u.arrived && u.lifetime > 95) ||
+               u.lifetime > 260;
+    if(done && dist(u.x, u.z, G.player.x, G.player.z) > 120){
+      dispatchSay(u.callsign + ' is clear, 10-8.', 3);
+      scene.remove(u.mesh);
+      G.backup.splice(i, 1);
+    }
+  }
+}
+
+/* ---- PIT maneuver ---- */
+function tryPIT(){
+  if(!Pursuit.active || !Pursuit.target) return false;
+  var t = Pursuit.target, v = G.veh;
+  if(!v) return false;
+  var d = dist(v.x, v.z, t.x, t.z);
+  if(d > 6.5) return false;
+  /* has to be a rear-quarter contact, not a head-on ram */
+  var toT = Math.atan2(t.z - v.z, t.x - v.x);
+  var closing = Math.abs(angDiff(toT, v.h));
+  var aligned = Math.abs(angDiff(t.h, v.h));
+  if(closing > .9 || aligned > 1.0) return false;
+  /* and you need speed to transfer */
+  if(Math.abs(v.spd) < 8) return false;
+
+  /* which quarter did you strike? */
+  var side = Math.sin(v.h) * (t.x - v.x) - Math.cos(v.h) * (t.z - v.z);
+  var spin = side > 0 ? 1 : -1;
+
+  t.slip = 1;
+  t.spinT = 1.5;
+  t.spinDir = spin;
+  t.spd *= .42;
+  v.spd *= .78;
+  Audio_crash(.6);
+  shakeCam(.55);
+  v.dmg = clamp(v.dmg + .05, 0, 1);
+
+  G.pitCount = (G.pitCount || 0) + 1;
+  /* a PIT at high speed is a use of force and gets reviewed */
+  if(Math.abs(v.spd) > 26){
+    G.conduct = clamp(G.conduct - .06, 0, 1);
+    toast('PIT AT HIGH SPEED \u2014 REPORTABLE', 'bad');
+  } else {
+    toast('PIT MANEUVER \u2014 VEHICLE SPINNING', 'good');
+  }
+  addXP(120, 'PIT maneuver');
+  dispatchSay(G.callsign + ' has executed a PIT, vehicle is spinning out.', 1);
+
+  /* most drivers give up after being spun */
+  if(chance(.62)){
+    setTimeout(function(){
+      if(Pursuit.active && Pursuit.target === t){
+        t.fleeing = false;
+        t.pulled = true;
+        t.throttle = 0; t.brake = 1;
+        G.stopVeh = t;
+        Pursuit.end('Suspect vehicle is stopped after the PIT. Units, hold your positions.', true);
+      }
+    }, 1400);
+  }
+  return true;
+}
+/* spin-out physics for a PITted car */
+function updateSpins(dt){
+  var i;
+  for(i = 0; i < G.traffic.length; i++){
+    var v = G.traffic[i];
+    if(!v.spinT || v.spinT <= 0) continue;
+    v.spinT -= dt;
+    v.h = angWrap(v.h + v.spinDir * dt * 5.2 * (v.spinT / 1.5));
+    v.spd *= (1 - dt * 1.1);
+    if(v.spinT <= 0){ v.slip = 0; snapToLane(v); }
+  }
 }
 /* ============================================================
    CALLOUT ENGINE
@@ -5835,10 +7896,70 @@ function addMoney(n, why){
   }
   refreshHUD();
 }
+/* XP is capped at zero, so a rookie sitting on 0 XP used to walk away from an
+   unjustified shooting with no consequence at all. Misconduct now also feeds a
+   separate discipline track that cannot be zeroed out, and that track drives
+   written reprimands, suspension and dismissal independently of rank. */
+var DISCIPLINE = [
+  { at:1,  n:'Counselling',        d:'A sergeant has a word with you.' },
+  { at:2,  n:'Written Reprimand',  d:'It goes in your file.' },
+  { at:3,  n:'Loss of Pay',        d:'Two days docked.' },
+  { at:4,  n:'Suspension',         d:'You are off the street until the end of watch.' },
+  { at:6,  n:'Termination Review', d:'Internal Affairs is recommending dismissal.' }
+];
+function addDiscipline(points, why){
+  G.discipline = (G.discipline || 0) + points;
+  G.dhistory = G.dhistory || [];
+  G.dhistory.unshift({ pts:points, why:why || 'Misconduct', when:'Day ' + G.day + ' ' + timeString() });
+  while(G.dhistory.length > 40) G.dhistory.pop();
+
+  var i, step = null;
+  for(i = 0; i < DISCIPLINE.length; i++) if(G.discipline >= DISCIPLINE[i].at) step = DISCIPLINE[i];
+  if(!step) return;
+  if(G.discStep === step.n) return;
+  G.discStep = step.n;
+  toast('IA \u2014 ' + step.n.toUpperCase() + ': ' + step.d, 'bad');
+  dispatchSay(G.callsign + ', see the shift supervisor at the station.', 1);
+  if(step.n === 'Loss of Pay') addMoney(-Math.round(rankObj().pay * 16), 'Disciplinary docking');
+  if(step.n === 'Suspension'){
+    addMoney(-Math.round(rankObj().pay * 24), 'Suspension without pay');
+    if(G.onDuty) goOffDuty();
+  }
+  if(step.n === 'Termination Review'){
+    /* demotion is the game's version of being put back in uniform */
+    if(G.rankIdx > 0){
+      G.rankIdx--;
+      toast('DEMOTED TO ' + RANKS[G.rankIdx].n.toUpperCase(), 'bad');
+    }
+    G.discipline = 3;
+    G.discStep = 'Loss of Pay';
+    if(G.onDuty) goOffDuty();
+  }
+  refreshHUD();
+}
+/* good work slowly clears your record */
+function easeDiscipline(n){
+  if(!G.discipline) return;
+  G.discipline = Math.max(0, G.discipline - n);
+  var i, step = null;
+  for(i = 0; i < DISCIPLINE.length; i++) if(G.discipline >= DISCIPLINE[i].at) step = DISCIPLINE[i];
+  G.discStep = step ? step.n : null;
+}
 function addXP(n, why){
   if(!G.onDuty && n > 0) n = Math.round(n * .25);
-  G.xp = Math.max(0, G.xp + n);
-  G.shiftXP += Math.max(0, n);
+  /* a penalty larger than your balance is still a penalty: bank the shortfall
+     as discipline so there is no such thing as a consequence-free rookie */
+  if(n < 0){
+    var shortfall = Math.max(0, -n - G.xp);
+    G.xp = Math.max(0, G.xp + n);
+    var pts = Math.max(1, Math.round((-n) / 150));
+    if(shortfall > 0) pts += Math.round(shortfall / 200);
+    addDiscipline(pts, why || 'Misconduct');
+  } else {
+    G.xp = G.xp + n;
+    G.shiftXP += n;
+    if(n >= 60) easeDiscipline(.34);
+  }
   if(why) toast((n >= 0 ? '+' : '') + n + ' XP \u2014 ' + why, n >= 0 ? 'xp' : 'bad');
   checkRank();
   refreshHUD();
@@ -6110,7 +8231,7 @@ function swapToCivilian(){
 function saveGame(){
   var d = {
     v:1,
-    xp:G.xp, cash:G.cash, rankIdx:G.rankIdx, division:G.division, shift:G.shift,
+    xp:G.xp, discipline:G.discipline || 0, discStep:G.discStep || null, dhistory:G.dhistory || [], cash:G.cash, rankIdx:G.rankIdx, division:G.division, shift:G.shift,
     equip:G.equip, garage:G.garage, vehId:G.vehId, livery:G.livery,
     props:G.props, homeId:G.homeId, holdings:G.holdings, basis:G.basis,
     appear:G.appear, unitNum:G.unitNum, beat:G.beat, day:G.day,
@@ -6124,7 +8245,8 @@ function loadGame(){
   var d = Store.get(SAVEKEY);
   if(!d) return false;
   try {
-    G.xp = d.xp || 0; G.cash = d.cash || 0; G.rankIdx = d.rankIdx || 0;
+    G.xp = d.xp || 0;
+  G.discipline = d.discipline || 0; G.discStep = d.discStep || null; G.dhistory = d.dhistory || []; G.cash = d.cash || 0; G.rankIdx = d.rankIdx || 0;
     G.division = d.division || 'patrol'; G.shift = d.shift || 'day';
     G.equip = d.equip || G.equip; G.garage = d.garage || G.garage;
     G.vehId = d.vehId || 'vanguard'; G.livery = d.livery || 'pd';
@@ -6151,6 +8273,7 @@ function wipeSave(){
 /* ---------- state defaults ---------- */
 function initMeta(){
   G.xp = 0; G.cash = 2500; G.rankIdx = 0;
+  G.discipline = 0; G.discStep = null; G.dhistory = [];
   G.division = 'patrol'; G.shift = 'day';
   G.equip = ['sidearm','flash','radio','bodycam','cuffs'];
   G.garage = [{ id:'vanguard', liv:'pd', unit:12, pushbar:true, spot:true, tint:.4, pattern:0, wheel:0 }];
@@ -6326,121 +8449,249 @@ function removeVehicle(v){
 /* ============================================================
    MINIMAP
    ============================================================ */
-var MMCFG = { zoom:.085, size:352 };
+/* ============================================================
+   MINIMAP  -- GTA-style
+   Dark ground, light road casing with a lighter fill on top, water in
+   blue, coloured blips, a north tick on the bezel, and the street name
+   in a bar underneath. The map counter-rotates so the player arrow
+   always points up, unless the player has asked for north-up.
+   ============================================================ */
+var MMCFG = { zoom:.105, size:344 };
+var MMC = {
+  ground:'#10161d', groundAlt:'#141c24', water:'#16384f',
+  casing:'#2c3540', road:'#6d7683', roadBig:'#8d97a4', roadFwy:'#b9a24e',
+  park:'#16301e', block:'#181f28',
+  arrow:'#ffffff', arrowEdge:'#0b0f14',
+  objective:'#f0c419', pursuit:'#e0463c', prop:'#3fd07a',
+  police:'#4a90d9', hospital:'#d05a5a', fire:'#d07a3a', gas:'#c9a227', shop:'#8d9bb3'
+};
 function drawMinimap(){
   var cv = $('minimap');
   if(!cv) return;
-  var g = cv.getContext('2d');
   var S = MMCFG.size, R = S / 2;
-  var zoom = MMCFG.zoom * (G.mapFull ? .11 : 1);
-  var px = G.player.x, pz = G.player.z, ph = G.player.h;
+  if(cv.width !== S){ cv.width = cv.height = S; }
+  var g = cv.getContext('2d');
+  var full = G.mapFull;
+  var zoom = MMCFG.zoom * (full ? .085 : 1);
+  var px = G.player.x, pz = G.player.z;
+  var northUp = full || (G.set && G.set.minimapRot === 'fixed');
+  var rot = northUp ? 0 : -(G.player.h + Math.PI / 2);
+
   g.clearRect(0, 0, S, S);
   g.save();
-  g.beginPath(); g.arc(R, R, R - 1, 0, TAU); g.clip();
-  g.fillStyle = '#101a12'; g.fillRect(0, 0, S, S);
+  g.beginPath();
+  if(full) g.rect(0, 0, S, S); else g.arc(R, R, R, 0, TAU);
+  g.clip();
+
+  g.fillStyle = MMC.ground;
+  g.fillRect(0, 0, S, S);
 
   g.translate(R, R);
-  g.rotate(-(ph + Math.PI / 2) * -1 - Math.PI);
-  g.rotate(Math.PI);
-  g.rotate(ph + Math.PI / 2);
+  g.rotate(rot);
   g.scale(zoom, zoom);
   g.translate(-px, -pz);
 
-  var view = (R / zoom) * 1.45;
-  var i, e, a, b;
+  var view = (R / zoom) * 1.5;
+  var i, j, e, a, b;
 
-  /* water */
-  g.fillStyle = '#12314a';
+  /* --- district tint so the city reads as blocks --- */
+  for(i = 0; i < DISTRICTS.length; i++){
+    var d = DISTRICTS[i];
+    if(!full && (Math.abs((d.x0 + d.x1) / 2 - px) > view + 600)) continue;
+    g.fillStyle = (d.kind === 'rural' || d.kind === 'lake') ? MMC.park : MMC.block;
+    g.fillRect(d.x0, d.z0, d.x1 - d.x0, d.z1 - d.z0);
+  }
+
+  /* --- water --- */
+  g.fillStyle = MMC.water;
+  g.strokeStyle = MMC.water;
+  g.lineJoin = 'round'; g.lineCap = 'round';
   for(i = 0; i < WATERS.length; i++){
     var w = WATERS[i];
     if(w.kind === 'river'){
-      g.strokeStyle = '#12314a'; g.lineWidth = w.w; g.beginPath();
-      var j;
-      for(j = 0; j < w.pts.length; j++){ if(j === 0) g.moveTo(w.pts[j].x, w.pts[j].z); else g.lineTo(w.pts[j].x, w.pts[j].z); }
+      g.lineWidth = w.w;
+      g.beginPath();
+      for(j = 0; j < w.pts.length; j++){
+        if(j === 0) g.moveTo(w.pts[j].x, w.pts[j].z); else g.lineTo(w.pts[j].x, w.pts[j].z);
+      }
       g.stroke();
     } else {
       g.beginPath(); g.ellipse(w.x, w.z, w.rx, w.rz, 0, 0, TAU); g.fill();
     }
   }
-  /* districts (only on full map) */
-  if(G.mapFull){
-    for(i = 0; i < DISTRICTS.length; i++){
-      var d = DISTRICTS[i];
-      g.fillStyle = 'rgba(255,255,255,.028)';
-      g.fillRect(d.x0, d.z0, d.x1 - d.x0, d.z1 - d.z0);
-    }
+
+  /* --- roads: dark casing pass, then lighter fill pass --- */
+  function roadWidth(t){
+    if(t === 'freeway') return 15;
+    if(t === 'highway' || t === 'arterial') return 11;
+    if(t === 'ramp' || t === 'frontage' || t === 'collector') return 8;
+    if(t === 'rural') return 8;
+    return 6;
   }
-  /* roads */
+  function roadColor(t){
+    if(t === 'freeway') return MMC.roadFwy;
+    if(t === 'highway' || t === 'arterial') return MMC.roadBig;
+    return MMC.road;
+  }
+  var pass, drawn = [];
   for(i = 0; i < EDGES.length; i++){
     e = EDGES[i];
     a = NODES[e.a]; b = NODES[e.b];
-    if(Math.abs((a.x + b.x) / 2 - px) > view || Math.abs((a.z + b.z) / 2 - pz) > view) continue;
-    var t = e.type;
-    if(G.mapFull && (t === 'local' || t === 'lot' || t === 'dirtrd')) continue;
-    g.strokeStyle = (t === 'freeway') ? '#4b6a94' : (t === 'ramp' ? '#3f5a7d' :
-                    (t === 'highway' || t === 'arterial') ? '#3a4a63' :
-                    (t === 'frontage' || t === 'collector') ? '#33405a' : '#2a3446');
-    g.lineWidth = Math.max(2 / zoom, e.w * (t === 'freeway' ? 1.1 : .8));
-    g.beginPath(); g.moveTo(a.x, a.z); g.lineTo(b.x, b.z); g.stroke();
+    var mx = (a.x + b.x) / 2, mz = (a.z + b.z) / 2;
+    if(!full && (Math.abs(mx - px) > view || Math.abs(mz - pz) > view)) continue;
+    if(full && (e.type === 'local' || e.type === 'lot' || e.type === 'dirtrd')) continue;
+    if(e.type === 'lot') continue;
+    drawn.push(e);
   }
-  /* landmarks */
-  for(i = 0; i < LANDMARKS.length; i++){
-    var lm = LANDMARKS[i];
-    if(!G.mapFull && Math.abs(lm.x - px) > view) continue;
-    g.fillStyle = lm.kind === 'police' ? '#3f7fd0' : (lm.kind === 'hospital' ? '#d05a5a' :
-                  lm.kind === 'fire' ? '#d07a3a' : (lm.kind === 'gas' ? '#c9a227' : '#7e8da3'));
-    var s2 = 9 / zoom;
-    g.fillRect(lm.x - s2 / 2, lm.z - s2 / 2, s2, s2);
-  }
-  /* owned property */
-  for(i = 0; i < G.props.length; i++){
-    var pp = propById(G.props[i]);
-    if(!pp) continue;
-    g.fillStyle = '#3fd07a';
-    g.beginPath(); g.arc(pp.x, pp.z, 7 / zoom, 0, TAU); g.fill();
-  }
-  /* traffic */
-  if(!G.mapFull){
-    g.fillStyle = '#5c6b80';
-    for(i = 0; i < G.traffic.length; i++){
-      var tv = G.traffic[i];
-      if(Math.abs(tv.x - px) > view) continue;
-      g.fillRect(tv.x - 3 / zoom, tv.z - 3 / zoom, 6 / zoom, 6 / zoom);
+  for(pass = 0; pass < 2; pass++){
+    g.lineCap = 'round';
+    for(i = 0; i < drawn.length; i++){
+      e = drawn[i];
+      a = NODES[e.a]; b = NODES[e.b];
+      var bw = roadWidth(e.type);
+      g.strokeStyle = pass === 0 ? MMC.casing : roadColor(e.type);
+      g.lineWidth = pass === 0 ? bw + 5 : bw;
+      g.beginPath(); g.moveTo(a.x, a.z); g.lineTo(b.x, b.z); g.stroke();
     }
   }
-  /* pursuit target */
-  if(Pursuit.active && Pursuit.target){
-    g.fillStyle = '#ff4d4d';
-    g.beginPath(); g.arc(Pursuit.target.x, Pursuit.target.z, 8 / zoom, 0, TAU); g.fill();
+
+  /* --- blips --- */
+  function blip(x, z, col, size, shape){
+    var s2 = (size || 9) / zoom;
+    g.save();
+    g.translate(x, z);
+    g.rotate(-rot);                       /* blips stay upright */
+    g.fillStyle = col;
+    g.strokeStyle = 'rgba(0,0,0,.75)';
+    g.lineWidth = 2 / zoom;
+    g.beginPath();
+    if(shape === 'circle') g.arc(0, 0, s2 * .55, 0, TAU);
+    else g.rect(-s2 / 2, -s2 / 2, s2, s2);
+    g.fill(); g.stroke();
+    g.restore();
   }
-  /* objective */
+  for(i = 0; i < LANDMARKS.length; i++){
+    var lm = LANDMARKS[i];
+    if(!full && (Math.abs(lm.x - px) > view || Math.abs(lm.z - pz) > view)) continue;
+    var c = lm.kind === 'police' ? MMC.police : (lm.kind === 'hospital' ? MMC.hospital :
+            (lm.kind === 'fire' ? MMC.fire : (lm.kind === 'gas' ? MMC.gas : MMC.shop)));
+    if(!full && lm.kind !== 'police' && lm.kind !== 'gas' && lm.kind !== 'hospital') continue;
+    blip(lm.x, lm.z, c, 9);
+  }
+  for(i = 0; i < G.props.length; i++){
+    var pp = propById(G.props[i]);
+    if(pp) blip(pp.x, pp.z, MMC.prop, 9, 'circle');
+  }
+  /* traffic as faint dots, close in only */
+  if(!full){
+    g.fillStyle = 'rgba(180,190,205,.55)';
+    for(i = 0; i < G.traffic.length; i++){
+      var tv = G.traffic[i];
+      if(Math.abs(tv.x - px) > view * .6 || Math.abs(tv.z - pz) > view * .6) continue;
+      g.beginPath(); g.arc(tv.x, tv.z, 3.2 / zoom, 0, TAU); g.fill();
+    }
+  }
+  if(Pursuit.active && Pursuit.target) blip(Pursuit.target.x, Pursuit.target.z, MMC.pursuit, 12, 'circle');
   if(G.obj){
-    g.strokeStyle = '#c9a227'; g.lineWidth = 3 / zoom;
-    g.beginPath(); g.arc(G.obj.x, G.obj.z, 16 / zoom, 0, TAU); g.stroke();
-    g.fillStyle = '#c9a227';
-    g.beginPath(); g.arc(G.obj.x, G.obj.z, 6 / zoom, 0, TAU); g.fill();
+    g.strokeStyle = MMC.objective;
+    g.lineWidth = 3.5 / zoom;
+    g.setLineDash([9 / zoom, 7 / zoom]);
+    g.beginPath(); g.arc(G.obj.x, G.obj.z, 20 / zoom, 0, TAU); g.stroke();
+    g.setLineDash([]);
+    blip(G.obj.x, G.obj.z, MMC.objective, 11);
+  }
+
+  /* --- street name labels on the full map --- */
+  if(full){
+    g.save();
+    var labelled = {};
+    g.font = (13 / zoom) + 'px ui-monospace, Menlo, monospace';
+    g.textAlign = 'center'; g.textBaseline = 'middle';
+    for(i = 0; i < drawn.length; i++){
+      e = drawn[i];
+      if(!e.name || labelled[e.name]) continue;
+      if(e.type === 'local' || e.type === 'collector') continue;
+      labelled[e.name] = 1;
+      a = NODES[e.a]; b = NODES[e.b];
+      var ang = Math.atan2(b.z - a.z, b.x - a.x);
+      if(ang > Math.PI / 2) ang -= Math.PI;
+      if(ang < -Math.PI / 2) ang += Math.PI;
+      g.save();
+      g.translate((a.x + b.x) / 2, (a.z + b.z) / 2);
+      g.rotate(ang);
+      g.lineWidth = 4 / zoom;
+      g.strokeStyle = 'rgba(6,10,16,.9)';
+      g.fillStyle = e.type === 'freeway' ? MMC.roadFwy : '#dfe6ef';
+      g.strokeText(e.name, 0, 0);
+      g.fillText(e.name, 0, 0);
+      g.restore();
+    }
+    g.restore();
   }
   g.restore();
 
-  /* player arrow (always center, up) */
+  /* --- player arrow, always centre, always up --- */
   g.save();
   g.translate(R, R);
-  g.fillStyle = '#e8eef7';
-  g.beginPath(); g.moveTo(0, -9); g.lineTo(6.5, 8); g.lineTo(0, 4.5); g.lineTo(-6.5, 8); g.closePath(); g.fill();
+  if(northUp) g.rotate(G.player.h + Math.PI / 2);
+  g.beginPath();
+  g.moveTo(0, -11); g.lineTo(8, 9); g.lineTo(0, 4.5); g.lineTo(-8, 9);
+  g.closePath();
+  g.fillStyle = MMC.arrow;
+  g.strokeStyle = MMC.arrowEdge;
+  g.lineWidth = 2.2;
+  g.fill(); g.stroke();
   g.restore();
 
-  /* ring */
-  g.strokeStyle = 'rgba(201,162,39,.5)'; g.lineWidth = 2;
-  g.beginPath(); g.arc(R, R, R - 2, 0, TAU); g.stroke();
+  /* --- bezel + north tick --- */
+  if(!full){
+    g.strokeStyle = 'rgba(0,0,0,.85)';
+    g.lineWidth = 6;
+    g.beginPath(); g.arc(R, R, R - 3, 0, TAU); g.stroke();
+    g.strokeStyle = 'rgba(220,228,240,.30)';
+    g.lineWidth = 2;
+    g.beginPath(); g.arc(R, R, R - 6, 0, TAU); g.stroke();
+    /* north marker rides the bezel */
+    var na = rot - Math.PI / 2;
+    g.save();
+    g.translate(R + Math.cos(na) * (R - 15), R + Math.sin(na) * (R - 15));
+    g.fillStyle = '#e0463c';
+    g.beginPath(); g.arc(0, 0, 5.5, 0, TAU); g.fill();
+    g.fillStyle = '#fff';
+    g.font = 'bold 8px ui-monospace, Menlo, monospace';
+    g.textAlign = 'center'; g.textBaseline = 'middle';
+    g.fillText('N', 0, .5);
+    g.restore();
+  }
 }
 function toggleMap(){
   G.mapFull = !G.mapFull;
   var w = $('minimapWrap');
-  w.style.width = w.style.height = G.mapFull ? '78vmin' : '';
-  w.style.left = G.mapFull ? '50%' : '';
-  w.style.bottom = G.mapFull ? '50%' : '';
-  w.style.transform = G.mapFull ? 'translate(-50%,50%)' : '';
-  $('mmLabel').textContent = G.mapFull ? 'BAYARD COUNTY \u00b7 TEXAS' : 'CYPRESS FALLS';
+  if(G.mapFull){
+    w.style.width = w.style.height = '86vmin';
+    w.style.left = '50%'; w.style.bottom = '50%';
+    w.style.transform = 'translate(-50%,50%)';
+    w.style.borderRadius = '12px';
+    w.style.zIndex = '60';
+  } else {
+    w.style.width = w.style.height = '';
+    w.style.left = ''; w.style.bottom = '';
+    w.style.transform = '';
+    w.style.borderRadius = '50%';
+    w.style.zIndex = '';
+  }
+  drawMinimap();
+  updateStreetBar();
+}
+/* the bar under the map carries the street you are actually on */
+function updateStreetBar(){
+  var el = $('mmLabel');
+  if(!el) return;
+  if(G.mapFull){ el.textContent = 'BAYARD COUNTY, TEXAS \u2014 TAP TO CLOSE'; return; }
+  var st = streetAt(G.player.x, G.player.z);
+  var nm = st.name || 'Bayard County';
+  if(nm.length > 24) nm = nm.substr(0, 23) + '\u2026';
+  el.textContent = nm;
 }
 
 /* ============================================================
@@ -6796,6 +9047,32 @@ function hd(b, t, s){
 }
 
 function menuDuty(b){
+  /* Standing with Internal Affairs, tracked separately from XP so a rookie
+     cannot outrun a misconduct finding by simply having no experience yet. */
+  if(G.discipline > 0 || (G.dhistory && G.dhistory.length)){
+    b.appendChild(h3('Internal Affairs'));
+    var dcard = document.createElement('div'); dcard.className = 'rec';
+    var stepName = G.discStep || 'None';
+    dcard.innerHTML = '<div class="hd"><div class="nm">Standing</div>' +
+      '<span class="tag ' + (G.discipline >= 3 ? 'bad' : (G.discipline > 0 ? 'warn' : 'ok')) + '">' +
+      esc(stepName.toUpperCase()) + '</span></div>' +
+      kv('Discipline Points', (G.discipline || 0).toFixed(1)) +
+      kv('Next Step', (function(){
+          var q, nx = null;
+          for(q = 0; q < DISCIPLINE.length; q++) if(DISCIPLINE[q].at > G.discipline){ nx = DISCIPLINE[q]; break; }
+          return nx ? nx.n + ' at ' + nx.at : 'Dismissal';
+        })()) +
+      '<div class="small" style="margin-top:6px">Clean, productive work slowly clears your record.</div>';
+    b.appendChild(dcard);
+    var dh = G.dhistory || [], q2;
+    for(q2 = 0; q2 < Math.min(5, dh.length); q2++){
+      var r3 = document.createElement('div'); r3.className = 'rowline small';
+      r3.innerHTML = '<span>' + esc(dh[q2].why) + '</span><span style="color:var(--bad)">+' +
+        dh[q2].pts + '</span>';
+      b.appendChild(r3);
+    }
+  }
+
   hd(b, G.onDuty ? 'On Duty \u2014 ' + G.callsign : 'Off Duty',
      G.onDuty ? 'End of watch pays out hourly at your rank, plus property income.'
               : 'Free roam the county, or report for a shift.');
@@ -6945,8 +9222,47 @@ function liveryDesc(l){
   return m[l] || '';
 }
 
+/* Complete loadouts you can switch between at the locker, rather than
+   rebuilding your officer field by field every time. */
+var UNIFORMS = [
+  { id:'patrol',  n:'Class B Patrol',   d:'Navy shirt, duty belt, no hat. The default watch uniform.',
+    set:{ uniform:0, hat:'none',     vest:'under', gloves:'none' } },
+  { id:'traffic', n:'Traffic Detail',   d:'High-visibility over the shirt, eight-point cap.',
+    set:{ uniform:1, hat:'eight',    vest:'under', gloves:'duty' } },
+  { id:'county',  n:'County Khaki',     d:'Sheriff\u2019s tan over green, campaign hat.',
+    set:{ uniform:2, hat:'campaign', vest:'under', gloves:'none' } },
+  { id:'dps',     n:'Highway Patrol',   d:'Trooper grey with the campaign hat.',
+    set:{ uniform:3, hat:'campaign', vest:'under', gloves:'duty' } },
+  { id:'tactical',n:'Tactical',         d:'Outer carrier and plates. Warrants and active threats.',
+    set:{ uniform:4, hat:'ball',     vest:'plate', gloves:'duty' } },
+  { id:'plain',   n:'Plain Clothes',    d:'Detective division. Badge on the belt.',
+    set:{ uniform:5, hat:'none',     vest:'none',  gloves:'none' } }
+];
+function applyUniform(u){
+  var k;
+  for(k in u.set) if(u.set.hasOwnProperty(k)) G.appear[k] = u.set[k];
+  G.uniformId = u.id;
+  rebuildOfficer();
+  toast(u.n.toUpperCase() + ' \u2014 DRESSED', 'good');
+}
 function menuOfficer(b){
   hd(b, 'Officer Appearance', 'Changes apply immediately to your on-foot model.');
+  /* presets first: one tap to a complete look */
+  b.appendChild(h3('Uniform Presets'));
+  var ui;
+  for(ui = 0; ui < UNIFORMS.length; ui++){
+    (function(u){
+      var card = document.createElement('div'); card.className = 'rec';
+      card.innerHTML = '<div class="hd"><div class="nm">' + esc(u.n) + '</div>' +
+        (G.uniformId === u.id ? '<span class="tag ok">WORN</span>' : '') + '</div>' +
+        '<div class="small">' + esc(u.d) + '</div>';
+      b.appendChild(card);
+      b.appendChild(btn(G.uniformId === u.id ? 'WORN' : 'WEAR THIS',
+        function(){ applyUniform(u); openMenu('officer'); },
+        G.uniformId === u.id ? 'dis' : 'pri'));
+    })(UNIFORMS[ui]);
+  }
+  b.appendChild(h3('Individual Options'));
   var keys = [
     ['sex','Sex'], ['skin','Complexion'], ['hair','Hair'], ['build','Build'],
     ['uniform','Uniform'], ['hat','Headwear'], ['glasses','Eyewear'], ['vest','Body Armor'], ['gloves','Gloves']
@@ -7401,11 +9717,15 @@ function weaponById(id){
   var i; for(i = 0; i < WEAPONS.length; i++) if(WEAPONS[i].id === id) return WEAPONS[i];
   return WEAPONS[0];
 }
+/* Standing at the station armoury counts as standing at your unit, so you can
+   draw and check long guns before you ever leave the building. */
+function atArmory(){ return !!(G.interior && G.intArmory); }
 function weaponAvailable(w){
   if(!w.equip) return true;
   if(!hasEquip(w.equip)) return false;
   /* long guns live in the rack \u2014 you have to be in or beside the unit */
   if(w.id === 'shotgun' || w.id === 'rifle' || w.id === 'beanbag'){
+    if(atArmory()) return true;
     if(!G.cruiser) return false;
     if(!G.onFoot) return true;
     return dist(G.player.x, G.player.z, G.cruiser.x, G.cruiser.z) < 6;
@@ -7434,7 +9754,7 @@ function initWeapons(){
 function drawWeapon(id){
   var w = weaponById(id);
   if(!weaponAvailable(w)){
-    if(w.equip && !hasEquip(w.equip)) toast('NOT ISSUED \u2014 BUY IN EQUIPMENT', 'bad');
+    if(w.equip && !hasEquip(w.equip)) toast('NOT ISSUED \u2014 DRAW IT AT THE ARMOURY', 'bad');
     else toast('LONG GUN IS IN THE RACK \u2014 GET TO YOUR UNIT', 'bad');
     return;
   }
@@ -7670,6 +9990,10 @@ var SETTINGS_DEF = {
   autosave:   { n:'Autosave',         v:'on',    opts:[['off','Off'],['on','On']], d:'Saves at every end of watch.' },
   touchUI:    { n:'Touch Controls',   v:'auto',  opts:[['auto','Auto'],['on','Always On'],['off','Hidden']],
                 d:'On-screen driving controls.' },
+  hudDensity: { n:'HUD Density',     v:'compact', opts:[['minimal','Minimal'],['compact','Compact'],['full','Full']],
+                d:'How much of the interface stays on screen while you drive.' },
+  hudScale:   { n:'HUD Size',        v:'auto',    opts:[['s','Small'],['auto','Auto'],['l','Large']],
+                d:'Scales the panels for your screen.' },
   minimapRot: { n:'Minimap',          v:'rotate',opts:[['rotate','Rotates'],['fixed','North Up']],
                 d:'Whether the minimap turns with your unit.' }
 };
@@ -7699,6 +10023,10 @@ function applySettings(){
   }
   var t = $('touch');
   if(t) t.style.display = (G.set.touchUI === 'off') ? 'none' : (G.started ? 'block' : 'none');
+  /* density and scale ride on the body class so the CSS does the work */
+  var body = document.body;
+  var keep = (G.cssFull ? 'fs ' : '');
+  body.className = keep + 'hud-' + (G.set.hudDensity || 'compact') + ' hs-' + (G.set.hudScale || 'auto');
   saveSettings();
 }
 
@@ -7763,13 +10091,15 @@ function renderMainMenu(){
   if(!G.mainOpen) return;
   var b = $('mmBody');
   b.innerHTML = '';
-  if(G.mmTab === 'load') mmLoad(b);
+  if(G.mmTab === 'spawn') mmSpawn(b);
+  else if(G.mmTab === 'load') mmLoad(b);
   else if(G.mmTab === 'settings') mmSettings(b, false);
   else if(G.mmTab === 'credits') mmCredits(b);
   else mmHome(b);
   var tabs = $('mmTabs');
   tabs.innerHTML = '';
   var list = [['home','START'], ['load','CAREERS'], ['settings','SETTINGS'], ['credits','ABOUT']];
+  if(G.mmTab === 'spawn') list = [['spawn','START OF SHIFT']].concat(list);
   var i;
   for(i = 0; i < list.length; i++){
     (function(t){
@@ -7811,14 +10141,51 @@ function mmHome(b){
     initMeta();
     initWeapons();
     respawnCruiser();
+    respawnAtStation();
     refreshHUD();
     closeMainMenu();
-    openMenu('officer');
-    toast('WELCOME TO CYPRESS FALLS. SET UP YOUR OFFICER, THEN GO 10-8.', 'xp');
+    /* start the shift the way a patrol sim does: inside your station,
+       at the lockers, before you have touched a car */
+    G.mmTab = 'spawn';
+    renderMainMenu();
+    return;
   }, has ? 'big' : 'pri big'));
   g.appendChild(btn('LOAD A CAREER', function(){ G.mmTab = 'load'; renderMainMenu(); }, 'big'));
   g.appendChild(btn('SETTINGS', function(){ G.mmTab = 'settings'; renderMainMenu(); }, 'big'));
   b.appendChild(g);
+}
+function mmSpawn(b){
+  hd(b, 'Start of Shift', 'Pick the post you are reporting to. It sets where you spawn, ' +
+     'which beat dispatch prioritises for you, and which agency you wear.');
+  var posts = stationList();
+  var i;
+  for(i = 0; i < posts.length; i++){
+    (function(lm){
+      var card = document.createElement('div'); card.className = 'rec';
+      var agency = lm.kind === 'pd' ? 'Cypress Falls Police' :
+                   (lm.kind === 'so' ? 'Bayard County Sheriff' : 'Texas Highway Patrol');
+      var beat = districtName(lm.x, lm.z);
+      card.innerHTML = '<div class="hd"><div class="nm">' + esc(lm.n) + '</div>' +
+        '<span class="tag ' + (lm.kind === 'pd' ? 'ok' : 'neu') + '">' + esc(agency) + '</span></div>' +
+        kv('Beat', beat) +
+        kv('Assignment', lm.kind === 'dps' ? 'Highway and interstate' :
+                         (lm.kind === 'so' ? 'County and unincorporated' : 'City patrol'));
+      b.appendChild(card);
+      b.appendChild(btn('REPORT HERE', function(){ startShiftAt(lm); }, 'pri'));
+    })(posts[i]);
+  }
+}
+function startShiftAt(lm){
+  G.homeStation = lm.kind;
+  G.spawnLM = { x:lm.x, z:lm.z };
+  teleportTo(lm.x + 26, lm.z + 26);
+  respawnCruiser();
+  refreshHUD();
+  closeMainMenu();
+  if(INTERIORS[lm.kind]){
+    enterInterior(lm.kind);
+  }
+  toast('REPORTING TO ' + lm.n.toUpperCase() + ' \u2014 GEAR UP, THEN GO 10-8.', 'xp');
 }
 function mmLoad(b){
   hd(b, 'Careers', 'Three slots. Saving writes your current career into the slot you pick.');
@@ -7841,6 +10208,14 @@ function mmLoad(b){
       if(info) b.appendChild(btn('DELETE SLOT ' + (n + 1), function(){ deleteSlot(n); }, 'danger'));
     })(i);
   }
+  var g2 = document.createElement('div'); g2.className = 'mmBtns'; g2.style.marginTop = '10px';
+  if(G.pauseOpen){
+    g2.appendChild(btn('BACK', function(){ G.pauseTab = 'main'; renderPause(); }, 'big'));
+    g2.appendChild(btn('RESUME GAME', closePause, 'pri big'));
+  } else {
+    g2.appendChild(btn('BACK', function(){ G.mmTab = 'home'; renderMainMenu(); }, 'big'));
+  }
+  b.appendChild(g2);
 }
 function mmCredits(b){
   hd(b, 'About', 'Cypress Falls Patrol');
@@ -7866,6 +10241,7 @@ function mmCredits(b){
     kv('Callout Types', CALLOUTS.length) +
     kv('Fleet', VEHICLES.length + ' duty \u00b7 ' + CIV_FLEET.length + ' civilian');
   b.appendChild(e3);
+  b.appendChild(btn('BACK', function(){ G.mmTab = 'home'; renderMainMenu(); }, 'pri big'));
 }
 
 /* ============================================================
@@ -7965,6 +10341,16 @@ function mmSettings(b, inGame){
     if(inGame) renderPause(); else renderMainMenu();
     toast('SETTINGS RESET', '');
   }, 'danger'));
+  /* there was no way out of this pane except guessing at a tab */
+  var g = document.createElement('div'); g.className = 'mmBtns'; g.style.marginTop = '10px';
+  if(inGame){
+    g.appendChild(btn('BACK', function(){ G.pauseTab = 'main'; renderPause(); }, 'big'));
+    g.appendChild(btn('RESUME GAME', closePause, 'pri big'));
+  } else {
+    g.appendChild(btn('BACK', function(){ G.mmTab = 'home'; renderMainMenu(); }, 'big'));
+    if(Store.get(SAVEKEY)) g.appendChild(btn('CLOSE AND PLAY', closeMainMenu, 'pri big'));
+  }
+  b.appendChild(g);
 }
 function pzControls(b){
   hd(b, 'Controls', 'Keyboard and touch. Both are always live.');
@@ -8020,6 +10406,276 @@ function pzControls(b){
     r2.innerHTML = '<span style="color:var(--gold)">' + esc(tt[i][0]) + '</span><span>' + esc(tt[i][1]) + '</span>';
     b.appendChild(r2);
   }
+  var g3 = document.createElement('div'); g3.className = 'mmBtns'; g3.style.marginTop = '10px';
+  g3.appendChild(btn('BACK', function(){ G.pauseTab = 'main'; renderPause(); }, 'big'));
+  g3.appendChild(btn('RESUME GAME', closePause, 'pri big'));
+  b.appendChild(g3);
+}
+/* ============================================================
+   INTERIORS
+   Small dressed rooms built off in unused world space; walking into a
+   marked door teleports you in, the exit mat takes you back. The CFPD
+   locker room is where appearance changes happen, like changing at the
+   station in a patrol sim.
+   ============================================================ */
+
+var INTERIORS = {};
+/* Furniture solids per room. The world solid list is for the outdoor map, so
+   interiors carry their own; without these you walked through the front desk,
+   the lockers and the cage. */
+var INT_SOLIDS = {};
+function intSolid(id, x, z, hw, hd){
+  if(!INT_SOLIDS[id]) INT_SOLIDS[id] = [];
+  INT_SOLIDS[id].push({ x:x, z:z, hw:hw, hd:hd });
+}
+function resolveInteriorSolids(id, np, r){
+  var list = INT_SOLIDS[id];
+  if(!list) return;
+  var i, pass;
+  for(pass = 0; pass < 2; pass++){
+    for(i = 0; i < list.length; i++){
+      var b = list[i];
+      var dx = np.x - b.x, dz = np.z - b.z;
+      var ox = (b.hw + r) - Math.abs(dx);
+      var oz = (b.hd + r) - Math.abs(dz);
+      if(ox <= 0 || oz <= 0) continue;
+      if(ox < oz) np.x += dx < 0 ? -ox : ox;
+      else np.z += dz < 0 ? -oz : oz;
+    }
+  }
+}
+var INT_BASE = { x:0, z:2350 };   /* rooms live past the south edge, out of the playfield */
+
+function buildInteriors(scene){
+  var B = new Builder();
+
+  /* ---------- CFPD station lobby + locker room ---------- */
+  var ix = INT_BASE.x, iz = INT_BASE.z;
+  var W = 26, D = 34, H = 4.2;
+  var wall = 0xdad6cc, floorC = 0xb9b2a4, trim = 0x1b2a44;
+  /* floor + ceiling */
+  B.plate(ix, .02, iz, W, D, floorC, 0);
+  B.box(ix, H, iz, W, .3, D, 0xcfccc4, 0);
+  /* perimeter walls */
+  B.box(ix, H / 2, iz - D / 2, W, H, .4, wall, 0);
+  B.box(ix, H / 2, iz + D / 2, W, H, .4, wall, 0);
+  B.box(ix - W / 2, H / 2, iz, .4, H, D, wall, 0);
+  B.box(ix + W / 2, H / 2, iz, .4, H, D, wall, 0);
+  /* wainscot band */
+  B.box(ix, 1.0, iz - D / 2 + .25, W - .8, .5, .1, trim, 0);
+  B.box(ix, 1.0, iz + D / 2 - .25, W - .8, .5, .1, trim, 0);
+
+  /* front desk */
+  B.box(ix, .85, iz - D / 2 + 5, 9, 1.7, 2.0, 0x8a7a5c, 0);
+  intSolid('pd', ix, iz - D / 2 + 5, 4.6, 1.2);
+  B.box(ix, 1.75, iz - D / 2 + 5, 9.4, .12, 2.4, 0x6d5f45, 0);
+  /* flags behind the desk */
+  B.box(ix - 3.4, 1.9, iz - D / 2 + .6, .1, 3.4, .1, 0x8a8f96, 0);
+  B.box(ix - 3.0, 3.0, iz - D / 2 + .65, .8, .9, .05, 0xb03a2e, 0);
+  B.box(ix + 3.4, 1.9, iz - D / 2 + .6, .1, 3.4, .1, 0x8a8f96, 0);
+  B.box(ix + 3.0, 3.0, iz - D / 2 + .65, .8, .9, .05, 0x1f3a6e, 0);
+  /* bench seating */
+  B.box(ix - W / 2 + 2.4, .5, iz - 6, 1.2, .35, 7, 0x6d5f45, 0);
+  B.box(ix + W / 2 - 2.4, .5, iz - 6, 1.2, .35, 7, 0x6d5f45, 0);
+  intSolid('pd', ix - W / 2 + 2.4, iz - 6, .7, 3.6);
+  intSolid('pd', ix + W / 2 - 2.4, iz - 6, .7, 3.6);
+  /* bulletin boards */
+  B.box(ix - W / 2 + .28, 2.2, iz - 2, .07, 1.6, 3.4, 0x8a6d3b, 0);
+  B.box(ix - W / 2 + .32, 2.2, iz - 2, .04, 1.35, 3.1, 0xe8e4d4, 0);
+
+  /* dividing wall into the locker room, with a doorway */
+  B.box(ix - W / 2 + 6.5, H / 2, iz + 4, 13, H, .35, wall, 0);
+  B.box(ix + W / 2 - 3.5, H / 2, iz + 4, 7, H, .35, wall, 0);
+
+  /* --- locker room (back half) --- */
+  var lz = iz + 4 + (D / 2 - 4) / 2;
+  var i;
+  for(i = 0; i < 8; i++){
+    var lx = ix - W / 2 + 2.2 + i * 1.35;
+    B.box(lx, 1.15, iz + D / 2 - 1.3, 1.15, 2.3, 1.0, i % 2 ? 0x4a5560 : 0x51606c, 0);
+    B.box(lx, 1.15, iz + D / 2 - .78, 1.05, 2.1, .06, 0x39434d, 0);
+    B.box(lx + .35, 1.15, iz + D / 2 - .74, .10, .35, .05, 0xb9bec4, 0);   /* handle */
+    intSolid('pd', lx, iz + D / 2 - 1.3, .60, .55);
+  }
+  /* changing bench */
+  B.box(ix - 2, .45, iz + D / 2 - 4.4, 10, .3, 1.0, 0x8a7a5c, 0);
+  intSolid('pd', ix - 2, iz + D / 2 - 4.4, 5.0, .5);
+  B.box(ix - 6.4, .22, iz + D / 2 - 4.4, .3, .45, .8, 0x6d5f45, 0);
+  B.box(ix + 2.4, .22, iz + D / 2 - 4.4, .3, .45, .8, 0x6d5f45, 0);
+  /* mirror */
+  B.box(ix + W / 2 - .30, 1.9, iz + D / 2 - 4.5, .06, 1.9, 3.2, 0x9fb6c4, 0);
+  /* armory cage in the corner */
+  B.box(ix + W / 2 - 3.0, 1.4, iz + 6.4, 4.6, 2.8, .12, 0x39434d, 0);
+  for(i = 0; i < 6; i++){
+    B.box(ix + W / 2 - 5.1 + i * .78, 1.4, iz + 6.35, .06, 2.8, .06, 0x59646f, 0);
+  }
+  B.box(ix + W / 2 - 3.0, 2.0, iz + 7.4, 3.4, .9, .5, 0x2a2f38, 0);   /* rifle rack */
+  intSolid('pd', ix + W / 2 - 3.0, iz + 6.4, 2.3, .3);
+
+  /* ---- holding cells along the west wall ---- */
+  var cellZ = iz + 1.5;
+  for(i = 0; i < 3; i++){
+    var cz2 = cellZ + i * 4.2;
+    /* cell walls */
+    B.box(ix - W / 2 + 2.2, H / 2, cz2 - 2.1, 4.4, H, .22, 0xb8b4aa, 0);
+    intSolid('pd', ix - W / 2 + 2.2, cz2 - 2.1, 2.2, .2);
+    /* bars facing the corridor */
+    var bq;
+    for(bq = 0; bq < 8; bq++){
+      B.box(ix - W / 2 + .35 + bq * .55, 1.35, cz2, .07, 2.7, .07, 0x59646f, 0);
+    }
+    B.box(ix - W / 2 + 2.2, 2.78, cz2, 4.4, .16, .16, 0x59646f, 0);
+    intSolid('pd', ix - W / 2 + 2.2, cz2, 2.2, .18);
+    /* bunk + toilet inside */
+    B.box(ix - W / 2 + 1.3, .40, cz2 - 1.2, 2.0, .30, 1.4, 0x8a9096, 0);
+    B.box(ix - W / 2 + 3.4, .35, cz2 - 1.6, .5, .70, .5, 0xdfe3e6, 0);
+  }
+  /* booking desk in front of the cells */
+  B.box(ix - W / 2 + 7.2, .85, iz + 5.5, 1.8, 1.7, 5.0, 0x6d5f45, 0);
+  intSolid('pd', ix - W / 2 + 7.2, iz + 5.5, 1.0, 2.6);
+  B.box(ix - W / 2 + 7.2, 1.78, iz + 5.5, 2.2, .12, 5.4, 0x574b36, 0);
+
+  /* ---- motor pool bay: repair and refit ---- */
+  var gz2 = iz - D / 2 - 9;
+  B.plate(ix + 8, .03, gz2, 16, 16, 0x6e737a, 0);
+  B.box(ix + 8, H / 2, gz2 - 8, 16, H, .4, 0xc6c2b8, 0);
+  B.box(ix + 8, H, gz2, 16, .3, 16, 0xcfccc4, 0);
+  B.box(ix + 16, H / 2, gz2, .4, H, 16, 0xc6c2b8, 0);
+  /* lift, tool chest, tyre stack */
+  B.box(ix + 8, .18, gz2, 5.0, .36, 2.2, 0x4a5058, 0);
+  B.box(ix + 14.4, .75, gz2 - 5, 1.2, 1.5, 3.0, 0xb03a2e, 0);
+  intSolid('pd', ix + 14.4, gz2 - 5, .7, 1.6);
+  for(i = 0; i < 4; i++) B.cyl(ix + 2.4, i * .34, gz2 + 5.5, .55, .55, .32, 8, 0x1e2126, 3);
+  intSolid('pd', ix + 2.4, gz2 + 5.5, .6, .6);
+  /* bay mouth marking */
+  B.plate(ix + 8, .05, gz2 + 7.4, 12, .4, 0xd6b83c, 0);
+
+  /* exit mat by the front door */
+  B.plate(ix, .06, iz - D / 2 + 1.4, 3.6, 1.6, 0x8d1f2b, 0);
+
+  var mesh = new THREE.Mesh(B.geo(), new THREE.MeshLambertMaterial({ vertexColors:true }));
+  scene.add(mesh);
+
+  /* interior lighting is faked with a local ambient boost while inside */
+  INTERIORS.pd = {
+    name:'CYPRESS FALLS POLICE',
+    x:ix, z:iz,
+    spawnX:ix, spawnZ:iz - D / 2 + 2.6,
+    exitX:ix, exitZ:iz - D / 2 + 1.4,
+    lockerX:ix - 2, lockerZ:iz + D / 2 - 3.6,
+    armoryX:ix + W / 2 - 3.0, armoryZ:iz + 7.6,
+    jailX:ix - W / 2 + 6.0, jailZ:iz + 5.5,
+    garageX:ix + 8, garageZ:iz - D / 2 - 4,
+    /* bounds open north into the motor pool bay */
+    bounds:{ x0:ix - W / 2 + .8, x1:ix + 16 - .8, z0:iz - D / 2 - 16, z1:iz + D / 2 - .8 }
+  };
+
+  /* ---------- Sheriff's Office and DPS post ----------
+     Same shell, different dress, offset along X so they do not overlap. */
+  var variants = [
+    { id:'so',  ox:60,  wall:0xd6cfbe, trim:0x4a3a24, flagA:0x8a6d2b, flagB:0x3b2d20, name:'BAYARD COUNTY SHERIFF' },
+    { id:'dps', ox:120, wall:0xd2d4d8, trim:0x14181d, flagA:0x8d1f2b, flagB:0x14181d, name:'TEXAS HIGHWAY PATROL' }
+  ];
+  var vi;
+  for(vi = 0; vi < variants.length; vi++){
+    var V = variants[vi];
+    var vx = INT_BASE.x + V.ox, vz = INT_BASE.z;
+    var VB = new Builder();
+    var vW = 22, vD = 28, vH = 4.2;
+    VB.plate(vx, .02, vz, vW, vD, 0xb0a99c, 0);
+    VB.box(vx, vH, vz, vW, .3, vD, 0xcfccc4, 0);
+    VB.box(vx, vH / 2, vz - vD / 2, vW, vH, .4, V.wall, 0);
+    VB.box(vx, vH / 2, vz + vD / 2, vW, vH, .4, V.wall, 0);
+    VB.box(vx - vW / 2, vH / 2, vz, .4, vH, vD, V.wall, 0);
+    VB.box(vx + vW / 2, vH / 2, vz, .4, vH, vD, V.wall, 0);
+    VB.box(vx, 1.0, vz - vD / 2 + .25, vW - .8, .5, .1, V.trim, 0);
+    /* counter */
+    VB.box(vx, .85, vz - vD / 2 + 4.5, 8, 1.7, 1.8, 0x8a7a5c, 0);
+    intSolid(V.id, vx, vz - vD / 2 + 4.5, 4.1, 1.1);
+    VB.box(vx, 1.75, vz - vD / 2 + 4.5, 8.4, .12, 2.2, 0x6d5f45, 0);
+    /* flags */
+    VB.box(vx - 3.0, 1.9, vz - vD / 2 + .6, .1, 3.4, .1, 0x8a8f96, 0);
+    VB.box(vx - 2.6, 3.0, vz - vD / 2 + .65, .8, .9, .05, V.flagA, 0);
+    VB.box(vx + 3.0, 1.9, vz - vD / 2 + .6, .1, 3.4, .1, 0x8a8f96, 0);
+    VB.box(vx + 2.6, 3.0, vz - vD / 2 + .65, .8, .9, .05, V.flagB, 0);
+    /* lockers + bench */
+    var q;
+    for(q = 0; q < 6; q++){
+      VB.box(vx - vW / 2 + 2.0 + q * 1.35, 1.15, vz + vD / 2 - 1.3, 1.15, 2.3, 1.0,
+             q % 2 ? 0x4a5560 : 0x51606c, 0);
+      VB.box(vx - vW / 2 + 2.0 + q * 1.35, 1.15, vz + vD / 2 - .78, 1.05, 2.1, .06, 0x39434d, 0);
+      intSolid(V.id, vx - vW / 2 + 2.0 + q * 1.35, vz + vD / 2 - 1.3, .60, .55);
+    }
+    VB.box(vx - 1, .45, vz + vD / 2 - 4.2, 8, .3, 1.0, 0x8a7a5c, 0);
+    intSolid(V.id, vx - 1, vz + vD / 2 - 4.2, 4.0, .5);
+    VB.box(vx + vW / 2 - .30, 1.9, vz + vD / 2 - 4.4, .06, 1.9, 2.8, 0x9fb6c4, 0);
+    /* armoury */
+    VB.box(vx + vW / 2 - 3.0, 1.4, vz + 5.0, 4.2, 2.8, .12, 0x39434d, 0);
+    for(q = 0; q < 5; q++) VB.box(vx + vW / 2 - 4.8 + q * .84, 1.4, vz + 4.95, .06, 2.8, .06, 0x59646f, 0);
+    intSolid(V.id, vx + vW / 2 - 3.0, vz + 5.0, 2.1, .3);
+    /* exit mat */
+    VB.plate(vx, .06, vz - vD / 2 + 1.4, 3.6, 1.6, 0x8d1f2b, 0);
+    scene.add(new THREE.Mesh(VB.geo(), new THREE.MeshLambertMaterial({ vertexColors:true })));
+    INTERIORS[V.id] = {
+      x:vx, z:vz, name:V.name,
+      spawnX:vx, spawnZ:vz - vD / 2 + 3.0,
+      exitX:vx, exitZ:vz - vD / 2 + 1.4,
+      lockerX:vx - 1, lockerZ:vz + vD / 2 - 3.4,
+      armoryX:vx + vW / 2 - 3.0, armoryZ:vz + 5.2,
+      bounds:{ x0:vx - vW / 2 + .8, x1:vx + vW / 2 - .8, z0:vz - vD / 2 + .8, z1:vz + vD / 2 - .8 }
+    };
+  }
+}
+
+/* ---- enter / exit ---- */
+function enterInterior(id){
+  var it = INTERIORS[id];
+  if(!it) return;
+  if(!G.onFoot) exitVehicle();
+  if(!G.onFoot){ toast('STEP OUT OF THE UNIT FIRST', 'bad'); return; }
+  G.interior = id;
+  G.returnX = G.player.x; G.returnZ = G.player.z; G.returnH = G.playerH;
+  G.player.x = it.spawnX; G.player.z = it.spawnZ; G.player.y = 0;
+  G.playerH = Math.PI / 2; G.camYaw = Math.PI / 2;
+  toast((it.name || 'CYPRESS FALLS POLICE') + ' \u2014 E AT THE LOCKERS TO CHANGE', '');
+}
+function exitInterior(){
+  if(!G.interior) return;
+  G.interior = null;
+  G.player.x = G.returnX; G.player.z = G.returnZ;
+  G.player.y = roadHeightAt(G.player.x, G.player.z);
+  G.playerH = G.returnH; G.camYaw = G.returnH;
+}
+/* keep the player inside the room, run the door / locker / armory triggers */
+function updateInterior(dt){
+  if(!G.interior){
+    /* outside: standing at the station's front door goes in */
+    if(G.onFoot && !G.stationDoor){
+      var ns = nearestStation(G.player.x, G.player.z);
+      if(ns && ns.d < 12 && INTERIORS[ns.lm.kind]){
+        G.stationDoor = true;
+        enterInterior(ns.lm.kind);
+        setTimeout(function(){ G.stationDoor = false; }, 1500);
+      }
+    }
+    return;
+  }
+  var it = INTERIORS[G.interior];
+  if(!it) { G.interior = null; return; }
+  var b = it.bounds;
+  G.player.x = clamp(G.player.x, b.x0, b.x1);
+  G.player.z = clamp(G.player.z, b.z0, b.z1);
+  G.player.y = 0;
+
+  if(dist(G.player.x, G.player.z, it.exitX, it.exitZ) < 1.6){
+    exitInterior();
+    return;
+  }
+  /* triggers show as prompts; ACT handles them */
+  G.intLocker = dist(G.player.x, G.player.z, it.lockerX, it.lockerZ) < 2.8;
+  G.intArmory = dist(G.player.x, G.player.z, it.armoryX, it.armoryZ) < 2.8;
+  G.intJail = it.jailX !== undefined && dist(G.player.x, G.player.z, it.jailX, it.jailZ) < 3.4;
+  G.intGarage = it.garageX !== undefined && dist(G.player.x, G.player.z, it.garageX, it.garageZ) < 5.0;
 }
 /* ============================================================
    ENGINE / PLAYER / INPUT / MAIN LOOP
@@ -8037,12 +10693,40 @@ var WX = {
   fog:   { fog:[0.00260, 0xb0b8c2], sun:0.35, amb:0.60, grip:0.90, temp:64 }
 };
 
-function setWeather(w){
+/* Weather moves through plausible states rather than teleporting between
+   them: clear does not become a thunderstorm without clouding over first,
+   and storms blow themselves out into rain and then cloud. */
+var WX_NEXT = {
+  clear: [['clear', .48], ['cloud', .42], ['fog', .10]],
+  cloud: [['cloud', .34], ['clear', .30], ['rain', .28], ['fog', .08]],
+  rain:  [['rain', .30], ['cloud', .40], ['storm', .22], ['clear', .08]],
+  storm: [['storm', .22], ['rain', .52], ['cloud', .26]],
+  fog:   [['fog', .30], ['clear', .44], ['cloud', .26]]
+};
+function rollWeather(from){
+  var opts = WX_NEXT[from] || WX_NEXT.clear;
+  var r = Math.random(), i, acc = 0;
+  for(i = 0; i < opts.length; i++){ acc += opts[i][1]; if(r <= acc) return opts[i][0]; }
+  return 'clear';
+}
+function setWeather(w, quiet){
+  var prev = G.weather;
   G.weather = w;
-  G.wxTimer = rng(240, 620);
+  /* fog burns off fast, storms move through, clear spells last */
+  G.wxTimer = w === 'fog' ? rng(120, 260) :
+              (w === 'storm' ? rng(90, 220) :
+              (w === 'rain' ? rng(160, 380) : rng(280, 700)));
   var c = WX[w] || WX.clear;
-  G.temp = c.temp + rng(-6, 6);
-  if(w === 'storm') dispatchSay('All units be advised, severe weather moving through the county. Watch your speed.', 1);
+  /* temperature drifts toward the new state instead of jumping */
+  var target = c.temp + rng(-5, 5);
+  G.tempTarget = target;
+  if(G.temp === undefined) G.temp = target;
+  G.wxBlend = 0;
+  if(quiet) return;
+  if(w === 'storm') dispatchSay('All units be advised, severe weather moving through the county. Watch your speed and your following distance.', 1);
+  else if(w === 'rain' && prev !== 'storm') dispatchSay('Roads are getting wet out there. Slow it down.', 2);
+  else if(w === 'fog') dispatchSay('Advising all units, visibility is dropping county-wide.', 2);
+  else if(w === 'clear' && (prev === 'storm' || prev === 'rain')) dispatchSay('Weather is clearing up. Roads still slick in spots.', 2);
 }
 
 /* ---------- init ---------- */
@@ -8182,9 +10866,21 @@ function updateSky(dt){
 
   /* --- clouds --- */
   if(cloudMesh){
-    cloudMesh.material.opacity = key.cloud * (.30 + day * .70);
-    cloudMesh.material.color.copy(hor).lerp(new THREE.Color(0xffffff), day * .5);
-    cloudMesh.rotation.y += dt * .0032;
+    var ci;
+    for(ci = 0; ci < cloudMesh.children.length; ci++){
+      var deck = cloudMesh.children[ci];
+      var lower = deck.userData.deck === 1;
+      var op = key.cloud * (.30 + day * .70) * (lower ? .72 : 1);
+      /* ease into the new weather instead of popping */
+      deck.material.opacity = lerp(deck.material.opacity, op, 1 - Math.pow(.25, dt));
+      deck.material.color.copy(hor).lerp(new THREE.Color(0xffffff), day * (lower ? .35 : .55));
+      /* storm decks are darker and move faster */
+      if(G.weather === 'storm' || G.weather === 'rain'){
+        deck.material.color.lerp(new THREE.Color(0x3c444f), G.weather === 'storm' ? .55 : .30);
+      }
+      var wind = (G.weather === 'storm' ? 3.2 : (G.weather === 'rain' ? 1.9 : 1));
+      deck.rotation.y += dt * (lower ? .0052 : .0030) * wind * (lower ? -1 : 1);
+    }
     cloudMesh.position.set(camera.position.x, 0, camera.position.z);
   }
 
@@ -8201,21 +10897,46 @@ function updateCamera(dt){
   var tx, ty, tz, lx, ly, lz;
   var mode = CAMMODES[G.camMode];
   if(G.onFoot){
+    /* GTA-style follow camera: it trails the officer, drifts back into line
+       behind him while he moves, and yields immediately to a manual drag.
+       Position and aim are both critically damped so it never snaps. */
+    if(G.lookHold > 0) G.lookHold -= dt;
+    if(G.player.spd > .6 && G.lookHold <= 0 && !G.aiming){
+      /* Align faster the further out of line the camera is, and faster still
+         at a run -- that is what makes SA's camera feel like it is chasing you
+         rather than drifting. */
+      var off2 = angDiff(G.playerH, G.camYaw);
+      var urgency = .55 + Math.min(Math.abs(off2) / Math.PI, 1) * 1.35
+                        + Math.min(G.player.spd / 4.3, 1) * .55;
+      var k = 1 - Math.pow(.012, dt * urgency);
+      G.camYaw = angWrap(G.camYaw + off2 * k);
+    }
     var ph = G.camYaw;
     if(mode === 'first' || mode === 'hood'){
       camera.position.set(G.player.x, G.player.y + 1.62, G.player.z);
       camera.lookAt(G.player.x + Math.cos(ph) * 10, G.player.y + 1.62 - G.pitch * 10, G.player.z + Math.sin(ph) * 10);
       return;
     }
-    var back = mode === 'close' ? 3.0 : 4.6, up = mode === 'close' ? 1.9 : 2.5;
+    var back = mode === 'close' ? 3.1 : 4.7, up = mode === 'close' ? 1.85 : 2.35;
+    /* pull the camera out a little as he speeds up */
+    back += Math.min(G.player.spd, 4.3) * .16;
     tx = G.player.x - Math.cos(ph) * back;
     tz = G.player.z - Math.sin(ph) * back;
     ty = G.player.y + up + G.pitch * 3;
-    var kf = 1 - Math.pow(.0016, dt);
+    var kf = 1 - Math.pow(.0022, dt);
     camera.position.x = lerp(camera.position.x, tx, kf);
     camera.position.y = lerp(camera.position.y, ty, kf);
     camera.position.z = lerp(camera.position.z, tz, kf);
-    camera.lookAt(G.player.x + Math.cos(ph) * 6, G.player.y + 1.3 - G.pitch * 6, G.player.z + Math.sin(ph) * 6);
+    /* smooth the aim point too, otherwise the world whips when he turns */
+    var ax = G.player.x + Math.cos(ph) * 7;
+    var az = G.player.z + Math.sin(ph) * 7;
+    var ay = G.player.y + 1.25 - G.pitch * 6;
+    if(G.camLook === undefined) G.camLook = { x:ax, y:ay, z:az };
+    var ka = 1 - Math.pow(.0009, dt);
+    G.camLook.x = lerp(G.camLook.x, ax, ka);
+    G.camLook.y = lerp(G.camLook.y, ay, ka);
+    G.camLook.z = lerp(G.camLook.z, az, ka);
+    camera.lookAt(G.camLook.x, G.camLook.y, G.camLook.z);
     return;
   }
   var v = G.veh;
@@ -8265,7 +10986,7 @@ function rebuildOfficer(){
   var a = G.appear, u = UNIFORM_COLS[a.uniform] || UNIFORM_COLS.navy;
   var m = buildPerson({
     cop:true,
-    skin:SKIN[clamp(a.skin, 0, SKIN.length - 1)],
+    skin:SKINS[clamp(a.skin, 0, SKINS.length - 1)],
     shirt:u.shirt, pants:u.pants,
     hat:a.hat !== 'none', vest:a.vest, gloves:a.gloves !== 'none',
     female:a.sex === 'f', build:a.build, hair:a.hair, glasses:a.glasses !== 'none'
@@ -8276,10 +10997,29 @@ function rebuildOfficer(){
 }
 
 /* ---------- station / travel ---------- */
+/* Landmarks are tagged 'pd' / 'so' / 'dps'; this used to look for 'police',
+   never matched, and silently returned a hardcoded corner of the map. Every
+   station door, respawn and new-career spawn was pointing at empty ground. */
+var AGENCY_KINDS = { pd:1, so:1, dps:1 };
+function stationList(){
+  var out = [], i;
+  for(i = 0; i < LANDMARKS.length; i++) if(AGENCY_KINDS[LANDMARKS[i].kind]) out.push(LANDMARKS[i]);
+  return out;
+}
 function stationPos(){
   var i;
-  for(i = 0; i < LANDMARKS.length; i++) if(LANDMARKS[i].kind === 'police') return LANDMARKS[i];
-  return { x:120, z:120 };
+  for(i = 0; i < LANDMARKS.length; i++) if(LANDMARKS[i].kind === 'pd') return LANDMARKS[i];
+  var all = stationList();
+  return all.length ? all[0] : { x:-210, z:200, kind:'pd', n:'CFPD' };
+}
+/* nearest post of any agency, used by the door trigger */
+function nearestStation(x, z){
+  var all = stationList(), best = null, bd = 1e9, i;
+  for(i = 0; i < all.length; i++){
+    var d = dist(x, z, all[i].x, all[i].z);
+    if(d < bd){ bd = d; best = all[i]; }
+  }
+  return best ? { lm:best, d:bd } : null;
 }
 function respawnAtStation(){
   var s = stationPos();
@@ -8332,6 +11072,14 @@ function nearestEnterable(){
     var d = dist(G.player.x, G.player.z, v.x, v.z);
     if(d < bd){ bd = d; best = v; }
   }
+  /* parked cars are as takeable as anything moving */
+  if(G.parked){
+    for(i = 0; i < G.parked.length; i++){
+      var pk = G.parked[i];
+      var dp = dist(G.player.x, G.player.z, pk.x, pk.z);
+      if(dp < bd){ bd = dp; best = pk; }
+    }
+  }
   if(!best){
     for(i = 0; i < G.traffic.length; i++){
       var t = G.traffic[i];
@@ -8344,7 +11092,7 @@ function nearestEnterable(){
 
 /* ---------- input ---------- */
 var K = {};
-var TOUCH = { stick:{ id:-1, cx:0, cy:0, x:0, y:0, on:false }, gas:false, brk:false, look:{ id:-1, x:0, y:0 } };
+var TOUCH = { stick:{ id:-1, cx:0, cy:0, ox:0, oy:0, x:0, y:0, on:false }, gas:false, brk:false, look:{ id:-1, x:0, y:0 } };
 function bindInput(){
   window.addEventListener('keydown', function(e){
     var k = e.key.toLowerCase();
@@ -8359,12 +11107,16 @@ function bindInput(){
 
   var t = $('touch');
   var stick = $('stick'), knob = $('stickKnob');
+  /* Anchor the stick to wherever the thumb actually lands, not the middle of
+     the pad. Landing off-centre used to register instant full deflection. */
   function stickStart(e){
     var tch = e.changedTouches[0];
     TOUCH.stick.id = tch.identifier;
     var r = stick.getBoundingClientRect();
-    TOUCH.stick.cx = r.left + r.width / 2;
-    TOUCH.stick.cy = r.top + r.height / 2;
+    TOUCH.stick.cx = tch.clientX;
+    TOUCH.stick.cy = tch.clientY;
+    TOUCH.stick.ox = r.left + r.width / 2;
+    TOUCH.stick.oy = r.top + r.height / 2;
     TOUCH.stick.on = true;
     stickMove(e);
   }
@@ -8374,10 +11126,20 @@ function bindInput(){
       var tc = e.changedTouches[i];
       if(tc.identifier !== TOUCH.stick.id) continue;
       var dx = tc.clientX - TOUCH.stick.cx, dy = tc.clientY - TOUCH.stick.cy;
-      var mx = 46, d = Math.sqrt(dx * dx + dy * dy);
-      if(d > mx){ dx = dx / d * mx; dy = dy / d * mx; }
-      TOUCH.stick.x = dx / mx; TOUCH.stick.y = dy / mx;
-      knob.style.transform = 'translate(' + (dx - 24) + 'px,' + (dy - 24) + 'px)';
+      var mx = 52, d = Math.sqrt(dx * dx + dy * dy);
+      if(d > mx){ dx = dx / d * mx; dy = dy / d * mx; d = mx; }
+      /* small deadzone, then a squared response: proportional like a real
+         analog stick instead of on/off */
+      var mag = d / mx;
+      var dead = .14;
+      var out = mag < dead ? 0 : (mag - dead) / (1 - dead);
+      out = out * out * .55 + out * .45;
+      var ux = d > .001 ? dx / d : 0, uy = d > .001 ? dy / d : 0;
+      TOUCH.stick.x = ux * out;
+      TOUCH.stick.y = uy * out;
+      var kx = TOUCH.stick.cx - TOUCH.stick.ox + dx;
+      var ky = TOUCH.stick.cy - TOUCH.stick.oy + dy;
+      knob.style.transform = 'translate(' + (kx - 24) + 'px,' + (ky - 24) + 'px)';
     }
   }
   function stickEnd(e){
@@ -8403,6 +11165,8 @@ function bindInput(){
   tap($('btnMdt'), function(){ if(G.mdtOpen) closeMDT(); else openMDT(G.mdtTab); });
   tap($('btnRadar'), function(){ Radar.toggle(); });
   tap($('btnAlpr'), function(){ ALPR.toggle(); });
+  tap($('btnBackup'), function(){ requestBackup(Pursuit.active ? 'pursuit' : 'general'); });
+  tap($('btnAir'), requestAir);
   tap($('btnCam'), function(){ G.camMode = (G.camMode + 1) % CAMMODES.length; toast('CAMERA \u2014 ' + CAMMODES[G.camMode].toUpperCase(), ''); });
   /* the three that were missing on touch entirely */
   tap($('btnDuty'), function(){ if(G.onDuty) goOffDuty(); else goOnDuty(); });
@@ -8410,9 +11174,19 @@ function bindInput(){
   tap($('btnWpn'), toggleWeaponWheel);
   tap($('btnPause'), togglePause);
   tap($('btnFull'), toggleFullscreen);
+  tap($('btnExit'), function(){
+    if(G.interior){ exitInterior(); return; }
+    if(!G.onFoot && G.veh) exitVehicle();
+    else { var v = nearestEnterable(); if(v){ if(v.kind === 'traffic' || v.kind === 'parked') takeVehicle(v); else enterVehicle(v); } }
+  });
   tap($('btnFire'), fireWeapon);
   tap($('wheelClose'), closeWeaponWheel);
   tap($('pzClose'), closePause);
+  tap($('mmClose'), function(){
+    /* only let the player leave the main menu if there is a career to return to */
+    if(Store.get(SAVEKEY)) closeMainMenu();
+    else toast('START OR LOAD A CAREER FIRST', 'bad');
+  });
 
   var look = $('look');
   look.addEventListener('touchstart', function(e){
@@ -8471,12 +11245,13 @@ function toggleFullscreen(){
 function cssFullscreen(on){
   G.cssFull = on;
   var b = document.body;
+  var dens = 'hud-' + ((G.set && G.set.hudDensity) || 'compact') + ' hs-' + ((G.set && G.set.hudScale) || 'auto');
   if(on){
-    b.className = 'fs';
+    b.className = 'fs ' + dens;
     window.scrollTo(0, 1);
     toast('FULLSCREEN \u2014 SWIPE DOWN TO EXIT', '');
   } else {
-    b.className = '';
+    b.className = dens;
   }
   var fb = $('btnFull');
   if(fb) fb.className = 'tsm' + (on ? ' on' : '');
@@ -8484,7 +11259,13 @@ function cssFullscreen(on){
 }
 function applyLook(dx, dy){
   G.pitch = clamp(G.pitch + dy, -.5, .7);
-  if(G.onFoot) G.camYaw = angWrap(G.camYaw - dx);
+  if(Math.abs(dx) > .0004 || Math.abs(dy) > .0004) G.lookHold = 1.6;
+  if(G.onFoot){
+    G.camYaw = angWrap(G.camYaw - dx);
+    /* a deliberate drag should steer you even mid-stride, so carry the frozen
+       input frame along with it */
+    G.ctrlYaw = angWrap((G.ctrlYaw === undefined ? G.camYaw : G.ctrlYaw) - dx);
+  }
   else G.lookYaw = clamp(G.lookYaw - dx, -2.6, 2.6);
 }
 function hold(el, fn){
@@ -8526,6 +11307,8 @@ function onKey(k, e){
   }
   if(k === '0'){ holster(); return; }
   if(k === 'z'){ toggleWeaponWheel(); return; }
+  if(k === 'b' && !K['shift']){ requestBackup(Pursuit.active ? 'pursuit' : 'general'); return; }
+  if(k === 'h' && K['shift']){ requestAir(); return; }
   if(k === 'r' && K['shift']){ reloadWeapon(); return; }
   if(k === 'e'){ doAction(); return; }
   if(k === 'l'){ toggleLights(); return; }
@@ -8547,7 +11330,7 @@ function onKey(k, e){
   if(k === 'v'){ toggleVoice(); return; }
   if(k === 'b'){ toggleMute(); return; }
   if(k === 'j'){ if(G.inCustody) bookPrisoner(); else toast('NO PRISONER IN CUSTODY', 'bad'); return; }
-  if(k === 'q'){ if(!G.onFoot && G.veh) exitVehicle(); else { var v = nearestEnterable(); if(v) enterVehicle(v); else toast('NO VEHICLE IN RANGE', 'bad'); } return; }
+  if(k === 'q'){ if(!G.onFoot && G.veh) exitVehicle(); else { var v = nearestEnterable(); if(v){ if(v.kind === 'traffic' || v.kind === 'parked') takeVehicle(v); else enterVehicle(v); } else toast('NO VEHICLE IN RANGE', 'bad'); } return; }
   if(k === 'u'){ if(!G.onDuty) goOnDuty(); else goOffDuty(); return; }
 }
 
@@ -8555,6 +11338,14 @@ function onKey(k, e){
 function doAction(){
   resumeAudio();
   if(G.dlgOpen){ return; }
+  /* inside the station */
+  if(G.interior){
+    if(G.intJail){ bookPrisoner(); return; }
+    if(G.intGarage){ openMenu('garage'); return; }
+    if(G.intLocker){ openMenu('officer'); return; }
+    if(G.intArmory){ openMenu('equip'); return; }
+    return;
+  }
   /* on scene of a call */
   if(G.onCall && CallSys.active && CallSys.active.arrived){ CallSys.sceneMenu(); return; }
   /* traffic stop contact */
@@ -8564,15 +11355,19 @@ function doAction(){
     toast('MOVE UP TO THE VEHICLE', 'bad');
     return;
   }
-  /* initiate a stop */
+  /* In the unit, ACT is police work -- never the door. Q (or the dedicated
+     EXIT button) is the only thing that puts you on the pavement, which is
+     what was making ACT feel like an eject button. */
   if(!G.onFoot && G.veh){
     var tgt = nearestStoppable();
     if(tgt){ initiateStop(tgt); return; }
+    if(CallSys.pending){ CallSys.accept(); return; }
+    if(G.onCall && CallSys.active){ toast('KEEP ROLLING TO THE CALL', ''); return; }
+    toast('NOTHING TO ACT ON \u2014 Q TO STEP OUT', '');
+    return;
   }
-  /* enter / exit */
-  if(!G.onFoot && G.veh){ exitVehicle(); return; }
   var nv = nearestEnterable();
-  if(nv){ enterVehicle(nv); return; }
+  if(nv){ if(nv.kind === 'traffic' || nv.kind === 'parked') takeVehicle(nv); else enterVehicle(nv); return; }
   /* on foot ped contact */
   var p = nearestPedTarget();
   if(p){ contactPedOnFoot(p); return; }
@@ -8689,31 +11484,64 @@ function controlFoot(dt){
   if(K['a'] || K['arrowleft']) mx -= 1;
   if(K['d'] || K['arrowright']) mx += 1;
   if(TOUCH.stick.on){ mx += TOUCH.stick.x; mz -= TOUCH.stick.y; }
-  var run = (K['shift'] || TOUCH.gas) ? 2.15 : 1;
   var mag = Math.sqrt(mx * mx + mz * mz);
   if(mag > 1){ mx /= mag; mz /= mag; mag = 1; }
-  /* G.camYaw is the authority for where the camera points. The body turns to
-     follow it. Deriving camYaw from playerH (as this used to) made the two
-     chase each other and the officer walked in circles forever. */
-  if(mag > .05){
+
+  /* San Andreas locomotion: the stick picks a world direction relative to the
+     camera, the body turns toward it at a fixed rate rather than snapping, and
+     speed ramps in and out instead of switching on. Sprint only engages once
+     you are already facing roughly where you are going. */
+  var wantRun = (K['shift'] || TOUCH.gas);
+  var walkTop = 1.85, runTop = 4.30;
+
+  if(mag > .06){
+    /* The input reference frame is FROZEN while a direction is held.
+       Deriving it from the live camera yaw while the camera auto-aligns onto
+       the body created a loop -- body chases camera, camera chases body -- and
+       every stick direction except hard right spun on the spot. Snapshot the
+       frame when input starts, re-sync when it stops. */
+    if(!G.inputHeld){
+      G.inputHeld = true;
+      G.ctrlYaw = G.camYaw;
+    }
     var moveAng = Math.atan2(mx, mz);
-    var wa = angWrap(G.camYaw + moveAng - Math.PI / 2);
-    G.playerH = angWrap(G.playerH + angDiff(wa, G.playerH) * clamp(dt * 11, 0, 1));
-    var spd = 2.1 * run * mag;
-    G.player.spd = spd;
-    var np = { x:G.player.x + Math.cos(wa) * spd * dt, z:G.player.z + Math.sin(wa) * spd * dt };
-    resolveSolid(np, .42);
-    G.player.x = np.x; G.player.z = np.z;
+    var wa = angWrap(G.ctrlYaw + moveAng - Math.PI / 2);
+    G.moveAng = wa;
+    var off = Math.abs(angDiff(wa, G.playerH));
+    /* turn rate falls off with speed, so you arc at a run and pivot at a walk */
+    var turn = (7.5 - Math.min(G.player.spd, 4) * 0.95) * dt;
+    G.playerH = angWrap(G.playerH + clamp(angDiff(wa, G.playerH), -turn, turn));
+    /* facing badly wrong scrubs speed, like turning hard in SA */
+    var facing = clamp(1 - off / 2.0, .25, 1);
+    var top = (wantRun && off < .9 ? runTop : walkTop) * mag * facing;
+    G.player.spd = lerp(G.player.spd, top, 1 - Math.pow(.0009, dt));
   } else {
-    G.player.spd = 0;
+    /* released: the next push is measured from wherever the camera now sits */
+    G.inputHeld = false;
+    G.ctrlYaw = G.camYaw;
+    G.moveAng = G.playerH;
+    G.player.spd = lerp(G.player.spd, 0, 1 - Math.pow(.000002, dt));
+    if(G.player.spd < .05) G.player.spd = 0;
+  }
+
+  if(G.player.spd > .01){
+    var np = { x:G.player.x + Math.cos(G.playerH) * G.player.spd * dt,
+               z:G.player.z + Math.sin(G.playerH) * G.player.spd * dt };
+    if(G.interior) resolveInteriorSolids(G.interior, np, .40);
+    else resolveSolid(np, .42);
+    /* stop dead against a wall rather than grinding along at full speed */
+    var moved = dist(np.x, np.z, G.player.x, G.player.z);
+    if(moved < G.player.spd * dt * .35) G.player.spd *= .35;
+    G.player.x = np.x; G.player.z = np.z;
   }
   G.player.y = roadHeightAt(G.player.x, G.player.z);
   G.player.h = G.playerH;
   if(G.officerMesh){
     G.officerMesh.position.set(G.player.x, G.player.y, G.player.z);
     G.officerMesh.rotation.y = -G.playerH + Math.PI / 2;
-    G.walkAnim = (G.walkAnim || 0) + G.player.spd * dt * 3;
-    G.officerMesh.position.y = G.player.y + Math.abs(Math.sin(G.walkAnim)) * .045;
+    G.walkAnim = (G.walkAnim || 0) + (G.player.spd > .15 ? Math.min(G.player.spd, 2.3) * 4.4 : .9) * dt;
+    animatePerson(G.officerMesh, { spd:G.player.spd, anim:G.walkAnim, y:G.player.y,
+      hands:false, cuffed:false, down:false, fight:false }, dt);
   }
 }
 
@@ -8797,26 +11625,60 @@ function populate(dt){
 }
 
 /* ---------- prompts ---------- */
+var TOUCHY = ('ontouchstart' in window) || (window.navigator && window.navigator.maxTouchPoints > 0);
+function pk(key, touchLabel){ return '<b>' + (TOUCHY ? touchLabel : key) + '</b>'; }
+/* The off-duty banner used to sit in the middle of the screen forever --
+   that was the "random popup always covering". Idle hints now show for a
+   few seconds when their situation begins, then get out of the way.
+   Action prompts (a stop, a call) stay up because you need them. */
 function updatePrompts(){
-  if(G.dlgOpen || G.mdtOpen || G.menuOpen){ setPrompt(''); return; }
+  if(G.dlgOpen || G.mdtOpen || G.menuOpen || G.paused){ setPrompt(''); return; }
+
+  var key = null, html = null, sticky = false;
+  if(G.interior){
+    if(G.intJail){
+      key='jail';
+      html = G.inCustody ? pk('E','ACT') + ' book ' + esc(G.inCustody.last) + ' into holding'
+                         : 'holding cells &mdash; bring a prisoner here';
+      sticky = true;
+    }
+    else if(G.intGarage){ key='garage'; html = pk('E','ACT') + ' motor pool &mdash; repair, refit, livery'; sticky = true; }
+    else if(G.intLocker){ key='locker'; html = pk('E','ACT') + ' change uniform &amp; appearance'; sticky = true; }
+    else if(G.intArmory){ key='armory'; html = pk('E','ACT') + ' draw equipment &amp; weapons'; sticky = true; }
+    else { key='inside'; html = 'walk to the red mat to leave'; }
+    if(key !== G.promptKey){ G.promptKey = key; G.promptT = 0; }
+    G.promptT = (G.promptT || 0) + .35;
+    if(!sticky && G.promptT > 6){ setPrompt(''); return; }
+    setPrompt(html); return;
+  }
   if(!G.onDuty){
-    setPrompt('<b>U</b> report for duty &middot; <b>TAB</b> menu');
-    return;
-  }
-  if(G.onCall && CallSys.active && CallSys.active.arrived){ setPrompt('<b>E</b> work the call'); return; }
-  if(G.stopVeh && G.stopVeh.pulled){ setPrompt('<b>E</b> approach the driver'); return; }
-  if(!G.onFoot && G.veh){
+    key = 'offduty'; html = pk('U', 'DUTY') + ' report for duty';
+  } else if(G.onCall && CallSys.active && CallSys.active.arrived){
+    key = 'scene'; html = pk('E', 'ACT') + ' work the call'; sticky = true;
+  } else if(G.stopVeh && G.stopVeh.pulled){
+    key = 'stop'; html = pk('E', 'ACT') + ' approach the driver'; sticky = true;
+  } else if(!G.onFoot && G.veh){
     var t = nearestStoppable();
-    if(t) setPrompt('<b>E</b> initiate a traffic stop');
-    else if(CallSys.pending) setPrompt('<b>T</b> accept call &middot; <b>Y</b> decline');
-    else setPrompt('<b>Q</b> exit unit &middot; <b>L</b> lights &middot; <b>O</b> siren');
-    return;
+    if(t){ key = 'canstop'; html = pk('E', 'ACT') + ' initiate a traffic stop'; sticky = true; }
+    else if(CallSys.pending){ key = 'call'; html = pk('T', 'ACT') + ' accept call' + (TOUCHY ? '' : ' &middot; <b>Y</b> decline'); sticky = true; }
+    else { key = 'drive'; html = TOUCHY ? null : '<b>Q</b> exit unit &middot; <b>L</b> lights &middot; <b>O</b> siren'; }
+  } else {
+    var v = nearestEnterable();
+    if(v){
+      var takeable = (v.kind === 'traffic' || v.kind === 'parked');
+      key = takeable ? 'steal' : 'enter';
+      html = pk('Q', 'ACT') + (takeable ? (v.kind === 'parked' ? ' take parked vehicle' : ' commandeer vehicle')
+                                        : ' enter vehicle');
+    } else {
+      var p = nearestPedTarget();
+      if(p){ key = 'ped'; html = pk('E', 'ACT') + ' contact ' + esc(p.name); }
+    }
   }
-  var v = nearestEnterable();
-  if(v){ setPrompt('<b>Q</b> enter vehicle'); return; }
-  var p = nearestPedTarget();
-  if(p){ setPrompt('<b>E</b> contact ' + esc(p.name)); return; }
-  setPrompt('');
+  if(!html){ setPrompt(''); G.promptKey = null; return; }
+  if(key !== G.promptKey){ G.promptKey = key; G.promptT = 0; }
+  G.promptT = (G.promptT || 0) + .35;         /* called every .35s from the loop */
+  if(!sticky && G.promptT > 6){ setPrompt(''); return; }
+  setPrompt(html);
 }
 
 /* ---------- main loop ---------- */
@@ -8842,7 +11704,10 @@ function tick(ts){
 
   /* weather */
   G.wxTimer -= dt;
-  if(G.wxTimer <= 0) setWeather(pick(WEATHERS));
+  if(G.wxTimer <= 0) setWeather(rollWeather(G.weather));
+  /* ease temperature and the visual blend so transitions are not instant */
+  if(G.tempTarget !== undefined) G.temp = lerp(G.temp, G.tempTarget, 1 - Math.pow(.35, dt));
+  G.wxBlend = Math.min(1, (G.wxBlend || 0) + dt * .25);
 
   updateSky(dt);
   updateRain(dt);
@@ -8891,6 +11756,13 @@ function tick(ts){
 
   /* police systems */
   updateWeapons(dt);
+  if(Pursuit.active && !G.onFoot && G.veh) tryPIT();
+  updateBackup(dt);
+  updateAir(dt);
+  updateSpins(dt);
+  updateParked(dt);
+  updatePedVehicle(dt);
+  updateInterior(dt);
   updateSignals(dt);
   Radar.update(dt);
   ALPR.update(dt);
@@ -8904,7 +11776,9 @@ function tick(ts){
   G.chunkT = (G.chunkT || 0) + dt;
   if(G.chunkT > .35){
     G.chunkT = 0;
-    updateChunkVis(G.player.x, G.player.z, G.weather === 'fog' ? 620 : (G.drawDist || 1150));
+    var dd = G.weather === 'fog' ? 620 : (G.drawDist || 1150);
+    updateChunkVis(G.player.x, G.player.z, dd);
+    updateSignVis(G.player.x, G.player.z, Math.min(340, dd));
     populate(dt);
     updatePrompts();
     G.pruneT = (G.pruneT || 0) + 1;
@@ -8924,12 +11798,14 @@ function tick(ts){
   if(fb) fb.className = 'tbtn fire' + (G.weapon && G.weapon !== 'none' ? ' show' : '');
   var db = $('btnDuty');
   if(db) db.className = 'tsm' + (G.onDuty ? ' on' : '');
+  var eb = $('btnExit');
+  if(eb) eb.textContent = G.interior ? 'LEAVE' : (G.onFoot ? 'ENTER' : 'EXIT');
 
   /* hud */
   hudT += dt;
   if(hudT > .1){ hudT = 0; updateHUDFast(); }
   mmT += dt;
-  if(mmT > .12){ mmT = 0; drawMinimap(); }
+  if(mmT > .10){ mmT = 0; drawMinimap(); updateStreetBar(); }
 
   /* wanted / pursuit banner */
   var wEl = $('wanted');
@@ -8971,7 +11847,7 @@ function boot(){
     ['Raising Cypress Falls', function(){ fillDistricts(); }],
     ['Placing public buildings', function(){ placeLandmarks(); }],
     ['Starting the render engine', function(){ initEngine(); }],
-    ['Baking the world', function(){ bakeChunks(scene); buildWater(scene); }],
+    ['Baking the world', function(){ bakeChunks(scene); buildWater(scene); buildSigns(scene); buildInteriors(scene); }],
     ['Issuing your equipment', function(){
         rebuildOfficer();
         setWeather('clear');
@@ -9051,6 +11927,10 @@ G.paused = false; G.pauseOpen = false; G.mainOpen = false; G.mmTab = 'home'; G.p
 G.shakeMul = 1; G.drawDist = 1150; G.trafficMul = 1; G.pedMul = 1;
 G.forceLog = [];
 G.fullscreen = false; G.cssFull = false;
+G.lookHold = 0; G.camLook = undefined;
+G.parked = [];
+G.ctrlYaw = 0; G.inputHeld = false;
+G.backup = []; G.air = null; G.pitCount = 0;
 
 boot();
 
