@@ -693,6 +693,126 @@ body.menuopen #dispatch,body.menuopen #prompt{display:none !important;}
 /* while loading or in a menu, only the menu is visible */
 body.menuopen #hud > *:not(#toast){display:none !important;}
 body.menuopen #btnPause{display:none !important;}
+
+/* ==========================================================
+   EDGE-TIGHT HUD
+   Panels sat a comfortable margin in from each edge, which ate
+   the middle of a phone screen. Everything is now pinned hard
+   to its corner, and the callout is a ticker across the top
+   rather than a card floating over the view.
+   ========================================================== */
+#unitBox{top:calc(4px + var(--sat)) !important;left:calc(4px + var(--sal)) !important;
+  width:186px !important;}
+#speedo{top:calc(72px + var(--sat)) !important;left:calc(4px + var(--sal)) !important;
+  width:186px !important;}
+#dispatch{top:calc(148px + var(--sat)) !important;left:calc(4px + var(--sal)) !important;
+  width:186px !important;max-width:186px !important;}
+#compass{left:calc(4px + var(--sal)) !important;width:186px !important;
+  bottom:calc(154px + var(--sab)) !important;}
+#minimapWrap{left:calc(4px + var(--sal)) !important;
+  bottom:calc(4px + var(--sab)) !important;width:186px !important;height:142px !important;}
+
+/* top-right clock must not sit under the button column */
+#topRight{top:calc(4px + var(--sat)) !important;right:calc(4px + var(--sar)) !important;z-index:18;}
+#rowTop{top:calc(62px + var(--sat)) !important;right:calc(4px + var(--sar)) !important;}
+#rowLeft{top:calc(62px + var(--sat)) !important;right:calc(80px + var(--sar)) !important;}
+#btnGas{right:calc(6px + var(--sar)) !important;bottom:calc(6px + var(--sab)) !important;}
+#btnBrake{right:calc(112px + var(--sar)) !important;bottom:calc(8px + var(--sab)) !important;}
+#btnAct{right:calc(90px + var(--sar)) !important;bottom:calc(106px + var(--sab)) !important;}
+#btnPause{top:calc(4px + var(--sat)) !important;left:calc(196px + var(--sal)) !important;}
+
+/* --- callout ticker --- */
+#objective{
+  position:absolute !important; top:calc(4px + var(--sat)) !important; bottom:auto !important;
+  left:50% !important; transform:translateX(-50%) !important;
+  width:min(520px, 42vw) !important; max-width:none !important;
+  padding:5px 12px !important; border-radius:8px !important;
+  background:rgba(14,18,24,.90) !important; border:1px solid rgba(255,255,255,.14) !important;
+  border-left:3px solid var(--accent, #f0c419) !important;
+  /* NOT display:flex !important -- that overrode the display:none used to
+     hide the bar, so an empty ASSIGNMENT ticker sat on screen permanently.
+     Layout comes from a class the JS toggles instead. */
+  align-items:baseline; gap:10px;
+  white-space:nowrap !important; overflow:hidden !important; z-index:15;
+}
+#objective[style*="flex"]{display:flex !important;}
+#objective #objT{font-size:11px !important;letter-spacing:.12em !important;
+  color:var(--accent,#f0c419) !important;flex:0 0 auto;}
+#objective #objD{font-size:11px !important;opacity:.86;flex:1 1 auto;
+  overflow:hidden;text-overflow:ellipsis;}
+#objective #objDist{font-size:11px !important;opacity:.7;flex:0 0 auto;}
+@media (orientation:portrait){
+  #objective{width:78vw !important;}
+  #unitBox,#speedo,#dispatch,#compass,#minimapWrap{width:162px !important;}
+}
+
+/* ============ PORTRAIT ============ */
+@media (orientation:portrait){
+  #objective{top:calc(46px + var(--sat)) !important;width:92vw !important;
+    font-size:10px !important;padding:4px 9px !important;}
+  #unitBox{top:calc(4px + var(--sat)) !important;width:150px !important;
+    padding:5px 8px !important;font-size:10px !important;}
+  #speedo{top:calc(66px + var(--sat)) !important;width:150px !important;
+    padding:4px 8px !important;}
+  #speedo .n{font-size:19px !important;}
+  #dispatch{display:none !important;}
+  #topRight{top:calc(4px + var(--sat)) !important;right:calc(4px + var(--sar)) !important;
+    font-size:10px !important;padding:5px 8px !important;}
+  /* single column of buttons down the right, clear of the clock */
+  #rowTop{top:calc(76px + var(--sat)) !important;right:calc(4px + var(--sar)) !important;
+    gap:5px !important;}
+  #rowLeft{top:calc(76px + var(--sat)) !important;right:calc(72px + var(--sar)) !important;
+    gap:5px !important;max-width:64px !important;}
+  .tsm{min-width:62px !important;padding:6px 7px !important;font-size:9px !important;}
+  #compass{bottom:calc(126px + var(--sab)) !important;width:150px !important;height:20px !important;
+    font-size:9px !important;}
+  #minimapWrap{width:150px !important;height:114px !important;
+    bottom:calc(4px + var(--sab)) !important;}
+  #btnGas{width:76px !important;height:76px !important;
+    right:calc(6px + var(--sar)) !important;bottom:calc(6px + var(--sab)) !important;}
+  #btnBrake{width:66px !important;height:66px !important;
+    right:calc(88px + var(--sar)) !important;bottom:calc(8px + var(--sab)) !important;}
+  #btnAct{width:70px !important;height:70px !important;
+    right:calc(14px + var(--sar)) !important;bottom:calc(90px + var(--sab)) !important;}
+  #btnPause{left:auto !important;right:calc(4px + var(--sar)) !important;
+    top:calc(46px + var(--sat)) !important;}
+}
+
+/* ==========================================================
+   LOCKER MIRROR
+   With the officer menu open at the lockers the panel slides to
+   one side so the character stays in view, and the world keeps
+   rendering behind it -- so a change of kit is visible as you
+   make it, not after you close the menu.
+   ========================================================== */
+body.mirror #menu{
+  left:auto !important; right:0 !important;
+  width:min(400px, 46vw) !important; max-width:46vw !important;
+  border-radius:12px 0 0 12px !important;
+  background:rgba(10,14,20,.93) !important;
+}
+body.mirror #menuWrap{background:transparent !important;}
+body.mirror #menuScrim{background:transparent !important;pointer-events:none !important;}
+#mirrorHint{position:absolute;left:6%;top:12%;z-index:60;display:none;
+  font:600 11px ui-monospace,Menlo,monospace;letter-spacing:.14em;
+  color:#e8eef6;text-shadow:0 2px 6px #000;opacity:.8;}
+body.mirror #mirrorHint{display:block;}
+
+/* the pause and menu overlays must sit above every HUD panel */
+body.paused #minimapWrap, body.paused #compass, body.paused #speedo,
+body.paused #unitBox, body.paused #dispatch, body.paused #topRight,
+body.paused #touch, body.paused #rowTop, body.paused #rowLeft,
+body.paused #objective, body.paused #btnPause, body.paused #prompt{
+  display:none !important;
+}
+#pause, #pauseWrap, #menu, #menuWrap, #mainmenu{z-index:200 !important;}
+/* on foot the speedometer is meaningless -- the compass carries the heading */
+body.onfoot #speedo{display:none !important;}
+body.onfoot #compass{top:calc(72px + var(--sat)) !important;bottom:auto !important;}
+
+#btnRun{display:none;}
+body.onfoot #btnRun{display:flex;}
+body.onfoot #btnGas, body.onfoot #btnBrake{display:none !important;}
 </style>
 </head>
 <body>
@@ -775,7 +895,9 @@ body.menuopen #btnPause{display:none !important;}
     <div class="tsm" id="btnMap">MAP</div>
     <div class="tsm" id="btnWpn">WPN</div>
     <div class="tsm" id="btnCam">CAM</div>
+    <div class="tsm" id="btnRun">RUN</div>
     <div class="tsm" id="btnExit">EXIT</div>
+    <div id="mirrorHint">LOCKER ROOM MIRROR &mdash; CHANGES APPLY LIVE</div>
     <div id="errBar"></div>
     <div class="tsm" id="btnPause">&#9208;</div>
   </div>
@@ -1410,8 +1532,8 @@ function buildWaterData(){
     pts.push([x, z]);
   }
   WATERS.push({ type:'river', pts:pts, w:52, name:'Bayard River' });
-  WATERS.push({ type:'lake', cx:1880, cz:-1330, rx:430, rz:290, name:'Lake Cypress' });
-  WATERS.push({ type:'lake', cx:2000, cz:1250, rx:400, rz:330, name:'Twin Bluff Reservoir' });
+  WATERS.push({ type:'lake', cx:1880, cz:-1330, rx:430, rz:290, deep:true, name:'Lake Cypress' });
+  WATERS.push({ type:'lake', cx:2000, cz:1250, rx:400, rz:330, deep:true, name:'Twin Bluff Reservoir' });
   WATERS.push({ type:'lake', cx:-1980, cz:1180, rx:180, rz:140, name:'Sandy Bluff Tank' });
 }
 function inWater(x, z){
@@ -2202,19 +2324,48 @@ function signalMastWidth(n){
   for(k = 0; k < n.e.length; k++) mw = Math.max(mw, EDGES[n.e[k]].w);
   return mw;
 }
-function signalHeadPos(n, idx){
-  var mw = signalMastWidth(n);
-  var a = idx / 4 * TAU + Math.PI / 4;
-  var px = n.x + Math.cos(a) * (mw / 2 + 2.6);
-  var pz = n.z + Math.sin(a) * (mw / 2 + 2.6);
-  var ax = Math.cos(a + Math.PI), az = Math.sin(a + Math.PI);
-  return {
-    poleX:px, poleZ:pz,
-    x:px + ax * 4.6, y:(n.y || 0) + 5.9, z:pz + az * 4.6,
-    face:Math.atan2(az, ax) + Math.PI
-  };
+/* The four heads were pinned to 45/135/225/315 degrees regardless of which
+   way the roads actually ran, so at a normal crossroads every signal hung
+   diagonally across the corner and you could not read your own light from
+   your lane. Each head now belongs to a real approach edge: the mast stands
+   on the right-hand kerb of that approach and the head faces back down it,
+   which is where a driver on that approach is looking. */
+function signalApproaches(n){
+  var out = [], i;
+  for(i = 0; i < n.e.length && out.length < 4; i++){
+    var e = EDGES[n.e[i]];
+    var o = (NODES[e.a] === n) ? NODES[e.b] : NODES[e.a];
+    out.push({ e:e, ang:Math.atan2(o.z - n.z, o.x - n.x) });
+  }
+  return out;
 }
-/* ============================================================
+function signalHeadPos(n, idx){
+  var ap = signalApproaches(n);
+  var mw = signalMastWidth(n);
+  if(!ap.length){
+    var a0 = idx / 4 * TAU;
+    return { poleX:n.x + Math.cos(a0) * (mw / 2 + 2.6), poleZ:n.z + Math.sin(a0) * (mw / 2 + 2.6),
+             x:n.x, y:(n.y || 0) + 5.9, z:n.z, face:a0 + Math.PI, edge:null };
+  }
+  var k = ap[idx % ap.length];
+  var ea = k.ang;                       /* toward the far end of that road */
+  var w = k.e.w;
+  /* mast on the right-hand kerb as seen by a driver arriving on this leg */
+  var nx = -Math.sin(ea), nz = Math.cos(ea);
+  var back = mw / 2 + 1.6;              /* just outside the junction box */
+  var poleX = n.x + Math.cos(ea) * back + nx * (w / 2 + 1.2);
+  var poleZ = n.z + Math.sin(ea) * back + nz * (w / 2 + 1.2);
+  /* arm reaches out over the lanes of this approach */
+  var reach = Math.min(w * .55 + 1.2, 7.0);
+  return {
+    poleX:poleX, poleZ:poleZ,
+    x:poleX - nx * reach, y:(n.y || 0) + 5.9, z:poleZ - nz * reach,
+    /* face straight back down the approach, at the oncoming driver */
+    face:ea,
+    armAng:Math.atan2(-nz, -nx),
+    edge:k.e
+  };
+}/* ============================================================
    TEXAS COMMERCIAL ARCHITECTURE
    Flat-shaded low-poly forms with real signage. Signs cannot live in
    the chunk mesh (they need textures), so they are registered here and
@@ -3134,8 +3285,32 @@ function bSpeedSign(B, x, z, rot, mph){
 /* octagonal stop sign */
 function bStopSign(B, x, z, rot){
   B.cyl(x, 0, z, .075, .07, 2.3, 6, 0x9aa0a6, 3);
-  /* octagon face built as a short 8-sided disc */
-  B.cyl(x, 2.30, z, .78, .78, .10, 8, 0xa8231f, 3);
+  /* An 8-sided disc built about Y lies FLAT -- it was a tabletop on a pole.
+     A road sign is a vertical plate, so build it as a thin octagonal slab
+     and stand it up by rotating about the road-facing axis. */
+  var i;
+  var faceCol = 0xa8231f;
+  for(i = 0; i < 8; i++){
+    var a0 = (i / 8) * TAU + Math.PI / 8, a1 = ((i + 1) / 8) * TAU + Math.PI / 8;
+    var r0 = .40;
+    /* wedge of the octagon, standing in the vertical plane */
+    var p0x = Math.cos(a0) * r0, p0y = Math.sin(a0) * r0;
+    var p1x = Math.cos(a1) * r0, p1y = Math.sin(a1) * r0;
+    var px2 = Math.cos(rot + Math.PI / 2), pz2 = Math.sin(rot + Math.PI / 2);
+    var qx2 = Math.cos(rot), qz2 = Math.sin(rot);
+    function V(lx, ly, off){
+      return [ x + lx * qx2 + px2 * off, 2.30 + ly, z + lx * qz2 + pz2 * off ];
+    }
+    /* front and back faces */
+    B.tri(V(0,0,.045)[0], V(0,0,.045)[1], V(0,0,.045)[2],
+          V(p0x,p0y,.045)[0], V(p0x,p0y,.045)[1], V(p0x,p0y,.045)[2],
+          V(p1x,p1y,.045)[0], V(p1x,p1y,.045)[1], V(p1x,p1y,.045)[2], faceCol);
+    B.tri(V(0,0,-.045)[0], V(0,0,-.045)[1], V(0,0,-.045)[2],
+          V(p1x,p1y,-.045)[0], V(p1x,p1y,-.045)[1], V(p1x,p1y,-.045)[2],
+          V(p0x,p0y,-.045)[0], V(p0x,p0y,-.045)[1], V(p0x,p0y,-.045)[2], faceCol);
+    /* rim */
+    B.quad(V(p0x,p0y,.045), V(p0x,p0y,-.045), V(p1x,p1y,-.045), V(p1x,p1y,.045), shade(faceCol, .82));
+  }
   var px = Math.cos(rot + Math.PI / 2), pz = Math.sin(rot + Math.PI / 2);
   addSign(x + px * .10, 2.36, z + pz * .10, rot, 1.05, .40, 'STOP', 0xa8231f, 0xffffff, 'channel', 'road');
   addSign(x - px * .10, 2.36, z - pz * .10, rot + Math.PI, 1.05, .40, 'STOP', 0xa8231f, 0xffffff, 'channel', 'road');
@@ -3686,6 +3861,132 @@ function bStreetFurniture(B, x, z, rot, len){
     }
   }
 }
+
+/* ============================================================
+   LAKE RECREATION AREA
+   North Texas has reservoirs, not seaports. This replaces the container
+   port with what actually sits on a Texas lake: a boat ramp, a marina
+   with finger docks, a swimming beach, picnic pavilions, a fishing pier
+   and a bait shop.
+   ============================================================ */
+function bLakeShore(B, x, z, rot, name){
+  var i, j;
+  var qx = Math.cos(rot), qz = Math.sin(rot);
+  var px = Math.cos(rot + Math.PI / 2), pz = Math.sin(rot + Math.PI / 2);
+  function P(a, b){ return { x:x + a * qx + px * b, z:z + a * qz + pz * b }; }
+
+  /* --- shoreline: sand, then grass behind it --- */
+  B.plate(P(0, 26).x, .04, P(0, 26).z, 190, 74, jitCol(0x5f9642, .05), rot);
+  B.plate(P(0, -6).x, .05, P(0, -6).z, 170, 26, jitCol(0xc9b98c, .06), rot);
+
+  /* --- boat ramp: a graded apron running down into the water --- */
+  var rp = P(-58, -2);
+  B.plate(rp.x, .06, rp.z, 22, 40, jitCol(0xb9b2a4, .04), rot);
+  for(i = 0; i < 3; i++){
+    B.plate(rp.x + (i - 1) * 7 * qx, .07, rp.z + (i - 1) * 7 * qz, .18, 38, C.line, rot);
+  }
+  /* trailer parking behind the ramp */
+  var tp = P(-58, 34);
+  B.plate(tp.x, .05, tp.z, 60, 34, C.asphaltOld, rot);
+  for(i = 0; i < 8; i++){
+    B.plate(tp.x + (-26 + i * 7) * qx, .07, tp.z + (-26 + i * 7) * qz, .16, 16, C.line, rot);
+  }
+
+  /* --- marina: a main walkway with finger docks and moored boats --- */
+  var mp = P(24, -14);
+  B.box(mp.x, .42, mp.z, 62, .30, 3.2, C.wood, rot);
+  for(i = 0; i < 9; i++){
+    var fx = -28 + i * 7;
+    var fp = P(24 + fx, -22);
+    B.box(fp.x, .42, fp.z, 1.8, .28, 14, C.wood, rot);
+    /* piles */
+    B.cyl(fp.x + px * 7, 0, fp.z + pz * 7, .17, .16, 1.5, 6, 0x6b5a44, 3);
+    /* a boat on most fingers */
+    if(wrand() < .7){
+      var bp = P(24 + fx + 2.6, -22 + wrng(-3, 3));
+      var hull = jitCol(wpick([0xe8e8e4, 0xdfe3e6, 0x2f5d7a, 0xb03a2e]), .07);
+      B.box(bp.x, .55, bp.z, 1.9, .55, 5.2, hull, rot);
+      B.box(bp.x, .92, bp.z - 0.6, 1.5, .40, 2.2, shade(hull, 1.06), rot);
+      B.box(bp.x, 1.20, bp.z - 0.6, .12, .55, .12, 0x8a9096, rot);
+    }
+  }
+  /* --- fishing pier reaching further out --- */
+  var pp = P(-6, -34);
+  B.box(pp.x, .48, pp.z, 3.0, .30, 48, C.wood, rot);
+  for(i = 0; i < 9; i++){
+    var pz2 = P(-6, -34 - 22 + i * 5.5);
+    B.cyl(pz2.x + 1.7 * qx, 0, pz2.z + 1.7 * qz, .16, .15, 1.5, 6, 0x6b5a44, 3);
+    B.cyl(pz2.x - 1.7 * qx, 0, pz2.z - 1.7 * qz, .16, .15, 1.5, 6, 0x6b5a44, 3);
+    /* rail */
+    B.box(pz2.x + 1.5 * qx, .95, pz2.z + 1.5 * qz, .09, .70, 5.4, C.wood, rot);
+    B.box(pz2.x - 1.5 * qx, .95, pz2.z - 1.5 * qz, .09, .70, 5.4, C.wood, rot);
+  }
+  /* covered end of the pier */
+  var pe = P(-6, -58);
+  B.box(pe.x, 2.6, pe.z, 6.5, .26, 6.5, jitCol(0x8a6d3b, .05), rot);
+  for(i = 0; i < 4; i++){
+    B.box(pe.x + (i % 2 ? 2.8 : -2.8) * qx + px * (i > 1 ? 2.8 : -2.8), 1.3,
+          pe.z + (i % 2 ? 2.8 : -2.8) * qz + pz * (i > 1 ? 2.8 : -2.8), .18, 2.6, .18, 0x6d5f45, rot);
+  }
+
+  /* --- bait shop / marina office --- */
+  var sp = P(50, 22);
+  var wall = jitCol(0xd8ccb2, .05);
+  B.box(sp.x, 2.4, sp.z, 16, 4.8, 11, wall, rot);
+  B.roof(sp.x, 4.8, sp.z, 17, 12, 2.2, jitCol(0x5a4a3c, .06), rot, 1);
+  B.box(sp.x - px * 5.7, 1.9, sp.z - pz * 5.7, 9, 3.0, .12, C.glass, rot);
+  /* porch */
+  B.box(sp.x - px * 7.6, 3.0, sp.z - pz * 7.6, 16, .22, 4.0, jitCol(0x8a6d3b, .05), rot);
+  for(i = 0; i < 3; i++){
+    B.box(sp.x + (i - 1) * 6.5 * qx - px * 9.4, 1.5, sp.z + (i - 1) * 6.5 * qz - pz * 9.4,
+          .18, 3.0, .18, 0x6d5f45, rot);
+  }
+  addSign(sp.x - px * 5.9, 4.1, sp.z - pz * 5.9, rot + Math.PI, 9, 1.1,
+          name || 'TWIN BLUFF MARINA', wall, 0x3a3020, 'flat');
+  addSolid(sp.x, sp.z, 8, 5.5, 5, rot);
+
+  /* --- day-use area: pavilions, tables, grills, playground --- */
+  for(i = 0; i < 3; i++){
+    var vp = P(-20 + i * 34, 30);
+    B.box(vp.x, 2.6, vp.z, 9, .28, 7, jitCol(0x8a6d3b, .06), rot);
+    for(j = 0; j < 4; j++){
+      B.box(vp.x + (j % 2 ? 4.0 : -4.0) * qx + px * (j > 1 ? 3.0 : -3.0), 1.3,
+            vp.z + (j % 2 ? 4.0 : -4.0) * qz + pz * (j > 1 ? 3.0 : -3.0), .18, 2.6, .18, 0x6d5f45, rot);
+    }
+    /* table and grill */
+    B.box(vp.x, .74, vp.z, 1.4, .10, 2.2, 0x9c7f5a, rot);
+    B.box(vp.x, .42, vp.z + .9, 1.4, .09, .5, 0x9c7f5a, rot);
+    B.box(vp.x, .42, vp.z - .9, 1.4, .09, .5, 0x9c7f5a, rot);
+    B.cyl(vp.x + 5.5 * qx, 0, vp.z + 5.5 * qz, .10, .09, .95, 6, 0x4a4a48, 3);
+    B.box(vp.x + 5.5 * qx, 1.05, vp.z + 5.5 * qz, .60, .18, .45, 0x2a2e34, rot);
+    addSolid(vp.x, vp.z, 4.5, 3.5, 3, rot);
+  }
+
+  /* --- swimming beach: buoy line and a lifeguard stand --- */
+  for(i = 0; i < 10; i++){
+    var by = P(-34 + i * 5, -20);
+    B.cyl(by.x, .18, by.z, .26, .26, .34, 6, 0xd8541e, 3);
+  }
+  var lg = P(-34, -12);
+  B.box(lg.x, 1.9, lg.z, 1.6, .16, 1.6, 0xe8e4d8, rot);
+  B.box(lg.x, 2.6, lg.z, 1.7, 1.2, .12, 0xe8e4d8, rot);
+  for(i = 0; i < 4; i++){
+    B.box(lg.x + (i % 2 ? .7 : -.7) * qx + px * (i > 1 ? .7 : -.7), .95,
+          lg.z + (i % 2 ? .7 : -.7) * qz + pz * (i > 1 ? .7 : -.7), .12, 1.9, .12, 0x8d7458, rot);
+  }
+
+  /* --- tree cover behind the day-use area --- */
+  for(i = 0; i < 34; i++){
+    var tt = P(wrng(-90, 90), wrng(16, 58));
+    bTree(B, tt.x, tt.z, wrng(.9, 1.5));
+  }
+  /* entrance sign */
+  var es = P(-88, 40);
+  B.box(es.x, 1.2, es.z, .24, 2.4, .24, 0x6d5f45, rot);
+  B.box(es.x, 2.5, es.z, 6.0, 1.1, .18, jitCol(0x3f6b48, .05), rot);
+  addSign(es.x + px * .12, 2.5, es.z + pz * .12, rot, 5.2, .85,
+          name || 'TWIN BLUFF MARINA', 0x3f6b48, 0xffffff, 'flat');
+}
 /* ============================================================
    CHUNK ASSEMBLY
    ============================================================ */
@@ -3711,6 +4012,21 @@ function initChunks(){
 }
 
 /* ---------- terrain base ---------- */
+/* how far below grade the lake bed sits at this point, 0 outside a lake */
+function lakeDepthAt(x, z){
+  var i, best = 0;
+  for(i = 0; i < WATERS.length; i++){
+    var w = WATERS[i];
+    if(w.type !== 'lake' || !w.deep) continue;
+    var dx = (x - w.cx) / w.rx, dz = (z - w.cz) / w.rz;
+    var q = dx * dx + dz * dz;
+    if(q >= 1) continue;
+    /* dished profile: deepest in the middle, shelving to the bank */
+    var d = (1 - Math.sqrt(q)) * 7.5;
+    if(d > best) best = d;
+  }
+  return best;
+}
 function terrainColor(x, z){
   var d = districtAt(x, z);
   if(inWater(x, z)) return C.water;
@@ -3735,7 +4051,14 @@ function buildTerrain(){
     var ox = -WORLD + gx * CHUNK, oz = -WORLD + gz * CHUNK;
     for(i = 0; i < N; i++) for(j = 0; j < N; j++){
       var x = ox + (i + .5) * S, z = oz + (j + .5) * S;
-      B.plate(x, 0, z, S + .3, S + .3, terrainColor(x, z), 0);
+      /* deep lakes get a dished bed below the surface, so the water has
+         something under it instead of sitting on flat ground */
+      var lakeD = lakeDepthAt(x, z);
+      if(lakeD > 0){
+        B.plate(x, -lakeD, z, S + .3, S + .3, jitCol(0x4a4436, .10), 0);
+      } else {
+        B.plate(x, 0, z, S + .3, S + .3, terrainColor(x, z), 0);
+      }
     }
   }
 }
@@ -3994,20 +4317,19 @@ function buildRoads(){
     if(n.y < 2) B2.plate(n.x, .06, n.z, mw + 1, mw + 1, RT[EDGES[n.e[0]].type].col, 0);
     if(n.light){
       var d;
-      for(d = 0; d < 4; d++){
+      var nap = signalApproaches(n).length || 4;
+      for(d = 0; d < nap; d++){
         var hp = signalHeadPos(n, d);
-        var a2 = d / 4 * TAU + Math.PI / 4;
-        var ax = Math.cos(a2 + Math.PI), az = Math.sin(a2 + Math.PI);
-        B2.cyl(hp.poleX, 0, hp.poleZ, .26, .2, 6.6, 6, C.pole, 2);
-        /* The arm has to be a long thin box rotated along its own direction.
-           Feeding abs(ax) and abs(az) as separate extents made a 3.9m square
-           slab whenever the arm ran diagonally -- which is all of them. */
-        var armA = Math.atan2(az, ax);
-        B2.box(hp.poleX + ax * 2.4, 6.62, hp.poleZ + az * 2.4, 5.0, .16, .16, C.pole, armA);
-        /* short vertical drop from the arm to the head */
+        /* upright on the kerb */
+        B2.cyl(hp.poleX, 0, hp.poleZ, .26, .2, 6.6, 6, C.pole, 3);
+        /* mast arm reaching out over the approach lanes */
+        var armL = dist(hp.poleX, hp.poleZ, hp.x, hp.z);
+        B2.box((hp.poleX + hp.x) / 2, 6.62, (hp.poleZ + hp.z) / 2,
+               armL, .16, .16, C.pole, hp.armAng);
+        /* drop rod down to the head */
         B2.box(hp.x, hp.y + 1.25, hp.z, .12, .70, .12, C.pole, 0);
-        /* housing only -- the three lamps are live objects placed at hp */
-        B2.box(hp.x, hp.y, hp.z, .70, 1.90, .70, 0x22262c, 0);
+        /* housing, square to the approach so the lenses face the driver */
+        B2.box(hp.x, hp.y, hp.z, .70, 1.90, .70, 0x22262c, hp.face);
       }
     } else if(n.stop){
       var oa = Math.atan2(NODES[EDGES[n.e[0]].b].z - NODES[EDGES[n.e[0]].a].z, NODES[EDGES[n.e[0]].b].x - NODES[EDGES[n.e[0]].a].x);
@@ -4323,7 +4645,10 @@ function placeLandmarks(){
 
   /* the square used to sit dead on the origin, which is a road junction --
      traffic drove straight into the steps */
-  var ccl = findClear(0, 0, 160, 160, 0, 14);
+  /* the square is 150m of grounds plus parking; clearing only 160x160 left
+     it overlapping the neighbouring block, so it read as clipped into a
+     building. Clear the whole parcel including its apron. */
+  var ccl = findClear(0, 0, 205, 205, 0, 16);
   bCourthouse(CB(ccl.x, ccl.z), ccl.x, ccl.z);
   LM('Bayard County Courthouse', ccl.x, ccl.z, 'court', true);
 
@@ -4547,8 +4872,11 @@ function placeLandmarks(){
   bAirport(CB(0, -2000), 0, -2000);
   LM('Cypress Falls Municipal Airport', -92, -2000, 'airport', false);
 
-  bPort(CB(2050, 1200), 2050, 1200);
-  LM('Port of Bayard', 2050, 1200, 'port', false);
+  /* There is no seaport in North Texas. Twin Bluff Reservoir gets what a
+     Texas lake actually has: a ramp, a marina, a beach and a day-use area. */
+  bLakeShore(CB(2020, 1540), 2020, 1540, Math.PI, 'TWIN BLUFF MARINA');
+  LM('Twin Bluff Marina', 2020, 1540, 'marina', true);
+  LM('Twin Bluff Lake Park', 2020, 1600, 'park', true);
 
   var WT = [[430, -820], [-1420, 980], [1660, -300]];
   for(i = 0; i < WT.length; i++){
@@ -4681,6 +5009,44 @@ function updateChunkVis(px, pz, viewDist){
     cx = chunkOrigin[i].x; cz = chunkOrigin[i].z;
     chunkMesh[i].visible = dist2(px, pz, cx, cz) < sq(viewDist + CHUNK);
   }
+}
+
+
+/* ============================================================
+   FINAL CLEARANCE SWEEP
+   A handful of placements still clear a smaller box than the building
+   actually occupies, so a corner ends up over a carriageway. The
+   geometry is already baked by this point and cannot be moved, but the
+   real harm is the collision solid: traffic piles into it and the whole
+   corridor gridlocks. Any solid genuinely sitting on a roadway has its
+   collision box trimmed back to the kerb line, so cars flow past even
+   where a corner overhangs.
+   ============================================================ */
+function sweepRoadSolids(){
+  var i, trimmed = 0, dropped = 0;
+  for(i = SOLIDS.length - 1; i >= 0; i--){
+    var s = SOLIDS[i];
+    if(s.hw < 3 || s.hd < 3) continue;          /* poles and posts are fine */
+    if(roadClear(s.x, s.z, 1)) continue;        /* centre is clear */
+    /* how far can it shrink before it clears? */
+    var f, ok = false;
+    for(f = .8; f >= .35; f -= .15){
+      if(footprintClear(s.x, s.z, s.hw * 2 * f, s.hd * 2 * f, s.rot || 0, 1)){
+        s.hw *= f; s.hd *= f; ok = true; trimmed++;
+        break;
+      }
+    }
+    if(!ok){
+      /* nothing works: drop the collider entirely rather than let it
+         block a lane. The building still draws; you can drive through
+         the overhanging corner, which is far better than a permanent
+         traffic jam. */
+      SOLIDS.splice(i, 1);
+      dropped++;
+    }
+  }
+  G.solidSweep = { trimmed:trimmed, dropped:dropped };
+  return G.solidSweep;
 }
 /* ============================================================
    TEXTURES + SKY
@@ -5093,11 +5459,30 @@ function attachDoorText(grp, P, liv){
 function VP(o){ return o; }
 var PROFILES = {
   /* --- full-size RWD sedan (Crown Victoria) --- */
-  cv: VP({ len:5.42, wid:1.98, wb:2.94, wr:.37, track:.86,
-    sill:.44, beltY:1.02, roofY:1.46, hoodY:1.00, deckY:1.00,
-    body:[[-2.71,.34],[-2.71,.86],[-2.62,1.02],[-1.30,1.06],[1.32,1.06],[2.58,1.00],[2.71,.84],[2.71,.34]],
-    cabin:[[-1.42,1.06],[-1.10,1.44],[.62,1.46],[1.16,1.06]],
-    nose:2.71, tail:-2.71, hoodX:1.30, deckX:-1.42, inset:.20 }),
+  /* Panther-platform proportions, measured off the real car rather than
+     guessed: 5.40m long on a 2.91m wheelbase, with a SHORT front overhang
+     (~0.92m) and a long rear deck (~1.57m). The old profile used symmetric
+     axles and a centred cabin, which is why it read as a generic three-box
+     saloon instead of a Crown Victoria. The cabin is set well back, the
+     roof is long and almost flat, and the beltline is high and straight. */
+  cv: VP({ len:5.42, wid:1.98, wb:2.93, wr:.375, track:.84,
+    axleF:1.79, axleR:-1.14,
+    /* Rendered and measured: the body side was 0.67m tall under only 0.36m
+       of glass, which reads as a slab with a cabin perched on it. The real
+       car is close to the reverse -- about 0.55m of bodyside under 0.47m of
+       glasshouse -- so the beltline drops and the roof comes up. */
+    /* Rendered again: the cabin only spanned about a fifth of the length and
+       sat behind the rear axle, and the whole car sat too low on its wheels.
+       On the real car the greenhouse covers roughly the middle THIRD -- from
+       just behind the front axle to just ahead of the rear one -- and the
+       sill clears the tyre centre. Both corrected here. */
+    sill:.52, beltY:1.06, roofY:1.62, hoodY:1.04, deckY:1.07,
+    /* flat top deck from the base of the windscreen right to the tail */
+    body:[[-2.71,.34],[-2.71,.92],[-2.66,1.06],[-1.50,1.09],[1.40,1.09],[2.62,1.04],[2.71,.88],[2.71,.34]],
+    /* windscreen base ahead of the front axle, C-pillar over the rear one:
+       a long roof spanning the middle of the car, not a small box at the back */
+    cabin:[[-1.34,1.09],[-.86,1.60],[1.02,1.62],[1.52,1.09]],
+    nose:2.71, tail:-2.71, hoodX:1.55, deckX:-1.58, inset:.19 }),
 
   /* --- mid-size FWD sedan --- */
   sedan: VP({ len:4.88, wid:1.84, wb:2.72, wr:.34, track:.80,
@@ -5277,6 +5662,40 @@ function roofDecal(B, x, y, sx, sz, col){
    between stacked lamps, a formal upright roofline, wheel-arch lips,
    chrome window surrounds, a vinyl-ish C-pillar and a full-width tail panel. */
 function detailCrownSedan(B, P, hw, paint, trim, liv){
+  /* Reference-matched details for the Crown Victoria police package:
+     A-pillar spotlights, a push bumper, steel wheels with a plain centre
+     cap, and the gold accent stripe that runs the flank. */
+  var refChrome = 0xb9bec4;
+  var i2;
+  /* pillar-mounted spotlights, both sides, angled forward */
+  if(liv !== 'civ' && P.cabin){
+    for(i2 = 0; i2 < 2; i2++){
+      var sz2 = i2 ? 1 : -1;
+      /* cabin[3] is the A-PILLAR base; cabin[0] is the C-pillar. Measuring
+         from cabin[0] put the spotlight in the middle of the roof, which is
+         the stray part sticking up near the front of the cabin. */
+      var spx = P.cabin[3][0] - .10;
+      B.box(spx, P.beltY + .16, sz2 * (hw - .06), .10, .10, .22, 0x2a2e34, 0);
+      B.cyl(spx + .10, P.beltY + .10, sz2 * (hw + .06), .105, .105, .17, 8, refChrome, 3);
+      B.cyl(spx + .19, P.beltY + .10, sz2 * (hw + .06), .085, .085, .03, 8, 0xf2ecd8, 3);
+    }
+  }
+  /* push bumper: two uprights, a crossbar and wing bars */
+  if(liv !== 'civ'){
+    B.box(P.nose + .22, P.sill + .30, 0, .09, .62, P.wid * .70, 0xe8e8e4, 0);
+    B.box(P.nose + .22, P.sill + .62, 0, .09, .09, P.wid * .74, 0xe8e8e4, 0);
+    for(i2 = 0; i2 < 2; i2++){
+      var pz3 = (i2 ? 1 : -1) * P.wid * .30;
+      B.box(P.nose + .20, P.sill + .34, pz3, .10, .74, .10, 0xe8e8e4, 0);
+      B.box(P.nose + .12, P.sill + .30, (i2 ? 1 : -1) * P.wid * .40, .26, .09, .10, 0xe8e8e4, 0);
+    }
+  }
+  /* gold accent stripe along the flank, above the moulding */
+  if(liv === 'pd' || liv === 'so'){
+    B.box(0, P.sill + .50, hw + .010, P.len * .78, .035, .015, 0xc8a24a, 0);
+    B.box(0, P.sill + .50, -(hw + .010), P.len * .78, .035, .015, 0xc8a24a, 0);
+  }
+
   var chrome = 0xb9bec4, dark = 0x14171b;
   var i;
   /* --- front: split eggcrate grille with a chrome surround --- */
@@ -5304,9 +5723,11 @@ function detailCrownSedan(B, P, hw, paint, trim, liv){
   /* --- roof and pillars: formal, upright, with chrome surrounds --- */
   if(P.cabin){
     var c0 = P.cabin[0][0], c3 = P.cabin[3][0];
-    /* drip rail along the roof edge */
-    B.box((c0 + c3) / 2, P.roofY - .02, hw - .16, Math.abs(c3 - c0) * .92, .035, .045, chrome, 0);
-    B.box((c0 + c3) / 2, P.roofY - .02, -(hw - .16), Math.abs(c3 - c0) * .92, .035, .045, chrome, 0);
+    /* Drip rail, tucked to the very edge of the roof. It used to sit .16 in
+       from the flank at full roof height, running right alongside the
+       lightbar -- which read as a second, doubled bar. */
+    B.box((c0 + c3) / 2, P.roofY - .045, hw - .055, Math.abs(c3 - c0) * .92, .028, .030, chrome, 0);
+    B.box((c0 + c3) / 2, P.roofY - .045, -(hw - .055), Math.abs(c3 - c0) * .92, .028, .030, chrome, 0);
     /* window chrome surround */
     B.box((c0 + c3) / 2, P.beltY + .015, hw - .13, Math.abs(c3 - c0) * .88, .03, .05, chrome, 0);
     B.box((c0 + c3) / 2, P.beltY + .015, -(hw - .13), Math.abs(c3 - c0) * .88, .03, .05, chrome, 0);
@@ -5319,11 +5740,12 @@ function detailCrownSedan(B, P, hw, paint, trim, liv){
   }
 
   /* --- flanks: wheel-arch lips and a body-side moulding --- */
-  var ax = P.wb / 2;
+  var axFd = (P.axleF !== undefined) ? P.axleF : P.wb / 2;
+  var axRd = (P.axleR !== undefined) ? P.axleR : -P.wb / 2;
   for(i = 0; i < 2; i++){
-    var s3 = i ? 1 : -1;
-    B.box(ax * s3, P.wr + .30, hw - .01, P.wr * 2.5, .06, .05, shade(paint, .70), 0);
-    B.box(ax * s3, P.wr + .30, -(hw - .01), P.wr * 2.5, .06, .05, shade(paint, .70), 0);
+    var axd = i ? axFd : axRd;
+    B.box(axd, P.wr + .30, hw - .01, P.wr * 2.5, .06, .05, shade(paint, .70), 0);
+    B.box(axd, P.wr + .30, -(hw - .01), P.wr * 2.5, .06, .05, shade(paint, .70), 0);
   }
   B.box(0, P.sill + .34, hw + .005, P.len * .70, .055, .02, shade(paint, .66), 0);
   B.box(0, P.sill + .34, -(hw + .005), P.len * .70, .055, .02, shade(paint, .66), 0);
@@ -5671,19 +6093,28 @@ function buildVehicle(defId, liv, tint){
      panel and only its lower half showed -- which reads as broken the
      moment the front wheels turn. Push the wheels out to just proud of
      the flank so the whole tyre is visible and steering is legible. */
-  var wheels = [], hx = P.wb / 2, hz = Math.max(P.track, P.wid / 2 - .06);
-  var wp = P.bike ? [[hx, 0], [-hx, 0]] : [[hx, hz], [hx, -hz], [-hx, hz], [-hx, -hz]];
+  var wheels = [], hz = Math.max(P.track, P.wid / 2 - .06);
+  /* real cars do not have their axles centred on the body; a long rear
+     deck and a short nose is most of what identifies this shape */
+  var axF = (P.axleF !== undefined) ? P.axleF : P.wb / 2;
+  var axR = (P.axleR !== undefined) ? P.axleR : -P.wb / 2;
+  var hx = axF;
+  var wp = P.bike ? [[axF, 0], [axR, 0]] : [[axF, hz], [axF, -hz], [axR, hz], [axR, -hz]];
   /* extra axle for the big rigs */
   if(def.body === 'semi' || def.body === 'boxtruck' || def.body === 'bus'){
-    wp.push([-hx - 1.30, hz], [-hx - 1.30, -hz]);
+    wp.push([axR - 1.30, hz], [axR - 1.30, -hz]);
   }
   /* a recessed dark arch behind each wheel gives the tyre something to sit
      in, instead of appearing to be swallowed by a solid slab */
   if(!P.bike){
     var AB = new Builder();
     for(i = 0; i < 4; i++){
-      var ax2 = (i < 2 ? hx : -hx), az2 = (i % 2 ? hz : -hz);
-      AB.box(ax2, P.wr * .92, az2 * .82, P.wr * 2.45, P.wr * 1.75, P.wid * .30, 0x14171b, 0);
+      var ax2 = (i < 2 ? axF : axR), az2 = (i % 2 ? hz : -hz);
+      /* Thin panel set INBOARD of the tyre. The previous box was wider and
+         deeper than the wheel and sat outboard of it, so it simply covered
+         the wheel -- which is why they looked like black squares that never
+         turned. */
+      AB.box(ax2, P.wr * .95, az2 * .55, P.wr * 1.9, P.wr * 1.25, .09, 0x14171b, 0);
     }
     grp.add(new THREE.Mesh(AB.geo(), vehVCMat()));
   }
@@ -5733,11 +6164,9 @@ function buildVehicle(defId, liv, tint){
         sp.cyl(P.cabin[3][0] + .04, P.beltY + .04, P.wid / 2 - .04, .07, .07, .14, 8, 0x2a2e34, true);
         grp.add(new THREE.Mesh(sp.geo(), vehVCMat()));
       }
-      /* antennas */
-      var an = new Builder();
-      an.box(P.cabin ? P.cabin[0][0] + .10 : -1, P.roofY + .28, .18, .022, .56, .022, 0x0d1014, 0);
-      an.box(P.cabin ? P.cabin[0][0] + .10 : -1, P.roofY + .22, -.22, .022, .44, .022, 0x0d1014, 0);
-      grp.add(new THREE.Mesh(an.geo(), vehVCMat()));
+      /* No roof antenna: detailCrownSedan already puts a whip on the trunk
+         lid. Having both is what left a mast poking up behind the rear
+         window. */
     }
   }
 
@@ -6118,14 +6547,23 @@ Vehicle.prototype.physics = function(dt){
   this.spd += (f - drag * .35) * dt;
   if(this.brake > 0){
     var bf = this.brake * 13 * grip;
-    if(this.spd > 0) this.spd = Math.max(this.spd - bf * dt, this.brake > .95 && this.throttle < .05 ? -4 : 0);
-    else this.spd = Math.min(this.spd + bf * dt, 0);
+    if(this.spd > 0.15){
+      /* still rolling forward: this is braking */
+      this.spd = Math.max(this.spd - bf * dt, 0);
+    } else {
+      /* Stopped or already reversing, with the brake still held: this is
+         REVERSE. The old code drove speed back toward zero here, so holding
+         the pedal cancelled the reverse it had just started and the car
+         could never actually back up. */
+      var rMax = maxS * .34;
+      this.spd = Math.max(this.spd - acc * .62 * dt, -rMax);
+    }
   }
   if(this.hand > 0){
     this.spd *= (1 - 1.6 * dt);
     this.slip = clamp(this.slip + Math.abs(this.spd) * .012 * dt * 10, 0, 1);
   }
-  this.spd = clamp(this.spd, -maxS * .35, maxS);
+  this.spd = clamp(this.spd, -maxS * .34, maxS);
 
   /* steering */
   var spdF = clamp(1 - Math.abs(this.spd) / (maxS * 1.35), .22, 1);
@@ -6363,7 +6801,17 @@ Ped.prototype.setState = function(s){ this.state = s; this.t = 0; };
 Ped.prototype.pose = function(dt){
   /* cap the stride rate: fleeing peds move at 5+ m/s and an uncapped
      phase made their legs blur comically */
-  this.anim = (this.anim || 0) + (this.spd > .15 ? Math.min(this.spd, 2.3) * 4.4 : .9) * dt;
+  /* Drive the stride from DISTANCE TRAVELLED, not from a timer. A fixed
+     rad/s meant the legs cycled at a rate unrelated to how far the body
+     actually moved, so the feet skated across the ground -- which is what
+     reads as a janky walk. One full cycle per two paces of stride length. */
+  var stride = 0.78 * (this.mesh && this.mesh.userData.rig ? this.mesh.userData.rig.S : 1);
+  if(this.spd > .15){
+    this.anim = (this.anim || 0) + (this.spd * dt / stride) * Math.PI;
+  } else {
+    /* idle sway, slow and independent of position */
+    this.anim = (this.anim || 0) + .9 * dt;
+  }
   animatePerson(this.mesh, {
     spd:this.spd, anim:this.anim, y:this.y || 0,
     down:this.down, cuffed:this.cuffed, hands:this.hands,
@@ -6375,18 +6823,19 @@ Ped.prototype.update = function(dt){
   this.t += dt;
   if(this.stunT > 0){
     this.stunT -= dt; this.down = true; this.spd = 0;
+    if(!this.rag) ragdollStart(this, this.ragH !== undefined ? this.ragH : this.h, this.ragF);
     this.mesh.position.set(this.x, this.y || 0, this.z);
-    this.mesh.rotation.y = -this.h;
-    this.pose(dt);
-    if(this.stunT <= 0) this.down = false;
+    ragdollUpdate(this, dt);
+    if(this.stunT <= 0){ this.down = false; ragdollClear(this); }
     return;
   }
+  if(this.rag) ragdollClear(this);
   this.mesh.rotation.x = 0;
   if(this.cuffed || this.down){
     this.spd = 0;
     this.mesh.position.set(this.x, this.down ? .3 : 0, this.z);
     if(this.down) this.mesh.rotation.x = -Math.PI / 2.2;
-    this.mesh.rotation.y = -this.h;
+    this.mesh.rotation.y = -this.h + Math.PI / 2;   /* model faces +Z */
     return;
   }
   var px = G.player.x, pz = G.player.z;
@@ -6656,10 +7105,10 @@ function trafficUpdate(v, dt){
      lost track of which way it is going -- put it back rather than let it
      drive into oncoming traffic. */
   var laneH = v.dir > 0 ? ea2 : ea2 + Math.PI;
-  if(Math.abs(angDiff(v.h, laneH)) > 1.75 && Math.abs(v.spd) > 1.5){
+  if(Math.abs(angDiff(v.h, laneH)) > 1.35 && Math.abs(v.spd) > 1.0){
     v.wrongT = (v.wrongT || 0) + dt;
     /* give it a moment in case it is mid-turn, then put it right */
-    if(v.wrongT > .7){
+    if(v.wrongT > .35){
       v.wrongT = 0;
       /* if it is actually facing the other way down this road, it belongs
          in the opposite lane -- flip the direction rather than spinning it */
@@ -6805,6 +7254,24 @@ function trafficAhead(v, range){
     var allowed = Math.max(0, (d - 7.5) * .9 + v2);
     if(best === null || allowed < best) best = allowed;
   }
+  /* parked cars at the kerb: they never move, so a car that does not see
+     them drives straight through. Only count one that is actually in the
+     lane ahead, not one legitimately clear at the kerb. */
+  if(G.parked){
+    for(i = 0; i < G.parked.length; i++){
+      var pk = G.parked[i];
+      var pdx = pk.x - v.x, pdz = pk.z - v.z;
+      var pdd = Math.sqrt(pdx * pdx + pdz * pdz);
+      if(pdd > range || pdd < .1) continue;
+      var pdot2 = (pdx * fx + pdz * fz) / pdd;
+      if(pdot2 < .80) continue;
+      var plat2 = Math.abs(-pdx * fz + pdz * fx);
+      if(plat2 > 2.2) continue;
+      var pa2 = Math.max(0, (pdd - 7.0) * .9);
+      if(best === null || pa2 < best) best = pa2;
+    }
+  }
+
   /* player vehicle */
   if(!G.onFoot){
     var pdx = G.player.x - v.x, pdz = G.player.z - v.z;
@@ -7248,13 +7715,17 @@ function animatePerson(mesh, st, dt){
   /* The knee only bends on the recovery half of the stride -- straight while
      the foot is planted, folded while the leg swings through. Flexing it on
      both halves is what makes a walk look like wading. */
+  /* Knees bend BACKWARD -- the heel comes up toward the seat. A negative
+     rotation about X swings the shin forward, which is how the legs ended up
+     hinging the wrong way. Elbows are the opposite (they fold forward), which
+     is why those looked right with the same sign. */
   function kneeFor(sv, cv){
     var swing = Math.max(0, -cv);                    /* leg travelling forward */
     var base = .12 + run * .30;
-    return -(base + swing * (.75 + run * .95) * lamp);
+    return (base + swing * (.75 + run * .95) * lamp);
   }
-  r.kneeL.rotation.x = moving ? kneeFor(sL, Math.cos(phase)) : -.06;
-  r.kneeR.rotation.x = moving ? kneeFor(sR, Math.cos(phase + Math.PI)) : -.06;
+  r.kneeL.rotation.x = moving ? kneeFor(sL, Math.cos(phase)) : .06;
+  r.kneeR.rotation.x = moving ? kneeFor(sR, Math.cos(phase + Math.PI)) : .06;
 
   /* pelvis dips onto the planted leg and rotates with the stride */
   r.belt.rotation.y = -sL * lamp * .16;
@@ -7277,6 +7748,31 @@ function animatePerson(mesh, st, dt){
     r.elbowL.rotation.x = -1.2 + jab * .5;
     r.elbowR.rotation.x = -1.2 - jab * .5;
     r.torso.rotation.set(.12, Math.sin(phase * 9) * .18, 0);
+  } else if(st.aim){
+    /* --- weapon stance ---
+       Both hands to the weapon, elbows in, torso bladed to the target and
+       the head tracking down the sights. A recoil kick drives back through
+       the arms and the torso, which is what sells a shot at this scale. */
+    var kick = st.recoil || 0;
+    var twoHand = st.twoHand !== false;
+    r.armR.rotation.set(-1.48 + kick * .55, 0, .16);
+    r.elbowR.rotation.x = -.32 - kick * .40;
+    if(twoHand){
+      r.armL.rotation.set(-1.40 + kick * .40, 0, -.44);
+      r.elbowL.rotation.x = -.95 - kick * .30;
+    } else {
+      r.armL.rotation.set(-.25, 0, -.12);
+      r.elbowL.rotation.x = -.55;
+    }
+    /* bladed stance: lead shoulder toward the target */
+    r.torso.rotation.set(.06 + kick * .12, -.34, 0);
+    r.belt.rotation.y = -.16;
+    r.neck.rotation.set(-.04 + kick * .10, .28, 0);
+    /* weight settles onto the rear leg */
+    if(!moving){
+      r.legL.rotation.x = .14; r.legR.rotation.x = -.16;
+      r.kneeL.rotation.x = .22; r.kneeR.rotation.x = .14;
+    }
   } else {
     /* arms swing opposite the legs, elbows carried bent and bending more
        through the forward swing; a runner tucks them right up */
@@ -7301,6 +7797,85 @@ function animatePerson(mesh, st, dt){
   r.belt.position.y = r.hipY + bob * S;
   r.neck.position.y = (r.neckY || (r.hipY + .62 * S)) + bob * S;
   mesh.position.y = (st.y || 0);
+}
+
+/* ============================================================
+   RAGDOLL
+   A struck or downed person used to snap to a single flat pose and pop
+   back up. This drops them properly: the body tips over the direction it
+   was hit, limbs settle, and they stay on the ground for a long while.
+   Not a physics solver -- a damped fall with per-limb settling, which at
+   this scale is indistinguishable and costs nothing.
+   ============================================================ */
+function ragdollStart(p, impulseH, force){
+  p.rag = {
+    t:0,
+    /* which way the body goes over */
+    dir:(impulseH === undefined ? p.h : impulseH),
+    force:clamp(force === undefined ? .6 : force, .2, 1.6),
+    /* per-limb settle targets, randomised so no two look alike */
+    lean:0,
+    twist:rng(-.5, .5),
+    armL:rng(-2.4, -.6), armR:rng(-2.4, -.6),
+    elbL:rng(-1.3, -.1), elbR:rng(-1.3, -.1),
+    legL:rng(-.7, .5),  legR:rng(-.7, .5),
+    kneeL:rng(.05, 1.2), kneeR:rng(.05, 1.2),
+    head:rng(-.5, .6),
+    settled:false
+  };
+  p.down = true;
+  p.spd = 0;
+}
+function ragdollUpdate(p, dt){
+  var r = p.rag;
+  if(!r) return false;
+  r.t += dt;
+  /* the fall itself: tips over in about half a second, then settles */
+  var fall = clamp(r.t / (.42 / Math.max(.4, r.force)), 0, 1);
+  var ease = 1 - Math.pow(1 - fall, 3);
+  r.lean = ease * (Math.PI / 2) * .97;
+  /* a small bounce as the body lands */
+  var bounce = (fall >= 1 && r.t < 1.1) ? Math.sin((r.t - (.42 / Math.max(.4, r.force))) * 14) * .05 * (1 - r.t) : 0;
+
+  var rig = p.mesh && p.mesh.userData ? p.mesh.userData.rig : null;
+  if(!rig) return true;
+  var S = rig.S;
+
+  /* the whole body pivots about the feet, in the direction of the hit */
+  p.mesh.rotation.order = 'YXZ';
+  p.mesh.rotation.y = -r.dir + Math.PI / 2;
+  p.mesh.rotation.x = r.lean + bounce;
+  p.mesh.rotation.z = r.twist * ease * .35;
+  /* sink the body so it lies ON the ground rather than through it */
+  p.mesh.position.y = (p.y || 0) + (1 - ease) * 0;
+
+  /* limbs swing out during the fall and then stop */
+  var k = ease;
+  rig.torso.rotation.set(-.18 * k, 0, 0);
+  rig.neck.rotation.set(r.head * k, r.twist * k * .5, 0);
+  rig.armL.rotation.set(r.armL * k, 0, -.45 * k);
+  rig.armR.rotation.set(r.armR * k, 0, .45 * k);
+  rig.elbowL.rotation.x = r.elbL * k;
+  rig.elbowR.rotation.x = r.elbR * k;
+  rig.legL.rotation.set(r.legL * k, 0, -.12 * k);
+  rig.legR.rotation.set(r.legR * k, 0, .12 * k);
+  rig.kneeL.rotation.x = r.kneeL * k;
+  rig.kneeR.rotation.x = r.kneeR * k;
+  rig.torso.position.y = rig.hipY;
+  rig.belt.position.y = rig.hipY;
+  rig.neck.position.y = rig.neckY || (rig.hipY + .62 * S);
+
+  if(fall >= 1) r.settled = true;
+  return true;
+}
+function ragdollClear(p){
+  if(!p.rag) return;
+  p.rag = null;
+  if(p.mesh){
+    p.mesh.rotation.order = 'YXZ';
+    p.mesh.rotation.x = 0;
+    p.mesh.rotation.z = 0;
+  }
 }
 /* ============================================================
    TRAFFIC PHYSICALITY + LIVE SIGNALS
@@ -7423,6 +7998,36 @@ function laneFree(x, z, minD){
 function resolveVehicleCollisions(dt){
   var pass;
   for(pass = 0; pass < 3; pass++) collisionPass(dt, pass);
+  resolveParkedCollisions();
+}
+/* Parked cars are immovable, so a moving car that reaches one gets pushed
+   out rather than the pair being separated. Without this, traffic that
+   clipped a kerbside car simply drove through it. */
+function resolveParkedCollisions(){
+  if(!G.parked || !G.parked.length) return;
+  var i, j;
+  for(i = 0; i < G.traffic.length; i++){
+    var v = G.traffic[i];
+    if(!v.alive) continue;
+    for(j = 0; j < G.parked.length; j++){
+      var p = G.parked[j];
+      var dx = v.x - p.x, dz = v.z - p.z;
+      if(dx * dx + dz * dz > 42) continue;
+      var hit = satOverlap(vehBox(v), vehBox(p));
+      if(!hit) continue;
+      /* satOverlap's normal points from the FIRST box toward the second,
+         i.e. from the moving car toward the parked one. Pushing along it
+         drives the car deeper in; the separation is the opposite way. */
+      var d = hit.depth;
+      var nx = hit.nx, nz = hit.nz;
+      var L = Math.sqrt(nx * nx + nz * nz) || 1;
+      v.x -= (nx / L) * (d + .02);
+      v.z -= (nz / L) * (d + .02);
+      v.spd *= .82;
+      /* and nudge it back toward its lane so it does not ride the kerb */
+      v.offT = (v.offT || 0) + .4;
+    }
+  }
 }
 function collisionPass(dt, pass){
   var list = G.traffic;
@@ -7538,7 +8143,8 @@ function updateSignals(dt){
     var n = NODES[i];
     if(!n.light) continue;
     if(Math.abs(n.x - px) > 130 || Math.abs(n.z - pz) > 130) continue;
-    for(j = 0; j < 4 && used < SIGMAX; j++){
+    var napp = signalApproaches(n).length || 4;
+    for(j = 0; j < napp && used < SIGMAX; j++){
       /* same placement the baked mast arm used, so the lamps sit inside
          their housings instead of hovering near them */
       var hp = signalHeadPos(n, j);
@@ -7547,14 +8153,8 @@ function updateSignals(dt){
       g.rotation.y = -hp.face;
       g.visible = true;
       /* the approach this head governs is the edge it points back down */
-      var best = null, bestDot = -2, k;
-      for(k = 0; k < n.e.length; k++){
-        var e = EDGES[n.e[k]];
-        var o = (NODES[e.a] === n) ? NODES[e.b] : NODES[e.a];
-        var ea = Math.atan2(o.z - n.z, o.x - n.x);
-        var dot = Math.cos(ea - hp.face);
-        if(dot > bestDot){ bestDot = dot; best = e; }
-      }
+      /* the head knows its own approach now -- no need to guess */
+      var best = hp.edge;
       var green = best ? lightGreen(n, best) : false;
       var amber = !!(n.light.amber && green);
       var lamps = g.userData.lamps;
@@ -7645,7 +8245,11 @@ function updatePedVehicle(dt){
       }
       /* struck */
       p.down = true;
-      p.stunT = clamp(impact * .8, 4, 20);
+      /* struck people stay down: long enough to matter, and they go over
+         in the direction the vehicle was travelling */
+      p.stunT = clamp(impact * 1.6, 14, 45);
+      p.ragH = v.h + (v.spd < 0 ? Math.PI : 0);
+      p.ragF = clamp(impact / 14, .4, 1.6);
       p.setState('down');
       v.spd *= .72;
       Audio_crash(clamp(impact / 24, .15, .7));
@@ -7740,7 +8344,10 @@ function parkSpotsNear(px, pz, out){
   for(i = 0; i < near.length; i++){
     var e = EDGES[near[i]];
     if(e.type === 'freeway' || e.type === 'ramp' || e.type === 'highway') continue;
-    if(e.w < 8) continue;
+    /* Only park on streets genuinely wide enough to carry a parking lane
+       beside the running lanes. On a narrow street there is no room, so
+       traffic simply drove through the parked cars. */
+    if(e.w < 14) continue;
     out.push(e);
   }
   return out;
@@ -7772,8 +8379,13 @@ function updateParked(dt){
   var t = rng(.12, .88);
   var dir = chance(.5) ? 1 : -1;
   var ang = Math.atan2(b.z - a.z, b.x - a.x);
-  /* sit against the kerb, just outside the running lane */
-  var off = (e.w * .5 + 1.15) * (dir > 0 ? -1 : 1);
+  /* Park against the kerb, INSIDE the carriageway. The old offset was
+     +1.15m beyond the road edge, which put the car's centre on the
+     pavement -- hence cars sitting on the sidewalk. A parked car's centre
+     belongs about a car-half-width in from the kerb line. */
+  /* sit in the parking lane: outside the running lanes but inside the kerb */
+  var off = (e.w * .5 - 1.15) * (dir > 0 ? -1 : 1);
+  if(e.w < 8) return;                       /* too narrow to park on */
   var x = a.x + (b.x - a.x) * t - Math.sin(ang) * off;
   var z = a.z + (b.z - a.z) * t + Math.cos(ang) * off;
   var d = dist(x, z, px, pz);
@@ -10046,7 +10658,7 @@ function setObjective(t, d, x, z){
   G.obj = { t:t, d:d, x:x, z:z };
   $('objT').textContent = t;
   $('objD').textContent = d;
-  $('objective').style.display = 'block';
+  $('objective').style.display = 'flex';
 }
 function setObjectiveDist(d){
   if(!G.obj) return;
@@ -10757,7 +11369,8 @@ function openMenu(tab){
   G.menuOpen = true;
   renderMenu();
 }
-function closeMenu(){ $('menu').style.display = 'none'; G.menuOpen = false; }
+function closeMenu(){
+  if(typeof stopMirror === 'function') stopMirror(); $('menu').style.display = 'none'; G.menuOpen = false; }
 function renderMenu(){
   if(!G.menuOpen) return;
   var tabs = $('menuTabs'); tabs.innerHTML = '';
@@ -11775,7 +12388,16 @@ function noteForce(what){
 }
 
 /* ---- firing ---- */
+/* recoil drives the shooting animation and decays over a few frames */
+function addRecoil(amt){
+  G.recoil = Math.min(1.4, (G.recoil || 0) + amt);
+}
+function updateRecoil(dt){
+  if(!G.recoil) return;
+  G.recoil = Math.max(0, G.recoil - dt * 5.2);
+}
 function fireWeapon(){
+  /* size the kick to the weapon so a shotgun visibly moves you */
   var w = weaponById(G.weapon);
   if(w.kind === 'none'){ return; }
   if(G.reloading > 0) return;
@@ -12142,11 +12764,10 @@ function mmHome(b){
     initMeta();
     initWeapons();
     respawnCruiser();
-    respawnAtStation();
     refreshHUD();
-    closeMainMenu();
-    /* start the shift the way a patrol sim does: inside your station,
-       at the lockers, before you have touched a car */
+    /* Do NOT close the menu here -- the whole point is to show the
+       start-of-shift picker next. Closing it first dropped the player
+       straight into the cruiser and the picker never appeared. */
     G.mmTab = 'spawn';
     renderMainMenu();
     return;
@@ -12189,12 +12810,18 @@ function startShiftAt(lm){
   if(INTERIORS[iid]){
     enterInterior(iid);
     var st0 = INTERIORS[iid];
-    G.player.x = st0.spawnX;
-    G.player.z = st0.spawnZ;
+    /* start at the LOCKERS, not the front door -- changing kit is the first
+       thing you do on shift, and it is where the mirror is */
+    G.player.x = st0.lockerX;
+    G.player.z = st0.lockerZ - 2.4;
     G.player.y = 0;
-    G.playerH = Math.PI / 2;
-    G.camYaw = Math.PI / 2;
-    G.ctrlYaw = Math.PI / 2;
+    G.player.y = 0;
+    /* face the lockers */
+    G.playerH = -Math.PI / 2;
+    G.camYaw = -Math.PI / 2;
+    G.ctrlYaw = -Math.PI / 2;
+    G.onFoot = true;
+    G.veh = null;
   }
   toast('REPORTING TO ' + lm.n.toUpperCase() + ' \u2014 GEAR UP, THEN GO 10-8.', 'xp');
 }
@@ -12741,7 +13368,11 @@ function buildInteriors(scene){
     x:ix, z:iz,
     spawnX:ix, spawnZ:iz - D / 2 + 2.6,
     exitX:ix, exitZ:iz - D / 2 + 1.4,
-    lockerX:ix - 2, lockerZ:iz + D / 2 - 3.6,
+    /* stand in FRONT of the middle of the locker bank. The trigger used to
+       sit off to one side of the bank, so at the Sheriff's Office you were
+       about 4m away from it while standing at the lockers and it never
+       armed. */
+    lockerX:ix - 6.1, lockerZ:iz + D / 2 - 3.4,
     armoryX:ix + W / 2 - 3.0, armoryZ:iz + 7.6,
     jailX:ix - W / 2 + 6.0, jailZ:iz + 5.5,
     deskX:ix, deskZ:iz - D / 2 + 7.0,
@@ -12835,7 +13466,7 @@ function buildInteriors(scene){
       jailX:vx - vW / 2 + 5.6, jailZ:vz + 3.0,
       garageX:vx + 7, garageZ:vz - vD / 2 - 4,
       exitX:vx, exitZ:vz - vD / 2 + 1.4,
-      lockerX:vx - 1, lockerZ:vz + vD / 2 - 3.4,
+      lockerX:vx - 5.6, lockerZ:vz + vD / 2 - 3.4,
       armoryX:vx + vW / 2 - 3.0, armoryZ:vz + 5.2,
       /* bounds open north into the bay, like the PD room */
       bounds:{ x0:vx - vW / 2 + .8, x1:vx + 14.5 - .8, z0:vz - vD / 2 - 15, z1:vz + vD / 2 - .8 }
@@ -12904,8 +13535,8 @@ function updateInterior(dt){
     return;
   }
   /* triggers show as prompts; ACT handles them */
-  G.intLocker = dist(G.player.x, G.player.z, it.lockerX, it.lockerZ) < 2.8;
-  G.intArmory = dist(G.player.x, G.player.z, it.armoryX, it.armoryZ) < 2.8;
+  G.intLocker = dist(G.player.x, G.player.z, it.lockerX, it.lockerZ) < 3.4;
+  G.intArmory = dist(G.player.x, G.player.z, it.armoryX, it.armoryZ) < 3.2;
   G.intJail = it.jailX !== undefined && dist(G.player.x, G.player.z, it.jailX, it.jailZ) < 3.4;
   /* the front desk is where you sign on and off shift */
   G.intDesk = dist(G.player.x, G.player.z, it.deskX, it.deskZ) < 3.2;
@@ -13741,10 +14372,29 @@ function updateCamera(dt){
     }
     var ph = G.camYaw;
     if(mode === 'first' || mode === 'hood'){
-      camera.position.set(G.player.x, G.player.y + 1.62, G.player.z);
-      camera.lookAt(G.player.x + Math.cos(ph) * 10, G.player.y + 1.62 - G.pitch * 10, G.player.z + Math.sin(ph) * 10);
+      /* First person on foot was a rigid camera bolted to the body: no head
+         height variation, no lean, and the officer model still drawn in
+         front of the lens. Give it a walk bob tied to the same stride phase
+         the legs use, a slight roll into the step, and hide the body. */
+      var eye = G.player.y + 1.64;
+      var ph2 = G.walkAnim || 0;
+      var mv = clamp(G.player.spd / 4.3, 0, 1);
+      eye += Math.abs(Math.sin(ph2)) * .035 * mv;
+      var sway = Math.sin(ph2) * .020 * mv;
+      var ex = G.player.x - Math.sin(ph) * sway;
+      var ez = G.player.z + Math.cos(ph) * sway;
+      camera.position.set(ex, eye, ez);
+      /* guard: not every camera object carries an up vector */
+      if(camera.up && camera.up.set){
+        camera.up.set(Math.sin(ph) * Math.sin(ph2) * .035 * mv, 1,
+                      -Math.cos(ph) * Math.sin(ph2) * .035 * mv);
+      }
+      camera.lookAt(ex + Math.cos(ph) * 10, eye - G.pitch * 10, ez + Math.sin(ph) * 10);
+      if(G.officerMesh) G.officerMesh.visible = false;
       return;
     }
+    if(G.officerMesh) G.officerMesh.visible = true;
+    if(camera.up && camera.up.set) camera.up.set(0, 1, 0);
     var back = mode === 'close' ? 3.1 : 4.7, up = mode === 'close' ? 1.85 : 2.35;
     /* pull the camera out a little as he speeds up */
     back += Math.min(G.player.spd, 4.3) * .16;
@@ -13809,6 +14459,40 @@ function updateCamera(dt){
 }
 
 /* ---------- officer model ---------- */
+/* ---- locker mirror ----
+   Frame the officer like a changing-room mirror and keep the world drawing
+   so appearance edits are visible as they happen. */
+function startMirror(){
+  if(!G.interior) return;
+  G.mirror = true;
+  var it = INTERIORS[G.interior];
+  if(it){
+    G.player.x = it.lockerX;
+    G.player.z = it.lockerZ - 2.4;
+    G.playerH = -Math.PI / 2;
+  }
+  if(document.body.className.indexOf('mirror') < 0){
+    document.body.className = 'mirror ' + document.body.className;
+  }
+}
+function stopMirror(){
+  G.mirror = false;
+  document.body.className = document.body.className.replace(/\bmirror\b\s*/g, '');
+}
+function updateMirrorCam(dt){
+  if(!G.mirror || !G.officerMesh) return;
+  /* stand off the officer's front-left, head height, looking at the torso */
+  var h = G.playerH;
+  var cx = G.player.x + Math.cos(h) * 3.0 - Math.sin(h) * .9;
+  var cz = G.player.z + Math.sin(h) * 3.0 + Math.cos(h) * .9;
+  camera.position.x = lerp(camera.position.x, cx, 1 - Math.pow(.004, dt));
+  camera.position.y = lerp(camera.position.y, G.player.y + 1.28, 1 - Math.pow(.004, dt));
+  camera.position.z = lerp(camera.position.z, cz, 1 - Math.pow(.004, dt));
+  camera.lookAt(G.player.x, G.player.y + 1.00, G.player.z);
+  /* slow turntable so you can see the kit from more than one angle */
+  G.mirrorT = (G.mirrorT || 0) + dt * .35;
+  G.officerMesh.rotation.y = -G.playerH + Math.PI / 2 + Math.sin(G.mirrorT) * .55;
+}
 function rebuildOfficer(){
   if(G.officerMesh){ scene.remove(G.officerMesh); }
   var a = G.appear, u = UNIFORM_COLS[a.uniform] || UNIFORM_COLS.navy;
@@ -14002,6 +14686,7 @@ function bindInput(){
   tap($('btnWpn'), toggleWeaponWheel);
   tap($('btnPause'), togglePause);
 
+  tap($('btnRun'), toggleRun);
   tap($('btnExit'), function(){
     if(G.interior){ exitInterior(); return; }
     if(!G.onFoot && G.veh) exitVehicle();
@@ -14052,6 +14737,12 @@ function bindInput(){
 /* iOS Safari has no Element.requestFullscreen, only the webkit prefix, and on
    iPhone it is unavailable entirely -- so fall back to a CSS layer that fills
    the viewport and hides the browser chrome behind scroll. */
+function toggleRun(){
+  G.runToggle = !G.runToggle;
+  var rb = $('btnRun');
+  if(rb) rb.className = 'tsm' + (G.runToggle ? ' on' : '');
+  toast(G.runToggle ? 'RUNNING' : 'WALKING', '');
+}
 function toggleFullscreen(){
   var el = document.documentElement;
   var doc = document;
@@ -14138,6 +14829,7 @@ function onKey(k, e){
   if(k === 'z'){ toggleWeaponWheel(); return; }
   if(k === 'b' && !K['shift']){ requestBackup(Pursuit.active ? 'pursuit' : 'general'); return; }
   if(k === 'k'){ if(K['shift']) k9Search(); else k9Toggle(); return; }
+  if(k === 'r' && G.onFoot && !G.menuOpen){ toggleRun(); return; }
   if(k === 'h' && K['shift']){ requestAir(); return; }
   if(k === 'r' && K['shift']){ reloadWeapon(); return; }
   if(k === 'e'){ doAction(); return; }
@@ -14177,7 +14869,7 @@ function doAction(){
     }
     else if(G.intJail){ bookPrisoner(); return; }
     if(G.intGarage){ openMenu('garage'); return; }
-    if(G.intLocker){ openMenu('officer'); return; }
+    if(G.intLocker){ startMirror(); openMenu('officer'); return; }
     if(G.intArmory){ openMenu('equip'); return; }
     return;
   }
@@ -14335,7 +15027,10 @@ function controlFoot(dt){
      camera, the body turns toward it at a fixed rate rather than snapping, and
      speed ramps in and out instead of switching on. Sprint only engages once
      you are already facing roughly where you are going. */
-  var wantRun = (K['shift'] || TOUCH.gas);
+  /* Run is a toggle, the way a patrol sim does it -- holding a second
+     control while steering on a phone is unworkable. The stick's own
+     deflection still governs speed inside whichever gait you are in. */
+  var wantRun = G.runToggle || K['shift'];
   var walkTop = 1.85, runTop = 4.30;
 
   if(mag > .06){
@@ -14357,7 +15052,10 @@ function controlFoot(dt){
     G.playerH = angWrap(G.playerH + clamp(angDiff(wa, G.playerH), -turn, turn));
     /* facing badly wrong scrubs speed, like turning hard in SA */
     var facing = clamp(1 - off / 2.0, .25, 1);
-    var top = (wantRun && off < .9 ? runTop : walkTop) * mag * facing;
+    /* full analog: a light push walks, a firm push moves at the top of the
+       current gait, and the run toggle raises that ceiling */
+    var gaitTop = (wantRun && off < .9) ? runTop : walkTop;
+    var top = gaitTop * (.34 + mag * .66) * facing;
     G.player.spd = lerp(G.player.spd, top, 1 - Math.pow(.0009, dt));
   } else {
     /* released: the next push is measured from wherever the camera now sits */
@@ -14383,9 +15081,22 @@ function controlFoot(dt){
   if(G.officerMesh){
     G.officerMesh.position.set(G.player.x, G.player.y, G.player.z);
     G.officerMesh.rotation.y = -G.playerH + Math.PI / 2;
-    G.walkAnim = (G.walkAnim || 0) + (G.player.spd > .15 ? Math.min(G.player.spd, 2.3) * 4.4 : .9) * dt;
-    animatePerson(G.officerMesh, { spd:G.player.spd, anim:G.walkAnim, y:G.player.y,
-      hands:false, cuffed:false, down:false, fight:false }, dt);
+    /* same distance-driven stride as the pedestrians, so the officer's
+       feet plant on the ground instead of sliding over it */
+    if(G.player.spd > .15){
+      G.walkAnim = (G.walkAnim || 0) + (G.player.spd * dt / 0.78) * Math.PI;
+    } else {
+      G.walkAnim = (G.walkAnim || 0) + .9 * dt;
+    }
+    updateRecoil(dt);
+    animatePerson(G.officerMesh, {
+      spd:G.player.spd, anim:G.walkAnim, y:G.player.y,
+      hands:false, cuffed:false, down:false, fight:false,
+      /* drawn weapon puts the officer into a firing stance */
+      aim:!!G.weapon && G.weapon !== 'none',
+      twoHand:(G.weapon !== 'oc' && G.weapon !== 'baton'),
+      recoil:G.recoil || 0
+    }, dt);
   }
 }
 
@@ -14665,7 +15376,7 @@ function tick(ts){
   updateAmbience();
 
   /* camera */
-  updateCamera(dt);
+  if(G.mirror) updateMirrorCam(dt); else updateCamera(dt);
 
   /* fire button only while something is drawn */
   var fb = $('btnFire');
@@ -14736,6 +15447,8 @@ function boot(){
      screen and the main menu until something happened to close them.
      Written straight to className: other code rebuilds that string
      wholesale, so classList bookkeeping does not survive anyway. */
+  var ob0 = document.getElementById('objective');
+  if(ob0) ob0.style.display = 'none';
   if(document.body.className.indexOf('menuopen') < 0){
     document.body.className = ('menuopen ' + document.body.className).replace(/\s+$/, '');
   }
@@ -14751,6 +15464,7 @@ function boot(){
     ['Raising Cypress Falls', function(){ fillDistricts(); }],
     ['Placing public buildings', function(){ placeLandmarks(); }],
     ['Starting the render engine', function(){ initEngine(); }],
+    ['Clearing the roadways', function(){ sweepRoadSolids(); }],
     ['Laying the rail', function(){ buildRailPath(); buildRailGeometry(); buildRailCrossings(); }],
     ['Baking the world', function(){ bakeChunks(scene); buildWater(scene); buildSigns(scene); buildInteriors(scene); buildTrain(scene); }],
     ['Issuing your equipment', function(){
@@ -14835,6 +15549,7 @@ G.fullscreen = false; G.cssFull = false;
 G.lookHold = 0; G.camLook = undefined;
 G.parked = [];
 G.ctrlYaw = 0; G.inputHeld = false;
+G.runToggle = false;
 G.backup = []; G.air = null; G.pitCount = 0;
 G.k9Unlocked = false; G.k9Alerts = 0;
 
