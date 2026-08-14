@@ -811,8 +811,33 @@ body.onfoot #speedo{display:none !important;}
 body.onfoot #compass{top:calc(72px + var(--sat)) !important;bottom:auto !important;}
 
 #btnRun{display:none;}
-body.onfoot #btnRun{display:flex;}
-body.onfoot #btnGas, body.onfoot #btnBrake{display:none !important;}
+body.onfoot #btnRun{display:none;}
+/* pedals stay: they are SPRINT and JUMP on foot */
+
+/* ==========================================================
+   COLLAPSIBLE TOOL TRAY
+   Ten buttons permanently on screen crowded the right third.
+   The primary controls stay out; everything else lives behind
+   TOOLS and slides in when you want it.
+   ========================================================== */
+.tsm.tool{display:none !important;}
+body.tools .tsm.tool{display:flex !important;}
+#btnTools.on{background:rgba(240,196,25,.22) !important;border-color:#f0c419 !important;}
+/* smaller map, and the stick clear of it */
+#minimapWrap{width:150px !important;height:116px !important;}
+#compass{width:150px !important;bottom:calc(128px + var(--sab)) !important;}
+#speedo{width:150px !important;}
+#unitBox{width:150px !important;}
+#dispatch{width:150px !important;max-width:150px !important;}
+#stick{left:calc(168px + var(--sal)) !important;
+  bottom:calc(10px + var(--sab)) !important;
+  width:112px !important;height:112px !important;}
+@media (orientation:portrait){
+  #minimapWrap{width:132px !important;height:102px !important;}
+  #compass,#speedo,#unitBox,#dispatch{width:132px !important;}
+  #compass{bottom:calc(112px + var(--sab)) !important;}
+  #stick{left:calc(146px + var(--sal)) !important;width:98px !important;height:98px !important;}
+}
 </style>
 </head>
 <body>
@@ -884,17 +909,18 @@ body.onfoot #btnGas, body.onfoot #btnBrake{display:none !important;}
   <div id="rowLeft">
     <div class="tsm" id="btnLight">LIGHTS</div>
     <div class="tsm" id="btnSiren">SIREN</div>
-    <div class="tsm" id="btnRadar">RADAR</div>
-    <div class="tsm" id="btnAlpr">ALPR</div>
-    <div class="tsm" id="btnBackup">BACKUP</div>
-    <div class="tsm" id="btnAir">AIR</div>
+    <div class="tsm tool" id="btnRadar">RADAR</div>
+    <div class="tsm tool" id="btnAlpr">ALPR</div>
+    <div class="tsm tool" id="btnBackup">BACKUP</div>
+    <div class="tsm tool" id="btnAir">AIR</div>
   </div>
   <div id="rowTop">
     <div class="tsm" id="btnDuty">DUTY</div>
-    <div class="tsm" id="btnMdt">MDT</div>
-    <div class="tsm" id="btnMap">MAP</div>
-    <div class="tsm" id="btnWpn">WPN</div>
-    <div class="tsm" id="btnCam">CAM</div>
+    <div class="tsm tool" id="btnMdt">MDT</div>
+    <div class="tsm tool" id="btnMap">MAP</div>
+    <div class="tsm tool" id="btnWpn">WPN</div>
+    <div class="tsm tool" id="btnCam">CAM</div>
+    <div class="tsm" id="btnTools">TOOLS</div>
     <div class="tsm" id="btnRun">RUN</div>
     <div class="tsm" id="btnExit">EXIT</div>
     <div id="mirrorHint">LOCKER ROOM MIRROR &mdash; CHANGES APPLY LIVE</div>
@@ -1557,6 +1583,89 @@ function inWater(x, z){
   return false;
 }
 
+/* Remove roads that lie on top of another road. The ring loop was laid
+   across streets that were already there, which doubled every light pole,
+   sign and lane marking along those stretches and produced the odd
+   half-lane textures where two carriageways overlapped. */
+function dedupeRoads(){
+  var i, j, removed = 0;
+  for(i = ROADS.length - 1; i >= 0; i--){
+    var r = ROADS[i];
+    var rmx = (r.x1 + r.x2) / 2, rmz = (r.z1 + r.z2) / 2;
+    var ra = Math.atan2(r.z2 - r.z1, r.x2 - r.x1);
+    var rlen = Math.sqrt((r.x2 - r.x1) * (r.x2 - r.x1) + (r.z2 - r.z1) * (r.z2 - r.z1));
+    for(j = 0; j < i; j++){
+      var o = ROADS[j];
+      var omx = (o.x1 + o.x2) / 2, omz = (o.z1 + o.z2) / 2;
+      var oa = Math.atan2(o.z2 - o.z1, o.x2 - o.x1);
+      var olen = Math.sqrt((o.x2 - o.x1) * (o.x2 - o.x1) + (o.z2 - o.z1) * (o.z2 - o.z1));
+      /* roughly parallel? */
+      var da = Math.abs(Math.atan2(Math.sin(ra - oa), Math.cos(ra - oa)));
+      if(da > .22 && Math.abs(da - Math.PI) > .22) continue;
+      /* and lying within a carriageway width of each other along their span? */
+      var sep = Math.sqrt((rmx - omx) * (rmx - omx) + (rmz - omz) * (rmz - omz));
+      if(sep > (r.w + o.w) * .5 + 2) continue;
+      if(Math.abs(rlen - olen) > Math.max(rlen, olen) * .75) continue;
+      /* keep the more important road */
+      var rank = { freeway:6, highway:5, arterial:4, frontage:3, collector:2, local:1 };
+      var rr = rank[r.type] || 0, ro = rank[o.type] || 0;
+      if(rr > ro){ ROADS.splice(j, 1); i--; }
+      else { ROADS.splice(i, 1); }
+      removed++;
+      break;
+    }
+  }
+  return removed;
+}
+
+/* Road-level dedupe cannot catch a 3km loop segment laid across dozens of
+   short streets -- after the graph splits everything at intersections you
+   are left with pairs of coincident EDGES. This removes those, which is
+   what actually doubles the light poles, signs and lane markings. */
+function dedupeEdges(){
+  var i, j, removed = 0;
+  var rank = { freeway:6, highway:5, arterial:4, frontage:3, collector:2, local:1, ramp:5 };
+  for(i = EDGES.length - 1; i >= 0; i--){
+    var e = EDGES[i];
+    var ea = NODES[e.a], eb = NODES[e.b];
+    var emx = (ea.x + eb.x) / 2, emz = (ea.z + eb.z) / 2;
+    var eang = Math.atan2(eb.z - ea.z, eb.x - ea.x);
+    for(j = 0; j < i; j++){
+      var f = EDGES[j];
+      var fa = NODES[f.a], fb = NODES[f.b];
+      var fmx = (fa.x + fb.x) / 2, fmz = (fa.z + fb.z) / 2;
+      if(Math.abs(emx - fmx) > 7 || Math.abs(emz - fmz) > 7) continue;
+      var fang = Math.atan2(fb.z - fa.z, fb.x - fa.x);
+      var da = Math.abs(Math.atan2(Math.sin(eang - fang), Math.cos(eang - fang)));
+      if(da > .22 && Math.abs(da - Math.PI) > .22) continue;
+      var re = rank[e.type] || 0, rf = rank[f.type] || 0;
+      /* drop the lesser road; on a tie drop the later one */
+      if(re > rf){ EDGES.splice(j, 1); i--; }
+      else { EDGES.splice(i, 1); }
+      removed++;
+      break;
+    }
+  }
+  if(removed) reindexGraph();
+  return removed;
+}
+/* edges carry node indices, and nodes carry edge indices, so any splice
+   invalidates both directions -- rebuild the cross references */
+function reindexGraph(){
+  var i, k;
+  for(i = 0; i < NODES.length; i++){
+    NODES[i].e = [];
+    /* signal phase maps are keyed by edge INDEX, so they are meaningless
+       once the indices move. Drop them and let them rebuild lazily. */
+    if(NODES[i].light) NODES[i].light.map = null;
+  }
+  for(i = 0; i < EDGES.length; i++){
+    var e = EDGES[i];
+    NODES[e.a].e.push(i);
+    NODES[e.b].e.push(i);
+  }
+}
+
 /* ---------- road layout ---------- */
 function layoutRoads(){
   var i, j, d;
@@ -1574,6 +1683,66 @@ function layoutRoads(){
     addRoad('I-35 Exit Ramp', 'ramp', 700, z + 130, 770, z + 40, 9, 0);
     addRoad('I-35 Entrance Ramp', 'ramp', 770, z - 40, 700, z - 130, 0, 9);
   }
+
+  /* ---------------------------------------------------------------
+     LOOP 320 -- the ring road.
+     A single N-S interstate meant every cross-town trip funnelled onto
+     the same five interchanges. This is the Tyler pattern: a loop that
+     rings the built-up area at grade level, with its own interchanges
+     onto the arterials, so you can get anywhere without threading the
+     surface grid.
+     --------------------------------------------------------------- */
+  var LP = 1520;                       /* loop radius from the city centre */
+  var loopSeg = [
+    [-LP, -LP,  LP, -LP],              /* north side  */
+    [ LP, -LP,  LP,  LP],              /* east side   */
+    [ LP,  LP, -LP,  LP],              /* south side  */
+    [-LP,  LP, -LP, -LP]               /* west side   */
+  ];
+  for(i = 0; i < loopSeg.length; i++){
+    addRoad('Loop 320', 'freeway', loopSeg[i][0], loopSeg[i][1],
+                                   loopSeg[i][2], loopSeg[i][3], 0, 0);
+  }
+  /* frontage roads flanking the loop, as Texas ring roads have */
+  var fo = 44;
+  addRoad('Loop 320 Frontage N', 'frontage', -LP, -LP - fo,  LP, -LP - fo);
+  addRoad('Loop 320 Frontage N', 'frontage', -LP, -LP + fo,  LP, -LP + fo);
+  addRoad('Loop 320 Frontage S', 'frontage', -LP,  LP - fo,  LP,  LP - fo);
+  addRoad('Loop 320 Frontage S', 'frontage', -LP,  LP + fo,  LP,  LP + fo);
+  addRoad('Loop 320 Frontage W', 'frontage', -LP - fo, -LP, -LP - fo,  LP);
+  addRoad('Loop 320 Frontage W', 'frontage', -LP + fo, -LP, -LP + fo,  LP);
+  addRoad('Loop 320 Frontage E', 'frontage',  LP - fo, -LP,  LP - fo,  LP);
+  addRoad('Loop 320 Frontage E', 'frontage',  LP + fo, -LP,  LP + fo,  LP);
+
+  /* Interchanges: a pair of ramps at every point the loop meets a radial
+     route, so traffic can actually get on and off. */
+  var loopExits = [
+    /* north side */ [-760, -LP, 0], [0, -LP, 0], [760, -LP, 0],
+    /* south side */ [-760,  LP, 0], [0,  LP, 0], [760,  LP, 0],
+    /* west side  */ [-LP, -700, 1], [-LP, 0, 1], [-LP, 700, 1],
+    /* east side  */ [ LP, -700, 1], [ LP, 0, 1], [ LP, 700, 1]
+  ];
+  for(i = 0; i < loopExits.length; i++){
+    var ex = loopExits[i][0], ez = loopExits[i][1], vert = loopExits[i][2];
+    if(vert){
+      /* loop runs N-S here: ramps peel east and west */
+      addRoad('Loop 320 Exit',     'ramp', ex, ez - 120, ex - fo, ez - 30, 0, 0);
+      addRoad('Loop 320 Entrance', 'ramp', ex - fo, ez + 30, ex, ez + 120, 0, 0);
+      addRoad('Loop 320 Exit',     'ramp', ex, ez + 120, ex + fo, ez + 30, 0, 0);
+      addRoad('Loop 320 Entrance', 'ramp', ex + fo, ez - 30, ex, ez - 120, 0, 0);
+    } else {
+      /* loop runs E-W here: ramps peel north and south */
+      addRoad('Loop 320 Exit',     'ramp', ex - 120, ez, ex - 30, ez - fo, 0, 0);
+      addRoad('Loop 320 Entrance', 'ramp', ex + 30, ez - fo, ex + 120, ez, 0, 0);
+      addRoad('Loop 320 Exit',     'ramp', ex - 120, ez, ex - 30, ez + fo, 0, 0);
+      addRoad('Loop 320 Entrance', 'ramp', ex + 30, ez + fo, ex + 120, ez, 0, 0);
+    }
+  }
+  /* radial connectors tying the loop back into the grid */
+  addRoad('Palo Pinto Rd', 'arterial', 0, -LP + fo, 0, -420);
+  addRoad('Palo Pinto Rd', 'arterial', 0,  420, 0,  LP - fo);
+  addRoad('Gafney Hwy',    'arterial', -LP + fo, 0, -520, 0);
+  addRoad('Gafney Hwy',    'arterial', 520, 0, LP - fo, 0);
 
   /* --- US and FM highways --- */
   addRoad('US-287', 'highway', -2500, -750, 2500, -750);
@@ -1708,16 +1877,59 @@ function buildGraph(){
       for(k = 0; k < n.e.length; k++){ if(EDGES[n.e[k]].w > bw){ bw = EDGES[n.e[k]].w; we = EDGES[n.e[k]]; } }
       var oa = NODES[we.a], ob = NODES[we.b];
       n.light.axis = Math.abs(ob.x - oa.x) > Math.abs(ob.z - oa.z) ? 0 : 1;
+      buildSignalPhases(n);
     } else if(big >= 2 && wrand() < 0.35){
       n.stop = true;
     }
   }
 }
+/* Assign every approach at a signalled junction to one of two phase groups,
+   by clustering the actual approach bearings. Classifying each edge by its
+   own bounding box meant two roads crossing at an angle could both read as
+   the same axis and go green together -- which is why it never looked like
+   anyone's light belonged to anyone. */
+function buildSignalPhases(n){
+  n.light.map = {};
+  var i, j, bear = [];
+  for(i = 0; i < n.e.length; i++){
+    var e = EDGES[n.e[i]];
+    var o = (NODES[e.a] === n) ? NODES[e.b] : NODES[e.a];
+    bear.push({ ei:n.e[i], a:Math.atan2(o.z - n.z, o.x - n.x), done:false });
+  }
+  if(!bear.length){ n.light.groups = 1; return; }
+  /* Two phases only work for a plain crossroads. At a Y or a five-way, two
+     groups always leave a pair of crossing approaches green together, so
+     build as many groups as the geometry actually needs: each group holds
+     approaches that are mutually opposite, never crossing. */
+  var grp = 0;
+  for(i = 0; i < bear.length; i++){
+    if(bear[i].done) continue;
+    bear[i].done = true;
+    n.light.map[bear[i].ei] = grp;
+    for(j = i + 1; j < bear.length; j++){
+      if(bear[j].done) continue;
+      var d = Math.abs(angDiff(bear[j].a, bear[i].a));
+      /* only a near-opposite approach may share the phase */
+      if(Math.abs(d - Math.PI) < Math.PI / 5){
+        bear[j].done = true;
+        n.light.map[bear[j].ei] = grp;
+      }
+    }
+    grp++;
+  }
+  n.light.groups = Math.max(1, grp);
+}
 function lightGreen(node, edge){
   if(!node || !node.light) return true;
-  var a = NODES[edge.a], b = NODES[edge.b];
-  var ax = Math.abs(b.x - a.x) > Math.abs(b.z - a.z) ? 0 : 1;
-  return node.light.phase === ax;
+  if(!node.light.map) buildSignalPhases(node);
+  var i, gi = -1;
+  for(i = 0; i < node.e.length; i++){
+    if(EDGES[node.e[i]] === edge){ gi = node.e[i]; break; }
+  }
+  if(gi < 0) return true;
+  var grp = node.light.map[gi];
+  if(grp === undefined) return true;
+  return node.light.phase === grp;
 }
 function updateLights(dt){
   var i, n;
@@ -1725,8 +1937,19 @@ function updateLights(dt){
     n = NODES[i];
     if(!n.light) continue;
     n.light.t += dt;
-    var dur = n.light.phase === n.light.axis ? 20 : 14;
-    if(n.light.t > dur){ n.light.t = 0; n.light.phase = 1 - n.light.phase; }
+    /* 20/14s phases meant a car arriving just after a change waited most of
+       a minute, and the queues never fully cleared between cycles. Shorter
+       phases keep the grid moving without changing right-of-way logic. */
+    if(!n.light.map) buildSignalPhases(n);
+    var ng = n.light.groups || 2;
+    /* the main axis gets a longer green than the side streets */
+    var dur = (n.light.phase === n.light.axis) ? 13 : 9;
+    if(ng > 2) dur = 8;
+    if(n.light.t > dur){
+      n.light.t = 0;
+      /* advance through however many phase groups this junction needs */
+      n.light.phase = (n.light.phase + 1) % (n.light.groups || 2);
+    }
     n.light.amber = n.light.t > dur - 3;
   }
 }
@@ -1747,6 +1970,27 @@ function addSolid(x, z, hw, hd, h, rot){
     k = i + ',' + j;
     if(!GRID[k]) GRID[k] = [];
     GRID[k].push(s.i);
+  }
+}
+/* The grid stores INDICES into SOLIDS, so any splice from that array
+   invalidates every entry after the removal point -- which showed up as
+   resolveSolid reading a hole. Anything that removes solids must rebuild
+   the index afterwards. */
+function rebuildSolidGrid(){
+  var k;
+  for(k in GRID){ if(GRID.hasOwnProperty(k)) delete GRID[k]; }
+  var n, i, j, gk;
+  for(n = 0; n < SOLIDS.length; n++){
+    var s2 = SOLIDS[n];
+    s2.i = n;
+    var r2 = Math.max(s2.hw, s2.hd) + 2;
+    var ax0 = Math.floor((s2.x - r2) / GCELL), ax1 = Math.floor((s2.x + r2) / GCELL);
+    var az0 = Math.floor((s2.z - r2) / GCELL), az1 = Math.floor((s2.z + r2) / GCELL);
+    for(i = ax0; i <= ax1; i++) for(j = az0; j <= az1; j++){
+      gk = i + ',' + j;
+      if(!GRID[gk]) GRID[gk] = [];
+      GRID[gk].push(n);
+    }
   }
 }
 function nearSolids(x, z){
@@ -3987,6 +4231,75 @@ function bLakeShore(B, x, z, rot, name){
   addSign(es.x + px * .12, 2.5, es.z + pz * .12, rot, 5.2, .85,
           name || 'TWIN BLUFF MARINA', 0x3f6b48, 0xffffff, 'flat');
 }
+
+
+/* ============================================================
+   BIRDS
+   A small flock that crosses the sky now and again. Purely ambient --
+   they wheel around a drifting centre and reset well outside the view
+   when they get too far away.
+   ============================================================ */
+var BIRDS = { group:null, list:[], t:0, next:14 };
+function buildBirds(scene){
+  BIRDS.group = new THREE.Group();
+  BIRDS.list = [];
+  var i;
+  for(i = 0; i < 9; i++){
+    var B = new Builder();
+    /* a simple V, which is all you can read at altitude */
+    B.box(0, 0, 0, .34, .05, .10, 0x2a2e34, 0);
+    B.box(-.26, .05, .16, .40, .05, .10, 0x2a2e34, .5);
+    B.box(-.26, .05, -.16, .40, .05, .10, 0x2a2e34, -.5);
+    var m = new THREE.Mesh(B.geo(), new THREE.MeshLambertMaterial({ vertexColors:true }));
+    m.visible = false;
+    BIRDS.group.add(m);
+    BIRDS.list.push({ mesh:m, ph:i * .7, r:6 + i * 2.2, a:i * .8 });
+  }
+  scene.add(BIRDS.group);
+  return BIRDS;
+}
+function updateBirds(dt){
+  if(!BIRDS.group) return;
+  BIRDS.t += dt;
+  if(!BIRDS.active){
+    BIRDS.next -= dt;
+    if(BIRDS.next > 0) return;
+    /* launch a flock somewhere off to one side, heading across */
+    BIRDS.active = true;
+    BIRDS.next = rng(40, 110);
+    var a0 = wrand() * TAU;
+    BIRDS.cx = G.player.x + Math.cos(a0) * 230;
+    BIRDS.cz = G.player.z + Math.sin(a0) * 230;
+    BIRDS.h = a0 + Math.PI + rng(-.5, .5);
+    BIRDS.cy = rng(48, 95);
+    BIRDS.spd = rng(9, 15);
+    var i;
+    for(i = 0; i < BIRDS.list.length; i++) BIRDS.list[i].mesh.visible = true;
+  }
+  BIRDS.cx += Math.cos(BIRDS.h) * BIRDS.spd * dt;
+  BIRDS.cz += Math.sin(BIRDS.h) * BIRDS.spd * dt;
+  var i2;
+  for(i2 = 0; i2 < BIRDS.list.length; i2++){
+    var b = BIRDS.list[i2];
+    b.ph += dt * (5.5 + i2 * .3);
+    /* loose V formation trailing the leader */
+    var back = (i2 % 2 ? 1 : -1) * Math.ceil(i2 / 2) * 3.2;
+    var side = (i2 % 2 ? 1 : -1) * Math.ceil(i2 / 2) * 2.6;
+    b.mesh.position.set(
+      BIRDS.cx - Math.cos(BIRDS.h) * Math.abs(back) - Math.sin(BIRDS.h) * side,
+      BIRDS.cy + Math.sin(b.ph * .35) * 1.6,
+      BIRDS.cz - Math.sin(BIRDS.h) * Math.abs(back) + Math.cos(BIRDS.h) * side
+    );
+    b.mesh.rotation.y = -BIRDS.h + Math.PI / 2;
+    /* wing beat */
+    b.mesh.rotation.z = Math.sin(b.ph) * .42;
+  }
+  if(dist(BIRDS.cx, BIRDS.cz, G.player.x, G.player.z) > 420){
+    BIRDS.active = false;
+    var i3;
+    for(i3 = 0; i3 < BIRDS.list.length; i3++) BIRDS.list[i3].mesh.visible = false;
+  }
+}
 /* ============================================================
    CHUNK ASSEMBLY
    ============================================================ */
@@ -5022,6 +5335,26 @@ function updateChunkVis(px, pz, viewDist){
    collision box trimmed back to the kerb line, so cars flow past even
    where a corner overhangs.
    ============================================================ */
+/* the interior rooms sit behind each station; do not let the station's own
+   exterior collider cover the room the player is meant to walk into */
+function clearInteriorSolids(){
+  if(typeof INTERIORS === 'undefined') return 0;
+  var id, n = 0, i;
+  for(id in INTERIORS){
+    if(!INTERIORS.hasOwnProperty(id)) continue;
+    var r = INTERIORS[id];
+    if(!r || !r.bounds) continue;      /* only real rooms carry bounds */
+    var b = r.bounds;
+    for(i = SOLIDS.length - 1; i >= 0; i--){
+      var s = SOLIDS[i];
+      if(s.x + s.hw < b.x0 || s.x - s.hw > b.x1) continue;
+      if(s.z + s.hd < b.z0 || s.z - s.hd > b.z1) continue;
+      SOLIDS.splice(i, 1); n++;
+    }
+  }
+  if(n && typeof rebuildSolidGrid === 'function') rebuildSolidGrid();
+  return n;
+}
 function sweepRoadSolids(){
   var i, trimmed = 0, dropped = 0;
   for(i = SOLIDS.length - 1; i >= 0; i--){
@@ -5045,6 +5378,7 @@ function sweepRoadSolids(){
       dropped++;
     }
   }
+  if(dropped && typeof rebuildSolidGrid === 'function') rebuildSolidGrid();
   G.solidSweep = { trimmed:trimmed, dropped:dropped };
   return G.solidSweep;
 }
@@ -5428,7 +5762,9 @@ function attachDoorText(grp, P, liv){
   var rg = new THREE.Mesh(new THREE.PlaneGeometry(w * .60, h * .40), rmat);
   /* the plate lives at sill+.30; put the lettering on the trunk face above
      it rather than in the same horizontal band as the lamps */
-  rg.position.set(P.tail - .028, P.sill + .62, 0);
+  /* The rear body face spans y=0.28 to 0.97 on this profile; sill+.62 put
+     the lettering at 1.02, above the sheet metal, so it hung in mid air. */
+  rg.position.set(P.tail - .028, P.sill + .48, 0);
   rg.rotation.y = -Math.PI / 2;
   grp.add(rg);
   if(d.shield){
@@ -5680,15 +6016,26 @@ function detailCrownSedan(B, P, hw, paint, trim, liv){
       B.cyl(spx + .19, P.beltY + .10, sz2 * (hw + .06), .085, .085, .03, 8, 0xf2ecd8, 3);
     }
   }
-  /* push bumper: two uprights, a crossbar and wing bars */
+  /* --- push bar ---
+     The old one was a flat plate with two posts. A real ram bar is a tubular
+     frame: uprights bolted to the frame horns, two horizontal rails, wrap
+     around wings at the corners and rubber pads facing forward. */
   if(liv !== 'civ'){
-    B.box(P.nose + .22, P.sill + .30, 0, .09, .62, P.wid * .70, 0xe8e8e4, 0);
-    B.box(P.nose + .22, P.sill + .62, 0, .09, .09, P.wid * .74, 0xe8e8e4, 0);
+    /* Scaled down: the previous frame stood nearly a metre tall and wider
+       than the car. A real push bar is chest-high on the bumper and tucks
+       inside the body line. */
+    var pbX = P.nose + .13;
+    var pbC = 0xd8dade, pad = 0x1a1d21;
+    var pbW = P.wid * .46;                 /* well inside the flanks */
     for(i2 = 0; i2 < 2; i2++){
-      var pz3 = (i2 ? 1 : -1) * P.wid * .30;
-      B.box(P.nose + .20, P.sill + .34, pz3, .10, .74, .10, 0xe8e8e4, 0);
-      B.box(P.nose + .12, P.sill + .30, (i2 ? 1 : -1) * P.wid * .40, .26, .09, .10, 0xe8e8e4, 0);
+      var mz = (i2 ? 1 : -1) * pbW * .62;
+      B.box(P.nose - .04, P.sill + .22, mz, .22, .08, .08, pbC, 0);
+      B.box(pbX, P.sill + .34, mz, .07, .52, .07, pbC, 0);
     }
+    B.box(pbX, P.sill + .16, 0, .06, .07, pbW * 1.34, pbC, 0);
+    B.box(pbX, P.sill + .52, 0, .06, .07, pbW * 1.34, pbC, 0);
+    B.box(pbX + .035, P.sill + .16, 0, .03, .11, pbW * .96, pad, 0);
+    B.box(pbX + .035, P.sill + .52, 0, .03, .11, pbW * .96, pad, 0);
   }
   /* gold accent stripe along the flank, above the moulding */
   if(liv === 'pd' || liv === 'so'){
@@ -5752,6 +6099,55 @@ function detailCrownSedan(B, P, hw, paint, trim, liv){
   /* fuel door */
   B.box(P.tail + .70, P.beltY - .26, hw + .006, .22, .20, .012, shade(paint, .88), 0);
 
+  /* --- reference details: things the real car has that were missing --- */
+  if(P.cabin){
+    var cA = P.cabin[3][0], cC = P.cabin[0][0];
+    /* chrome window surround along the beltline, both flanks */
+    B.box((cA + cC) / 2, P.beltY + .015, hw - .045, Math.abs(cA - cC) * .96, .028, .028, refChrome, 0);
+    B.box((cA + cC) / 2, P.beltY + .015, -(hw - .045), Math.abs(cA - cC) * .96, .028, .028, refChrome, 0);
+    /* B-pillar, blacked out as on the real car */
+    B.box((cA + cC) / 2 + .18, (P.beltY + P.roofY) / 2, hw - .035, .055, P.roofY - P.beltY, .03, 0x14171b, 0);
+    B.box((cA + cC) / 2 + .18, (P.beltY + P.roofY) / 2, -(hw - .035), .055, P.roofY - P.beltY, .03, 0x14171b, 0);
+    /* --- side glass ---
+       The flank was a bare slab between the beltline and the roof. A real
+       Panther has two door windows split by the B-pillar, a fixed quarter
+       light at the back, and chrome running the whole opening. */
+    var gTop = P.roofY - .10, gBot = P.beltY + .055;
+    var gH = gTop - gBot, gY = (gTop + gBot) / 2;
+    var bP = (cA + cC) / 2 + .18;                    /* B-pillar */
+    var sQ;
+    for(sQ = 0; sQ < 2; sQ++){
+      var sz3 = sQ ? (hw - .035) : -(hw - .035);
+      /* front door glass */
+      var fW = Math.abs(cA - bP) - .30;
+      B.box((cA + bP) / 2 - .06, gY, sz3, fW, gH, .028, 0x1c2630, 0);
+      B.box((cA + bP) / 2 - .06, gBot + .012, sz3 - (sQ ? -.012 : .012), fW, .035, .030, refChrome, 0);
+      /* rear door glass */
+      var rW = Math.abs(bP - cC) - .58;
+      B.box((bP + cC) / 2 - .10, gY, sz3, rW, gH, .028, 0x1c2630, 0);
+      B.box((bP + cC) / 2 - .10, gBot + .012, sz3 - (sQ ? -.012 : .012), rW, .035, .030, refChrome, 0);
+      /* fixed quarter light behind the rear door */
+      B.box(cC + .20, gY, sz3, .26, gH * .86, .026, 0x1c2630, 0);
+      /* division bar between the rear door glass and the quarter light */
+      B.box(cC + .36, gY, sz3, .045, gH, .034, refChrome, 0);
+      /* chrome along the top of the opening, under the drip rail */
+      B.box((cA + cC) / 2, gTop - .012, sz3, Math.abs(cA - cC) * .94, .030, .030, refChrome, 0);
+      /* mirror on the front door */
+      B.box(cA - .16, P.beltY + .10, sz3 + (sQ ? .10 : -.10), .10, .13, .16, shade(paint, .96), 0);
+      B.box(cA - .19, P.beltY + .10, sz3 + (sQ ? .15 : -.15), .03, .10, .12, 0x2b3a48, 0);
+    }
+  }
+  /* chrome door handles, front and rear, both sides */
+  var dh;
+  for(dh = 0; dh < 2; dh++){
+    var hz2 = dh ? (hw + .012) : -(hw + .012);
+    B.box(.42, P.beltY - .20, hz2, .22, .045, .022, refChrome, 0);
+    B.box(-.72, P.beltY - .20, hz2, .22, .045, .022, refChrome, 0);
+  }
+  /* rocker chrome under the doors */
+  B.box(0, P.sill + .04, hw - .01, P.len * .58, .035, .022, refChrome, 0);
+  B.box(0, P.sill + .04, -(hw - .01), P.len * .58, .035, .022, refChrome, 0);
+
   /* --- rear ---
      The tail is a busy piece of real estate: it carries the lamps, the plate
      (at sill+.30, on the surface at tail-.015) and the agency lettering
@@ -5776,14 +6172,20 @@ function detailCrownSedan(B, P, hw, paint, trim, liv){
   B.box(P.tail + .01, P.sill + .05, 0, .14, .16, P.wid - .12, shade(paint, .62), 0);
   /* exhaust tucked under */
   B.box(P.tail + .06, P.sill - .06, P.wid * .28, .16, .07, .07, chrome, 0);
+  /* --- Texas registration and inspection stickers, lower windscreen --- */
+  if(P.cabin){
+    var wsx = P.cabin[2][0] - .18;
+    var wsy = P.beltY + .16;
+    /* the combined sticker sits in the driver-side lower corner */
+    B.box(wsx, wsy, hw - .30, .10, .16, .16, 0xdfe3e6, 0);
+    B.box(wsx + .002, wsy + .045, hw - .30, .09, .05, .13, 0x2f6d3a, 0);
+    B.box(wsx + .002, wsy - .045, hw - .30, .09, .05, .13, 0xb03a2e, 0);
+  }
   /* trunk shut line */
   B.box(P.deckX + .06, P.deckY + .012, 0, .022, .02, P.wid * .78, shade(paint, .78), 0);
-  /* One tidy whip on the trunk lid. Anything more on the roof reads as
-     clutter at this scale -- the lightbar already carries the silhouette. */
-  if(liv !== 'civ'){
-    B.box(P.tail + .55, P.deckY + .26, P.wid * .30, .020, .50, .020, 0x1a1d21, 0);
-    B.box(P.tail + .55, P.deckY + .02, P.wid * .30, .06, .05, .06, 0x2a2f36, 0);
-  }
+  /* No mast at all. Anything standing off the roof or deck reads as a stray
+     part sticking out of the car at this scale; the lightbar carries the
+     silhouette on its own. */
 }
 function buildCarBody(def, liv, paintOverride){
   var P = PROFILES[def.body] || PROFILES.sedan;
@@ -5918,7 +6320,10 @@ function applyLivery(B, P, L, liv, hw, chw, paint){
      lettering now, so this band only needs to be a thin accent on the trunk
      lid, well above the plate. */
   if(liv !== 'unmarked' && liv !== 'slick'){
-    faceDecal(B, P.tail, P.sill + .82, P.wid * .44, .045, L.accent, -1);
+    /* This sat at sill+.82 while the trunk lid is at deckY -- 15cm of clear
+       air, so it read as a yellow bar floating above the boot. Put it on the
+       tail panel where a real stripe goes. */
+    faceDecal(B, P.tail, P.beltY - .30, P.wid * .44, .040, L.accent, -1);
   }
 }
 
@@ -6394,16 +6799,25 @@ Vehicle.prototype.sync = function(){
   this.mesh.position.set(this.x, this.ySmooth, this.z);
   var i, P = this.P;
   /* squat and body roll, applied as a child-free approximation */
-  var pitch = clamp(-this.throttle * .014 + this.brake * .026, -.05, .06);
-  var roll = clamp(-this.steer * clamp(Math.abs(this.spd) / 22, 0, 1) * .09, -.09, .09);
+  /* dive and squat driven by the same load term the physics uses, so the
+     body visibly shifts its weight */
+  var load = this.pitchLoad || 0;
+  var pitch = clamp(load * .055 - this.throttle * .010, -.055, .075);
+  var roll = clamp(-(this.steerA !== undefined ? this.steerA : this.steer) * clamp(Math.abs(this.spd) / 22, 0, 1) * .11, -.11, .11);
   this.mesh.rotation.y = -this.h;
   this.mesh.rotation.z = pitch;
   this.mesh.rotation.x = roll;
   for(i = 0; i < this.wheels.length; i++){
     var w = this.wheels[i];
     /* axle lies on Z, so roll on Z and steer on Y */
-    w.rotation.z = this.wheelSpin;
-    w.rotation.y = (i < 2 && !P.bike) ? this.steer * .62 : 0;
+    /* Rolling forward (+X) means the TOP of the wheel moves +X, which about
+       the +Z axis is a NEGATIVE rotation. The positive value spun them
+       backwards at every speed. */
+    w.rotation.z = -this.wheelSpin;
+    /* Mesh yaw is -h, so a right turn (positive steer, h increasing) is a
+       NEGATIVE rotation in mesh space. The positive value pointed the front
+       wheels the opposite way to the turn. */
+    w.rotation.y = (i < 2 && !P.bike) ? -(this.steerA !== undefined ? this.steerA : this.steer) * .62 : 0;
   }
 };
 
@@ -6527,6 +6941,11 @@ function streetAt(x, z){
 function def_topSpeed(def){ return def.top * MPH2MPS; }
 
 Vehicle.prototype.physics = function(dt){
+  /* a vehicle left in park does not creep, roll or reverse on its own */
+  if(this.parkedBrake && this.kind === 'player' && G.veh !== this){
+    this.spd = 0; this.throttle = 0; this.brake = 0;
+    return;
+  }
   var def = this.def, P = this.P;
   var maxS = def.top * MPH2MPS;
   var acc = def.acc * 9.5;
@@ -6565,11 +6984,52 @@ Vehicle.prototype.physics = function(dt){
   }
   this.spd = clamp(this.spd, -maxS * .34, maxS);
 
-  /* steering */
-  var spdF = clamp(1 - Math.abs(this.spd) / (maxS * 1.35), .22, 1);
-  var maxSteer = (.52 + def.hand * .26) * spdF;
-  var eff = this.steer * maxSteer;
-  var turn = (this.spd / Math.max(P.wb, 1.5)) * Math.tan(eff) * grip;
+  /* ---- steering ----
+     The car had no weight: steer input applied instantly and the heading
+     followed it with no lag, so it pivoted almost on the spot. Three things
+     give it mass -- the steering rack takes time to move, the body's yaw
+     takes time to build and to stop, and the front tyres wash out (push
+     wide) instead of the whole car rotating. */
+  var spdF = clamp(1 - Math.abs(this.spd) / (maxS * 1.05), .16, 1);
+  var maxSteer = (.40 + def.hand * .16) * spdF;
+
+  /* rack rate: a quick car still needs a beat to go lock to lock, and it
+     centres faster than it turns */
+  if(this.steerA === undefined) this.steerA = 0;
+  var want = clamp(this.steer, -1, 1);
+  var rate = (Math.abs(want) < Math.abs(this.steerA) ? 5.2 : 3.1) * (.75 + def.hand * .5);
+  this.steerA += clamp(want - this.steerA, -rate * dt, rate * dt);
+
+  var eff = this.steerA * maxSteer;
+  var target = (this.spd / Math.max(P.wb, 1.5)) * Math.tan(eff) * grip;
+
+  /* front-end wash: beyond what the tyres can hold the car understeers
+     rather than turning tighter */
+  var maxLat = 8.6 * grip * (.75 + def.hand * .5);
+  var need = Math.abs(target * this.spd);
+  if(need > maxLat) target *= maxLat / need;
+
+  /* yaw inertia: heavier cars build and shed rotation more slowly */
+  if(this.yaw === undefined) this.yaw = 0;
+  var mass = (def.body === 'semi' || def.body === 'bus' || def.body === 'boxtruck') ? .30
+           : (def.body === 'suv' || def.body === 'truck' ? .48 : .62);
+  /* Weight transfer: braking loads the front and the car turns in harder;
+     hard acceleration unloads it and the nose pushes wide. This is what
+     gives a car the sense of mass moving around rather than a rigid box. */
+  if(this.pitchLoad === undefined) this.pitchLoad = 0;
+  var wantLoad = clamp(this.brake * .85 - this.throttle * .55, -1, 1);
+  this.pitchLoad += (wantLoad - this.pitchLoad) * (1 - Math.pow(.02, dt));
+  target *= (1 + this.pitchLoad * .22);
+
+  /* the rear steps out under power in a turn, and settles as you lift */
+  var power = this.throttle * clamp(Math.abs(this.spd) / 14, 0, 1);
+  if(power > .55 && Math.abs(target) > .28){
+    this.slip = clamp(this.slip + (power - .55) * dt * 1.7, 0, 1);
+  }
+
+  var k = 1 - Math.pow(.0009, dt * mass * (.6 + def.hand * .5));
+  this.yaw += (target - this.yaw) * k;
+  var turn = this.yaw;
   /* oversteer / drift */
   var lat = Math.abs(turn * this.spd);
   var limit = 7.5 * grip * (.7 + def.hand * .6);
@@ -6818,6 +7278,21 @@ Ped.prototype.pose = function(dt){
     fight:(this.state === 'fight')
   }, dt);
 };
+/* the station rooms are real space now, so wandering pedestrians must not
+   route through them the way they did when the rooms sat off-map */
+function inAnyInterior(x, z, pad){
+  if(typeof INTERIORS === 'undefined') return false;
+  var id;
+  for(id in INTERIORS){
+    if(!INTERIORS.hasOwnProperty(id)) continue;
+    var r = INTERIORS[id];
+    if(!r || !r.bounds) continue;
+    var b = r.bounds;
+    if(x > b.x0 - (pad || 0) && x < b.x1 + (pad || 0) &&
+       z > b.z0 - (pad || 0) && z < b.z1 + (pad || 0)) return true;
+  }
+  return false;
+}
 Ped.prototype.update = function(dt){
   var p = this;
   this.t += dt;
@@ -6928,6 +7403,13 @@ Ped.prototype.update = function(dt){
   this.mesh.position.set(this.x, this.y + Math.abs(Math.sin(this.anim)) * .045, this.z);
   this.mesh.rotation.y = -this.h + Math.PI / 2;
   this.mesh.rotation.z = Math.sin(this.anim) * .05;
+  /* if a ped has wandered into a station, push it back out the way it came */
+  if(inAnyInterior(this.x, this.z, .5)){
+    this.x -= Math.cos(this.h) * this.spd * dt * 2.2;
+    this.z -= Math.sin(this.h) * this.spd * dt * 2.2;
+    this.h = angWrap(this.h + Math.PI);
+    if(this.edge) this.tt = clamp(this.tt + .04, 0, 1);
+  }
   this.pose(dt);
 };
 Ped.prototype.step = function(dt){
@@ -6994,7 +7476,7 @@ function spawnTrafficAt(edgeIdx, t, dir){
   var lp0 = lanePoint(e, dir, t, 0);
   var lane = laneOffset(e, dir);
   var x = lp0.x, z = lp0.z;
-  var cd = pickCivDef();
+  var cd = (typeof pickCivDefFor === 'function') ? pickCivDefFor(e) : pickCivDef();
   /* keep the big rigs off residential streets */
   if((cd.body === 'semi' || cd.body === 'bus' || cd.body === 'boxtruck') &&
      e.type !== 'freeway' && e.type !== 'highway' && e.type !== 'arterial' && e.type !== 'frontage'){
@@ -7029,15 +7511,31 @@ function trafficUpdate(v, dt){
      motionless for a long stretch with the road ahead clear, put it back on
      its lane and let it go. */
   if(Math.abs(v.spd) < .4){
-    v.deadT = (v.deadT || 0) + dt;
-    if(v.deadT > 14){
+    /* A car waiting at a red light or queued behind another car is not
+       stuck -- it is behaving correctly. Force-restarting it shoved it into
+       the vehicle ahead, which is where the bumper interpenetration at
+       junctions came from. Only recover cars with no reason to be stopped. */
+    var legit = (v.brakeReason === 'signal' || v.brakeReason === 'queue' ||
+                 v.brakeReason === 'stopsign' || v.brakeReason === 'yield' ||
+                 v.brakeReason === 'crossing');
+    if(legit){
       v.deadT = 0;
-      snapToLane(v);
-      v.spd = 2;
-      v.stopCleared = true;
-      v.yieldT = 99;
+      /* but a signal that never clears is still a fault: allow a much
+         longer fuse so genuine deadlocks still resolve */
+      v.jamT = (v.jamT || 0) + dt;
+      if(v.jamT > 75){ v.jamT = 0; snapToLane(v); v.stopCleared = true; v.yieldT = 99; }
+    } else {
+      v.jamT = 0;
+      v.deadT = (v.deadT || 0) + dt;
+      if(v.deadT > 14){
+        v.deadT = 0;
+        snapToLane(v);
+        v.spd = 2;
+        v.stopCleared = true;
+        v.yieldT = 99;
+      }
     }
-  } else v.deadT = 0;
+  } else { v.deadT = 0; v.jamT = 0; }
   if(v.stopNode !== undefined && v.stopCleared && v.t < .2) v.stopNode = -1;
   updateStuck(v, dt);
   if(v.pulled){ v.throttle = 0; v.brake = 1; v.steer = 0; return; }
@@ -7093,13 +7591,24 @@ function trafficUpdate(v, dt){
   var lateral = (v.x - here.x) * lnx + (v.z - here.z) * lnz;
   v.laneErr = lateral;
   /* pull the aim point across by the error, capped so it never yanks */
-  var corr = clamp(-lateral * 2.10, -5.0, 5.0);
+  /* PD lane keeping. Proportional-only overshoots on anything with a long
+     wheelbase and slow yaw response -- the bus wandered left and right like
+     a drunk because every correction arrived too late and was too big. The
+     derivative term damps that, and the gain scales down with length. */
+  if(v.lastLat === undefined) v.lastLat = lateral;
+  var latRate = (lateral - v.lastLat) / Math.max(dt, .001);
+  v.lastLat = lateral;
+  var lenF = clamp(5.0 / Math.max(v.P ? v.P.len : 4.8, 3), .40, 1.15);
+  var kP = 1.55 * lenF, kD = .42 * lenF;
+  var corr = clamp(-(lateral * kP + latRate * kD), -4.2, 4.2);
   tx += lnx * corr; tz += lnz * corr;
 
   var want = Math.atan2(tz - v.z, tx - v.x);
   var err = angDiff(want, v.h);
   if(v.behav === 'drunk'){ v.wander += dt; err += Math.sin(v.wander * 1.3) * .16; }
-  v.steer = clamp(err * 2.2, -1, 1);
+  /* long vehicles need a gentler hand or they saw back and forth */
+  var steerGain = 2.2 * clamp(5.0 / Math.max(v.P ? v.P.len : 4.8, 3), .45, 1.1);
+  v.steer = clamp(err * steerGain, -1, 1);
 
   /* Wrong-way recovery: if the car is travelling against its lane it has
      lost track of which way it is going -- put it back rather than let it
@@ -7157,6 +7666,12 @@ function trafficUpdate(v, dt){
       /* Mutual yielding can deadlock: each car reads the other as being on
          its right and neither moves. Give up the courtesy after a couple of
          seconds so somebody always takes the gap. */
+      /* merging traffic keeps rolling at lane speed */
+      if(rampMerge(v, b, distToEnd)){
+        tgt = Math.min(tgt, v.mergeSpd * .72);
+      } else if(v.edge && v.edge.type === 'ramp' && v.mergeSpd){
+        tgt = Math.max(tgt, Math.min(v.mergeSpd, tgt + 6));
+      }
       if(junctionYield(v, b, distToEnd) && (v.yieldT || 0) < 2.2){
         v.yieldT = (v.yieldT || 0) + dt;
         tgt = Math.min(tgt, Math.max(0, (distToEnd - 8) * .45));
@@ -7217,6 +7732,17 @@ function trafficUpdate(v, dt){
   if(dv > .4){ v.throttle = clamp(dv * .3, 0, 1); v.brake = 0; }
   else if(dv < -.8){ v.throttle = 0; v.brake = clamp(-dv * .16, 0, 1); }
   else { v.throttle = clamp(dv, 0, .4); v.brake = 0; }
+  /* A car asked to stop while barely moving fell into the middle branch:
+     no throttle AND no brake, so it coasted at a couple of tenths straight
+     into the vehicle ahead and sat there bumper to bumper. Hold the brake
+     and settle to a genuine stop instead. */
+  /* Only when the AI genuinely wants a full stop. A wider band held the
+     brake through ordinary slow-moving traffic and pinned cars in place. */
+  if(tgt < .10 && Math.abs(v.spd) < 1.0){
+    v.throttle = 0;
+    v.brake = 1;
+    if(Math.abs(v.spd) < .15) v.spd = 0;
+  }
   if(v.fleeing) v.throttle = 1;
 }
 function trafficAhead(v, range){
@@ -7251,7 +7777,8 @@ function trafficAhead(v, range){
       take = true;
     }
     if(!take) continue;
-    var allowed = Math.max(0, (d - 7.5) * .9 + v2);
+    /* stop with a real gap, not nose to tail: 5.4m of car plus 2.5m */
+    var allowed = Math.max(0, (d - 8.4) * .9 + v2);
     if(best === null || allowed < best) best = allowed;
   }
   /* parked cars at the kerb: they never move, so a car that does not see
@@ -7280,7 +7807,7 @@ function trafficAhead(v, range){
       var pdot = (pdx * fx + pdz * fz) / pd;
       var plat = Math.abs(-pdx * fz + pdz * fx);
       if(pdot > .80 && plat < 2.6 && Math.cos(angDiff(G.player.h, v.h)) > .30){
-        var pa = Math.max(0, (pd - 7.5) * .9 + G.player.spd * Math.max(0, Math.cos(angDiff(G.player.h, v.h))));
+        var pa = Math.max(0, (pd - 8.4) * .9 + G.player.spd * Math.max(0, Math.cos(angDiff(G.player.h, v.h))));
         if(best === null || pa < best) best = pa;
       }
     }
@@ -7294,7 +7821,33 @@ function trafficAhead(v, range){
    now nobody yielded at them at all -- cars simply drove through each
    other's path. First to arrive goes; otherwise yield to the right.
    ============================================================ */
+/* A car leaving a ramp should MERGE -- match the speed of the through
+   traffic and slot into a gap -- not treat the join as an intersection and
+   stop dead on the shoulder. */
+function rampMerge(v, node, distToEnd){
+  if(!v.edge || v.edge.type !== 'ramp') return false;
+  if(distToEnd > 90) return false;
+  var i, gap = 1e9, thruSpd = 0;
+  for(i = 0; i < G.traffic.length; i++){
+    var o = G.traffic[i];
+    if(o === v || !o.edge) continue;
+    if(o.edge.type !== 'freeway' && o.edge.type !== 'highway') continue;
+    var d = dist(o.x, o.z, node.x, node.z);
+    if(d > 110) continue;
+    /* only cars still approaching the merge point matter */
+    var toward = Math.cos(o.h) * (node.x - o.x) + Math.sin(o.h) * (node.z - o.z);
+    if(toward < 0) continue;
+    if(d < gap){ gap = d; thruSpd = Math.abs(o.spd); }
+  }
+  if(gap > 1e8) return false;
+  /* build to roughly the speed of the lane you are joining */
+  v.mergeSpd = Math.max(thruSpd * .92, 11);
+  /* if the gap is tight, ease off and take the one behind it */
+  return gap < 26;
+}
 function junctionYield(v, node, distToEnd){
+  /* ramps merge instead of yielding at a stop line */
+  if(v && v.edge && v.edge.type === 'ramp') return false;
   if(!node || node.light || node.stop) return false;
   if(node.e.length < 3) return false;              /* not a real junction */
   if(distToEnd > 22 + v.spd * .8) return false;
@@ -7566,15 +8119,43 @@ function buildPerson(opts){
   var H = new Builder();
   var hh = headR * 2.0;
   H.box(0, 0, 0, headR * 1.85, hh, headR * 1.75, skin, 0);
-  /* brow ridge + eyes, the flat-shaded look from the references */
-  H.box(-headR * .42, headR * .18, headR * .90, headR * .40, headR * .12, .02 * S, 0x1a1512, 0);
-  H.box( headR * .42, headR * .18, headR * .90, headR * .40, headR * .12, .02 * S, 0x1a1512, 0);
-  H.box(-headR * .42, headR * .02, headR * .90, headR * .30, headR * .22, .02 * S, 0x15120f, 0);
-  H.box( headR * .42, headR * .02, headR * .90, headR * .30, headR * .22, .02 * S, 0x15120f, 0);
-  /* nose */
-  H.box(0, -headR * .12, headR * 1.00, headR * .26, headR * .40, headR * .28, shade(skin, .96), 0);
-  /* mouth */
-  H.box(0, -headR * .52, headR * .90, headR * .50, headR * .07, .02 * S, shade(skin, .72), 0);
+  /* --- face ---
+     A head is not a cube: the skull tapers to the jaw, the brow sits proud
+     of the eyes, and the eyes sit in sockets. Building those as real steps
+     rather than decals on a flat front is what separates a face from a
+     painted box. */
+  /* cheekbones and a narrower jaw below them */
+  H.box(0, -headR * .30, headR * .06, headR * 1.66, headR * .60, headR * 1.62, shade(skin, .985), 0);
+  H.box(0, -headR * .62, headR * .10, headR * 1.34, headR * .34, headR * 1.44, shade(skin, .97), 0);
+  /* chin */
+  H.box(0, -headR * .80, headR * .52, headR * .70, headR * .26, headR * .58, shade(skin, .99), 0);
+  /* brow ridge, proud of the face */
+  H.box(0, headR * .30, headR * .86, headR * 1.62, headR * .18, headR * .16, shade(skin, 1.03), 0);
+  /* eye sockets recessed, then the eyes inside them */
+  H.box(-headR * .42, headR * .06, headR * .84, headR * .48, headR * .30, headR * .10, shade(skin, .90), 0);
+  H.box( headR * .42, headR * .06, headR * .84, headR * .48, headR * .30, headR * .10, shade(skin, .90), 0);
+  /* whites, then irises set into them */
+  H.box(-headR * .42, headR * .06, headR * .90, headR * .38, headR * .19, .02 * S, 0xe8e4dc, 0);
+  H.box( headR * .42, headR * .06, headR * .90, headR * .38, headR * .19, .02 * S, 0xe8e4dc, 0);
+  var eyeCol = opts.eyes !== undefined ? opts.eyes : pick([0x3c2a1a, 0x2f4a63, 0x3f5a3a, 0x4a3a2a]);
+  H.box(-headR * .42, headR * .05, headR * .93, headR * .16, headR * .16, .02 * S, eyeCol, 0);
+  H.box( headR * .42, headR * .05, headR * .93, headR * .16, headR * .16, .02 * S, eyeCol, 0);
+  /* pupils */
+  H.box(-headR * .42, headR * .05, headR * .95, headR * .07, headR * .08, .015 * S, 0x100d0b, 0);
+  H.box( headR * .42, headR * .05, headR * .95, headR * .07, headR * .08, .015 * S, 0x100d0b, 0);
+  /* eyebrows above the ridge */
+  H.box(-headR * .42, headR * .26, headR * .92, headR * .46, headR * .10, .02 * S, shade(hair, .82), 0);
+  H.box( headR * .42, headR * .26, headR * .92, headR * .46, headR * .10, .02 * S, shade(hair, .82), 0);
+  /* nose: bridge from between the brows, then the tip and nostrils */
+  H.box(0, headR * .08, headR * .94, headR * .17, headR * .34, headR * .16, shade(skin, 1.01), 0);
+  H.box(0, -headR * .18, headR * 1.00, headR * .25, headR * .22, headR * .26, shade(skin, .98), 0);
+  H.box(-headR * .13, -headR * .28, headR * .96, headR * .07, headR * .08, .03 * S, shade(skin, .74), 0);
+  H.box( headR * .13, -headR * .28, headR * .96, headR * .07, headR * .08, .03 * S, shade(skin, .74), 0);
+  /* mouth: upper and lower lip, slightly set in */
+  H.box(0, -headR * .50, headR * .93, headR * .46, headR * .08, .02 * S, shade(skin, .80), 0);
+  H.box(0, -headR * .58, headR * .92, headR * .40, headR * .07, .02 * S, shade(skin, .70), 0);
+  /* philtrum */
+  H.box(0, -headR * .40, headR * .95, headR * .06, headR * .10, .015 * S, shade(skin, .93), 0);
   /* ears */
   H.box(-headR * .95, -headR * .05, 0, headR * .12, headR * .38, headR * .30, shade(skin, .94), 0);
   H.box( headR * .95, -headR * .05, 0, headR * .12, headR * .38, headR * .30, shade(skin, .94), 0);
@@ -7590,6 +8171,8 @@ function buildPerson(opts){
     if(hs === 3) H.box(0, -headR * .10, -headR * 1.10, headR * .55, headR * 1.20, headR * .45, hair, 0); /* ponytail */
     if(hs === 4) H.box(0, top + headR * .55, -headR * .70, headR * .70, headR * .60, headR * .60, hair, 0); /* bun */
   }
+  /* light stubble on some faces, which reads as jaw definition at distance */
+  if(opts.stubble || (opts.stubble === undefined && !female && wrand < 0 ? false : false)){ }
   if(opts.glasses){
     H.box(0, headR * .06, headR * .96, headR * 1.60, headR * .30, .025 * S, 0x101216, 0);
   }
@@ -7610,15 +8193,19 @@ function buildPerson(opts){
     }
   }
   var neck = new THREE.Group();
-  neck.position.y = shoulderY + headR * .28;
+  /* The head box is 2*headR tall and centred on this pivot, so its base sits
+     headR BELOW the pivot. Placing the pivot only .28*headR above the
+     shoulders buried nearly three quarters of the head in the torso. Lift it
+     clear: half a head, plus the neck stub, plus a little daylight. */
+  neck.position.y = shoulderY + headR * 1.06 + .06 * S;
   var head = mkPart(H, mat);
   neck.add(head);
   g.add(neck);
   /* neck stub */
   var NK = new Builder();
-  NK.box(0, 0, 0, headR * .78, .10 * S, headR * .78, shade(skin, .90), 0);
+  NK.box(0, 0, 0, headR * .74, .18 * S, headR * .74, shade(skin, .92), 0);
   var nk = mkPart(NK, mat);
-  nk.position.y = shoulderY + .02 * S;
+  nk.position.y = shoulderY + .07 * S;
   g.add(nk);
 
   /* ---- limbs ----
@@ -7678,7 +8265,7 @@ function buildPerson(opts){
                      armL:armL, armR:armR, legL:legL, legR:legR,
                      elbowL:armL.userData.joint, elbowR:armR.userData.joint,
                      kneeL:legL.userData.joint, kneeR:legR.userData.joint,
-                     hipY:hipY, neckY:shoulderY + headR * .28, S:S };
+                     hipY:hipY, neckY:shoulderY + headR * 1.06 + .06 * S, S:S };
   return g;
 }
 
@@ -7893,8 +8480,19 @@ function laneOffset(edge, dir){
   var half = edge.w * .5;
   /* centre of the innermost forward lane, kept off the centreline and
      off the curb */
-  var laneW = Math.min(3.6, (half - .6) / Math.max(1, lanes));
-  return (half - laneW * .5 - .4) * (dir > 0 ? -1 : 1);
+  /* Put the car in the MIDDLE of its lane, not up against the kerb. The
+     old formula measured in from the outside edge, which on a 12m street
+     put traffic 3.8m off the centreline when the lane's true centre is
+     2.75m -- so every car looked offset from its own painted lane.
+     NO dir term: lanePoint already swaps the endpoints for dir<0. */
+  /* Sign convention, verified empirically rather than reasoned about: with
+     the perpendicular this code uses, a POSITIVE offset puts an east-bound
+     car on the +Z (south) half of the road -- which is right-hand traffic.
+     The negative sign was putting everyone on the left, UK style. */
+  var usable = half - .5;                       /* inside the edge line */
+  if(lanes <= 1) return usable * .5;            /* one lane each way */
+  var laneW = Math.min(3.6, usable / lanes);
+  return .35 + laneW * .5;                      /* innermost lane */
 }
 function lanePoint(edge, dir, t, extra){
   var a = NODES[dir > 0 ? edge.a : edge.b];
@@ -7996,8 +8594,14 @@ function laneFree(x, z, minD){
 }
 
 function resolveVehicleCollisions(dt){
-  var pass;
-  for(pass = 0; pass < 3; pass++) collisionPass(dt, pass);
+  /* Three passes did not converge in a dense queue: separating one pair
+     pushes a car into the next, and the chain needs more iterations than
+     the queue is long. Run until nothing is left overlapping, with a cap. */
+  var pass, moved;
+  for(pass = 0; pass < 10; pass++){
+    moved = collisionPass(dt, pass);
+    if(!moved) break;
+  }
   resolveParkedCollisions();
 }
 /* Parked cars are immovable, so a moving car that reaches one gets pushed
@@ -8006,6 +8610,29 @@ function resolveVehicleCollisions(dt){
 function resolveParkedCollisions(){
   if(!G.parked || !G.parked.length) return;
   var i, j;
+  /* the player's unit must hit parked cars too -- they were scenery before */
+  var pv = G.veh || G.cruiser;
+  if(pv){
+    for(j = 0; j < G.parked.length; j++){
+      var pk2 = G.parked[j];
+      var ddx = pv.x - pk2.x, ddz = pv.z - pk2.z;
+      if(ddx * ddx + ddz * ddz > 64) continue;
+      var h2 = satOverlap(vehBox(pv), vehBox(pk2));
+      if(!h2) continue;
+      var L2 = Math.sqrt(h2.nx * h2.nx + h2.nz * h2.nz) || 1;
+      /* the parked car takes some of it, so a hit shunts it aside */
+      pv.x -= (h2.nx / L2) * (h2.depth + .02) * .72;
+      pv.z -= (h2.nz / L2) * (h2.depth + .02) * .72;
+      pk2.x += (h2.nx / L2) * (h2.depth + .02) * .28;
+      pk2.z += (h2.nz / L2) * (h2.depth + .02) * .28;
+      pk2.sync();
+      if(Math.abs(pv.spd) > 6){
+        pv.dmg = clamp((pv.dmg || 0) + Math.abs(pv.spd) * .004, 0, 1);
+        if(typeof Audio_crash === 'function') Audio_crash(Math.abs(pv.spd));
+      }
+      pv.spd *= .74;
+    }
+  }
   for(i = 0; i < G.traffic.length; i++){
     var v = G.traffic[i];
     if(!v.alive) continue;
@@ -8030,6 +8657,7 @@ function resolveParkedCollisions(){
   }
 }
 function collisionPass(dt, pass){
+  var worst = 0;
   var list = G.traffic;
   var i, j, n = list.length;
   var px = G.player.x, pz = G.player.z;
@@ -8046,6 +8674,7 @@ function collisionPass(dt, pass){
       var dq = (v.x - o.x) * (v.x - o.x) + (v.z - o.z) * (v.z - o.z);
       if(dq > 169) continue;                      /* 13m broad phase */
       var push = separate(v, o);
+      if(push > worst) worst = push;
       if(push > .35){
         if(pass === 0){ v.nudge = (v.nudge || 0) + dt; o.nudge = (o.nudge || 0) + dt; }
       }
@@ -8076,6 +8705,7 @@ function collisionPass(dt, pass){
     /* a car that has been shoved for a while gives up and re-acquires a lane */
     if(pass === 0 && v.nudge > 2.2){ v.nudge = 0; snapToLane(v); }
   }
+  return worst > .004;
 }
 /* put a wedged car back on the nearest legal lane heading */
 function snapToLane(v){
@@ -8338,7 +8968,7 @@ function takeVehicle(v){
    are real vehicles from the civilian fleet, streamed in around the player,
    so anything you can see parked you can also get into.
    ============================================================ */
-var PARKED_MAX = 26, PARK_T = 0;
+var PARKED_MAX = 8, PARK_T = 0;
 function parkSpotsNear(px, pz, out){
   var near = edgesNear(px, pz), i;
   for(i = 0; i < near.length; i++){
@@ -8348,6 +8978,12 @@ function parkSpotsNear(px, pz, out){
        beside the running lanes. On a narrow street there is no room, so
        traffic simply drove through the parked cars. */
     if(e.w < 14) continue;
+    /* kerbside parking is a downtown/commercial thing here, not a
+       residential one -- 26 cars lining every street read as a city
+       centre everywhere */
+    var dq = (typeof districtAt === 'function') ? districtAt(
+      (NODES[e.a].x + NODES[e.b].x) / 2, (NODES[e.a].z + NODES[e.b].z) / 2) : null;
+    if(!dq || (dq.kind !== 'downtown' && dq.kind !== 'commercial' && dq.kind !== 'oldres')) continue;
     out.push(e);
   }
   return out;
@@ -8392,8 +9028,28 @@ function updateParked(dt){
   if(d < 40 || d > 190) return;
   if(!laneFree(x, z, 8)) return;
   if(!G.parked.every ? false : false){ /* noop for ES5 clarity */ }
+  /* Do not drop a parked car on top of anything already there. Checking
+     only against other parked cars let them land on moving traffic, on the
+     player's unit and on backup units -- which is the stack of cars glitching
+     outside the station. */
   var q;
   for(q = 0; q < G.parked.length; q++) if(dist(x, z, G.parked[q].x, G.parked[q].z) < 9) return;
+  for(q = 0; q < G.traffic.length; q++) if(dist(x, z, G.traffic[q].x, G.traffic[q].z) < 9) return;
+  if(G.cruiser && dist(x, z, G.cruiser.x, G.cruiser.z) < 11) return;
+  if(G.veh && dist(x, z, G.veh.x, G.veh.z) < 11) return;
+  if(G.backup) for(q = 0; q < G.backup.length; q++){
+    var bu = G.backup[q];
+    if(bu && bu.veh && dist(x, z, bu.veh.x, bu.veh.z) < 11) return;
+  }
+  /* and never inside a station or shop footprint */
+  if(typeof inAnyInterior === 'function' && inAnyInterior(x, z, 6)) return;
+  /* and not inside a garage bay or other reserved area */
+  if(typeof NOPARK !== 'undefined'){
+    for(q = 0; q < NOPARK.length; q++){
+      var npz = NOPARK[q];
+      if(Math.abs(x - npz.x) < npz.hw && Math.abs(z - npz.z) < npz.hd) return;
+    }
+  }
 
   var cd = pickCivDef();
   if(cd.body === 'semi' || cd.body === 'bus' || cd.body === 'boxtruck') cd = CIV_FLEET[0];
@@ -8615,6 +9271,7 @@ function updateStop(dt){
     if(Math.abs(v.spd) < .5){
       v.stopState = 'stopped';
       v.pulled = true;
+    if(typeof stopBegin === 'function') stopBegin(v);
       v.stopTime = 0;
     }
   } else if(v.stopState === 'stopped'){
@@ -12282,6 +12939,143 @@ function Audio_crossingBell(){
     setTimeout(function(){ Audio_beep(880, .10, 'sine', .07); }, i * 340);
   }
 }
+
+
+/* ============================================================
+   CITY AMBIENCE
+   Occasional one-shots layered over the existing traffic wash: distant
+   horns, a dog, a siren passing somewhere else, an aircraft, a train
+   horn. Density is tied to where you are and what time it is, so a
+   rural road at 3am is not the same soundscape as downtown at noon.
+   ============================================================ */
+var CITY_T = 0, CITY_NEXT = 9;
+function cityOneShot(kind, gain){
+  if(!AC || !(SFXBUS || MASTER)) return;
+  try {
+    var now = AC.currentTime;
+    var o = AC.createOscillator(), g = AC.createGain();
+    var f = AC.createBiquadFilter();
+    f.type = 'lowpass';
+    f.frequency.value = 900;
+    o.connect(f); f.connect(g); g.connect(SFXBUS || MASTER);
+    var v = (gain || .06);
+    if(kind === 'horn'){
+      o.type = 'square'; o.frequency.value = 330;
+      g.gain.setValueAtTime(0, now);
+      g.gain.linearRampToValueAtTime(v, now + .03);
+      g.gain.setValueAtTime(v, now + .34);
+      g.gain.exponentialRampToValueAtTime(.0001, now + .55);
+      o.start(now); o.stop(now + .6);
+    } else if(kind === 'dog'){
+      o.type = 'sawtooth'; o.frequency.setValueAtTime(240, now);
+      o.frequency.exponentialRampToValueAtTime(150, now + .16);
+      g.gain.setValueAtTime(v * .8, now);
+      g.gain.exponentialRampToValueAtTime(.0001, now + .22);
+      o.start(now); o.stop(now + .25);
+    } else if(kind === 'far_siren'){
+      o.type = 'sine'; o.frequency.setValueAtTime(620, now);
+      o.frequency.linearRampToValueAtTime(880, now + .7);
+      o.frequency.linearRampToValueAtTime(620, now + 1.4);
+      g.gain.setValueAtTime(0, now);
+      g.gain.linearRampToValueAtTime(v * .55, now + .3);
+      g.gain.linearRampToValueAtTime(.0001, now + 1.8);
+      o.start(now); o.stop(now + 1.9);
+    } else if(kind === 'plane'){
+      o.type = 'sawtooth'; o.frequency.setValueAtTime(70, now);
+      o.frequency.linearRampToValueAtTime(58, now + 3.2);
+      f.frequency.value = 260;
+      g.gain.setValueAtTime(0, now);
+      g.gain.linearRampToValueAtTime(v * .7, now + 1.1);
+      g.gain.linearRampToValueAtTime(.0001, now + 3.4);
+      o.start(now); o.stop(now + 3.5);
+    } else {              /* distant train horn */
+      o.type = 'triangle'; o.frequency.value = 196;
+      g.gain.setValueAtTime(0, now);
+      g.gain.linearRampToValueAtTime(v * .8, now + .12);
+      g.gain.setValueAtTime(v * .8, now + .8);
+      g.gain.exponentialRampToValueAtTime(.0001, now + 1.5);
+      o.start(now); o.stop(now + 1.6);
+    }
+  } catch(e){ }
+}
+function updateCityAmbience(dt){
+  if(!AC || !AMB || !AMB.humGain) return;
+  CITY_T += dt;
+  if(CITY_T < CITY_NEXT) return;
+  CITY_T = 0;
+  var d = (typeof districtAt === 'function') ? districtAt(G.player.x, G.player.z) : null;
+  var urban = d && (d.kind === 'downtown' || d.kind === 'commercial' ||
+                    d.kind === 'industrial');
+  var hr = G.hour || 12;
+  var quiet = (hr < 6 || hr > 22);
+  /* how often, and how loud */
+  CITY_NEXT = (urban ? rng(7, 16) : rng(16, 34)) * (quiet ? 1.7 : 1);
+  var roll = wrand();
+  var g = (urban ? .07 : .045) * (quiet ? .6 : 1);
+  if(urban){
+    if(roll < .42) cityOneShot('horn', g);
+    else if(roll < .60) cityOneShot('far_siren', g);
+    else if(roll < .76) cityOneShot('dog', g * .7);
+    else if(roll < .90) cityOneShot('plane', g);
+    else cityOneShot('train', g);
+  } else {
+    if(roll < .34) cityOneShot('dog', g);
+    else if(roll < .58) cityOneShot('train', g);
+    else if(roll < .78) cityOneShot('plane', g);
+    else cityOneShot('horn', g * .6);
+  }
+}
+
+
+/* ============================================================
+   NPC ENGINE NOISE
+   One shared engine bed whose pitch and level track the nearest few
+   vehicles, rather than a source per car. At this scale that is
+   indistinguishable and costs almost nothing.
+   ============================================================ */
+var NPCENG = null;
+function initNpcEngines(){
+  if(!AC || NPCENG) return;
+  try {
+    var o = AC.createOscillator(), o2 = AC.createOscillator();
+    var g = AC.createGain(), f = AC.createBiquadFilter();
+    f.type = 'lowpass'; f.frequency.value = 420;
+    o.type = 'sawtooth'; o.frequency.value = 70;
+    o2.type = 'square';  o2.frequency.value = 47;
+    var g2 = AC.createGain(); g2.gain.value = .35;
+    o.connect(f); o2.connect(g2); g2.connect(f);
+    f.connect(g); g.connect(SFXBUS || MASTER);
+    g.gain.value = 0;
+    o.start(); o2.start();
+    NPCENG = { osc:o, osc2:o2, gain:g, filt:f };
+  } catch(e){ NPCENG = null; }
+}
+function updateNpcEngines(dt){
+  if(!AC || !(SFXBUS || MASTER)) return;
+  if(!NPCENG) initNpcEngines();
+  if(!NPCENG) return;
+  var i, near = 0, load = 0, best = 1e9;
+  for(i = 0; i < G.traffic.length; i++){
+    var v = G.traffic[i];
+    var d = dist(v.x, v.z, G.player.x, G.player.z);
+    if(d > 55) continue;
+    near++;
+    if(d < best){ best = d; }
+    load += Math.abs(v.spd) / Math.max(1, d * .35);
+  }
+  var want = 0, pitch = 62;
+  if(near){
+    want = clamp(.010 + near * .0055 + (55 - Math.min(best, 55)) * .0011, 0, .075);
+    pitch = 58 + clamp(load, 0, 16) * 3.4;
+  }
+  /* muffle everything when you are indoors */
+  if(G.interior) want *= .25;
+  try {
+    NPCENG.gain.gain.setTargetAtTime(want, AC.currentTime, .25);
+    NPCENG.osc.frequency.setTargetAtTime(pitch, AC.currentTime, .30);
+    NPCENG.osc2.frequency.setTargetAtTime(pitch * .68, AC.currentTime, .30);
+  } catch(e){ }
+}
 /* ============================================================
    WEAPONS / USE OF FORCE
    Everything here is a duty tool. Drawing one is a reportable act:
@@ -12595,7 +13389,7 @@ var SETTINGS_DEF = {
   siren:      { n:'Default Siren',    v:'0',     opts:[['0','Wail'],['1','Yelp'],['2','Phaser'],['3','Hi-Lo']],
                 d:'Which tone the siren starts on.' },
   units:      { n:'Speed Units',      v:'mph',   opts:[['mph','MPH'],['kph','KPH']], d:'Speedometer and radar readout.' },
-  timeScale:  { n:'Clock Speed',      v:'22',    opts:[['1','Real Time'],['10','Slow'],['22','Normal'],['60','Fast']],
+  timeScale:  { n:'Clock Speed',      v:'22',    opts:[['live','Match My Clock'],['1','Real Time'],['10','Slow'],['22','Normal'],['60','Fast']],
                 d:'How quickly the in-game day advances.' },
   autosave:   { n:'Autosave',         v:'on',    opts:[['off','Off'],['on','On']], d:'Saves at every end of watch.' },
   touchUI:    { n:'Touch Controls',   v:'auto',  opts:[['auto','Auto'],['on','Always On'],['off','Hidden']],
@@ -12619,6 +13413,9 @@ function initSettings(){
 }
 function saveSettings(){ Store.set('cfp_settings', G.set); }
 function applySettings(){
+  /* 'live' follows the device clock, so the sun and the sky match the time
+     where you actually are. Anything else is a multiplier on game time. */
+  G.liveClock = (G.set.timeScale === 'live');
   G.timeScale = parseFloat(G.set.timeScale) || 22;
   G.voiceOn = G.set.voice === 'on';
   G.muted = G.set.sfx === 'off';
@@ -13250,256 +14047,300 @@ function resolveInteriorSolids(id, np, r){
     }
   }
 }
-var INT_BASE = { x:0, z:2350 };   /* rooms live past the south edge, out of the playfield */
-
-function buildInteriors(scene){
-  var B = new Builder();
-
-  /* ---------- CFPD station lobby + locker room ---------- */
-  var ix = INT_BASE.x, iz = INT_BASE.z;
-  var W = 26, D = 34, H = 4.2;
-  var wall = 0xdad6cc, floorC = 0xb9b2a4, trim = 0x1b2a44;
-  /* floor + ceiling */
-  B.plate(ix, .02, iz, W, D, floorC, 0);
-  B.box(ix, H, iz, W, .3, D, 0xcfccc4, 0);
-  /* perimeter walls */
-  B.box(ix, H / 2, iz - D / 2, W, H, .4, wall, 0);
-  B.box(ix, H / 2, iz + D / 2, W, H, .4, wall, 0);
-  B.box(ix - W / 2, H / 2, iz, .4, H, D, wall, 0);
-  B.box(ix + W / 2, H / 2, iz, .4, H, D, wall, 0);
-  /* wainscot band */
-  B.box(ix, 1.0, iz - D / 2 + .25, W - .8, .5, .1, trim, 0);
-  B.box(ix, 1.0, iz + D / 2 - .25, W - .8, .5, .1, trim, 0);
-
-  /* front desk */
-  B.box(ix, .85, iz - D / 2 + 5, 9, 1.7, 2.0, 0x8a7a5c, 0);
-  intSolid('pd', ix, iz - D / 2 + 5, 4.6, 1.2);
-  B.box(ix, 1.75, iz - D / 2 + 5, 9.4, .12, 2.4, 0x6d5f45, 0);
-  /* flags behind the desk */
-  B.box(ix - 3.4, 1.9, iz - D / 2 + .6, .1, 3.4, .1, 0x8a8f96, 0);
-  B.box(ix - 3.0, 3.0, iz - D / 2 + .65, .8, .9, .05, 0xb03a2e, 0);
-  B.box(ix + 3.4, 1.9, iz - D / 2 + .6, .1, 3.4, .1, 0x8a8f96, 0);
-  B.box(ix + 3.0, 3.0, iz - D / 2 + .65, .8, .9, .05, 0x1f3a6e, 0);
-  /* bench seating */
-  B.box(ix - W / 2 + 2.4, .5, iz - 6, 1.2, .35, 7, 0x6d5f45, 0);
-  B.box(ix + W / 2 - 2.4, .5, iz - 6, 1.2, .35, 7, 0x6d5f45, 0);
-  intSolid('pd', ix - W / 2 + 2.4, iz - 6, .7, 3.6);
-  intSolid('pd', ix + W / 2 - 2.4, iz - 6, .7, 3.6);
-  /* bulletin boards */
-  B.box(ix - W / 2 + .28, 2.2, iz - 2, .07, 1.6, 3.4, 0x8a6d3b, 0);
-  B.box(ix - W / 2 + .32, 2.2, iz - 2, .04, 1.35, 3.1, 0xe8e4d4, 0);
-
-  /* dividing wall into the locker room, with a doorway */
-  B.box(ix - W / 2 + 6.5, H / 2, iz + 4, 13, H, .35, wall, 0);
-  B.box(ix + W / 2 - 3.5, H / 2, iz + 4, 7, H, .35, wall, 0);
-
-  /* --- locker room (back half) --- */
-  var lz = iz + 4 + (D / 2 - 4) / 2;
+/* Rooms used to live off-map and you were teleported in. They are now built
+   at their own station so you simply walk through the door -- no transition,
+   no loading, the world carries on around you. */
+/* reserved areas nothing may park in (garage bays, ramps, apron) */
+var NOPARK = [];
+var INT_BASE = { x:0, z:2350 };
+/* find clear ground near a station for its interior, preferring behind it */
+function intFindSpot(ax, az, w, d){
+  var tries = [[0, 62], [0, -62], [62, 0], [-62, 0], [0, 86], [0, -86],
+               [86, 0], [-86, 0], [62, 62], [-62, 62], [62, -62], [-62, -62],
+               [0, 110], [110, 0], [-110, 0], [0, -110]];
   var i;
-  for(i = 0; i < 8; i++){
-    var lx = ix - W / 2 + 2.2 + i * 1.35;
-    B.box(lx, 1.15, iz + D / 2 - 1.3, 1.15, 2.3, 1.0, i % 2 ? 0x4a5560 : 0x51606c, 0);
-    B.box(lx, 1.15, iz + D / 2 - .78, 1.05, 2.1, .06, 0x39434d, 0);
-    B.box(lx + .35, 1.15, iz + D / 2 - .74, .10, .35, .05, 0xb9bec4, 0);   /* handle */
-    intSolid('pd', lx, iz + D / 2 - 1.3, .60, .55);
-  }
-  /* changing bench */
-  B.box(ix - 2, .45, iz + D / 2 - 4.4, 10, .3, 1.0, 0x8a7a5c, 0);
-  intSolid('pd', ix - 2, iz + D / 2 - 4.4, 5.0, .5);
-  B.box(ix - 6.4, .22, iz + D / 2 - 4.4, .3, .45, .8, 0x6d5f45, 0);
-  B.box(ix + 2.4, .22, iz + D / 2 - 4.4, .3, .45, .8, 0x6d5f45, 0);
-  /* mirror */
-  B.box(ix + W / 2 - .30, 1.9, iz + D / 2 - 4.5, .06, 1.9, 3.2, 0x9fb6c4, 0);
-  /* armory cage in the corner */
-  B.box(ix + W / 2 - 3.0, 1.4, iz + 6.4, 4.6, 2.8, .12, 0x39434d, 0);
-  for(i = 0; i < 6; i++){
-    B.box(ix + W / 2 - 5.1 + i * .78, 1.4, iz + 6.35, .06, 2.8, .06, 0x59646f, 0);
-  }
-  B.box(ix + W / 2 - 3.0, 2.0, iz + 7.4, 3.4, .9, .5, 0x2a2f38, 0);   /* rifle rack */
-  intSolid('pd', ix + W / 2 - 3.0, iz + 6.4, 2.3, .3);
-
-  /* ---- holding cells along the west wall ---- */
-  var cellZ = iz + 1.5;
-  for(i = 0; i < 3; i++){
-    var cz2 = cellZ + i * 4.2;
-    /* cell walls */
-    B.box(ix - W / 2 + 2.2, H / 2, cz2 - 2.1, 4.4, H, .22, 0xb8b4aa, 0);
-    intSolid('pd', ix - W / 2 + 2.2, cz2 - 2.1, 2.2, .2);
-    /* bars facing the corridor */
-    var bq;
-    for(bq = 0; bq < 8; bq++){
-      B.box(ix - W / 2 + .35 + bq * .55, 1.35, cz2, .07, 2.7, .07, 0x59646f, 0);
+  for(i = 0; i < tries.length; i++){
+    var x = ax + tries[i][0], z = az + tries[i][1];
+    if(typeof footprintClear === 'function' && footprintClear(x, z, w + 16, d + 16, 0, 8)){
+      return { x:x, z:z };
     }
-    B.box(ix - W / 2 + 2.2, 2.78, cz2, 4.4, .16, .16, 0x59646f, 0);
-    intSolid('pd', ix - W / 2 + 2.2, cz2, 2.2, .18);
-    /* bunk + toilet inside */
-    B.box(ix - W / 2 + 1.3, .40, cz2 - 1.2, 2.0, .30, 1.4, 0x8a9096, 0);
-    B.box(ix - W / 2 + 3.4, .35, cz2 - 1.6, .5, .70, .5, 0xdfe3e6, 0);
   }
-  /* booking desk in front of the cells */
-  B.box(ix - W / 2 + 7.2, .85, iz + 5.5, 1.8, 1.7, 5.0, 0x6d5f45, 0);
-  intSolid('pd', ix - W / 2 + 7.2, iz + 5.5, 1.0, 2.6);
-  B.box(ix - W / 2 + 7.2, 1.78, iz + 5.5, 2.2, .12, 5.4, 0x574b36, 0);
-
-  /* ---- motor pool bay: repair and refit ---- */
-  var gz2 = iz - D / 2 - 9;
-  B.plate(ix + 8, .03, gz2, 16, 16, 0x6e737a, 0);
-  B.box(ix + 8, H / 2, gz2 - 8, 16, H, .4, 0xc6c2b8, 0);
-  B.box(ix + 8, H, gz2, 16, .3, 16, 0xcfccc4, 0);
-  B.box(ix + 16, H / 2, gz2, .4, H, 16, 0xc6c2b8, 0);
-  /* lift, tool chest, tyre stack */
-  B.box(ix + 8, .18, gz2, 5.0, .36, 2.2, 0x4a5058, 0);
-  B.box(ix + 14.4, .75, gz2 - 5, 1.2, 1.5, 3.0, 0xb03a2e, 0);
-  intSolid('pd', ix + 14.4, gz2 - 5, .7, 1.6);
-  for(i = 0; i < 4; i++) B.cyl(ix + 2.4, i * .34, gz2 + 5.5, .55, .55, .32, 8, 0x1e2126, 3);
-  intSolid('pd', ix + 2.4, gz2 + 5.5, .6, .6);
-  /* bay mouth marking */
-  B.plate(ix + 8, .05, gz2 + 7.4, 12, .4, 0xd6b83c, 0);
-
-  /* exit mat by the front door */
-  B.plate(ix, .06, iz - D / 2 + 1.4, 3.6, 1.6, 0x8d1f2b, 0);
-
-  var mesh = new THREE.Mesh(B.geo(), new THREE.MeshLambertMaterial({ vertexColors:true }));
-  scene.add(mesh);
-
-  /* interior lighting is faked with a local ambient boost while inside */
-  INTERIORS.pd = {
-    name:'CYPRESS FALLS POLICE',
-    x:ix, z:iz,
-    spawnX:ix, spawnZ:iz - D / 2 + 2.6,
-    exitX:ix, exitZ:iz - D / 2 + 1.4,
-    /* stand in FRONT of the middle of the locker bank. The trigger used to
-       sit off to one side of the bank, so at the Sheriff's Office you were
-       about 4m away from it while standing at the lockers and it never
-       armed. */
-    lockerX:ix - 6.1, lockerZ:iz + D / 2 - 3.4,
-    armoryX:ix + W / 2 - 3.0, armoryZ:iz + 7.6,
-    jailX:ix - W / 2 + 6.0, jailZ:iz + 5.5,
-    deskX:ix, deskZ:iz - D / 2 + 7.0,
-    garageX:ix + 8, garageZ:iz - D / 2 - 4,
-    /* bounds open north into the motor pool bay */
-    bounds:{ x0:ix - W / 2 + .8, x1:ix + 16 - .8, z0:iz - D / 2 - 16, z1:iz + D / 2 - .8 }
-  };
-
-  /* ---------- Sheriff's Office and DPS post ----------
-     Same shell, different dress, offset along X so they do not overlap. */
-  var variants = [
-    { id:'so',  ox:60,  wall:0xd6cfbe, trim:0x4a3a24, flagA:0x8a6d2b, flagB:0x3b2d20, name:'BAYARD COUNTY SHERIFF' },
-    { id:'dps', ox:120, wall:0xd2d4d8, trim:0x14181d, flagA:0x8d1f2b, flagB:0x14181d, name:'TEXAS HIGHWAY PATROL' }
-  ];
-  var vi;
-  for(vi = 0; vi < variants.length; vi++){
-    var V = variants[vi];
-    var vx = INT_BASE.x + V.ox, vz = INT_BASE.z;
-    var VB = new Builder();
-    var vW = 22, vD = 28, vH = 4.2;
-    VB.plate(vx, .02, vz, vW, vD, 0xb0a99c, 0);
-    VB.box(vx, vH, vz, vW, .3, vD, 0xcfccc4, 0);
-    VB.box(vx, vH / 2, vz - vD / 2, vW, vH, .4, V.wall, 0);
-    VB.box(vx, vH / 2, vz + vD / 2, vW, vH, .4, V.wall, 0);
-    VB.box(vx - vW / 2, vH / 2, vz, .4, vH, vD, V.wall, 0);
-    VB.box(vx + vW / 2, vH / 2, vz, .4, vH, vD, V.wall, 0);
-    VB.box(vx, 1.0, vz - vD / 2 + .25, vW - .8, .5, .1, V.trim, 0);
-    /* counter */
-    VB.box(vx, .85, vz - vD / 2 + 4.5, 8, 1.7, 1.8, 0x8a7a5c, 0);
-    intSolid(V.id, vx, vz - vD / 2 + 4.5, 4.1, 1.1);
-    VB.box(vx, 1.75, vz - vD / 2 + 4.5, 8.4, .12, 2.2, 0x6d5f45, 0);
-    /* flags */
-    VB.box(vx - 3.0, 1.9, vz - vD / 2 + .6, .1, 3.4, .1, 0x8a8f96, 0);
-    VB.box(vx - 2.6, 3.0, vz - vD / 2 + .65, .8, .9, .05, V.flagA, 0);
-    VB.box(vx + 3.0, 1.9, vz - vD / 2 + .6, .1, 3.4, .1, 0x8a8f96, 0);
-    VB.box(vx + 2.6, 3.0, vz - vD / 2 + .65, .8, .9, .05, V.flagB, 0);
-    /* lockers + bench */
-    var q;
-    for(q = 0; q < 6; q++){
-      VB.box(vx - vW / 2 + 2.0 + q * 1.35, 1.15, vz + vD / 2 - 1.3, 1.15, 2.3, 1.0,
-             q % 2 ? 0x4a5560 : 0x51606c, 0);
-      VB.box(vx - vW / 2 + 2.0 + q * 1.35, 1.15, vz + vD / 2 - .78, 1.05, 2.1, .06, 0x39434d, 0);
-      intSolid(V.id, vx - vW / 2 + 2.0 + q * 1.35, vz + vD / 2 - 1.3, .60, .55);
-    }
-    VB.box(vx - 1, .45, vz + vD / 2 - 4.2, 8, .3, 1.0, 0x8a7a5c, 0);
-    intSolid(V.id, vx - 1, vz + vD / 2 - 4.2, 4.0, .5);
-    VB.box(vx + vW / 2 - .30, 1.9, vz + vD / 2 - 4.4, .06, 1.9, 2.8, 0x9fb6c4, 0);
-    /* armoury */
-    VB.box(vx + vW / 2 - 3.0, 1.4, vz + 5.0, 4.2, 2.8, .12, 0x39434d, 0);
-    for(q = 0; q < 5; q++) VB.box(vx + vW / 2 - 4.8 + q * .84, 1.4, vz + 4.95, .06, 2.8, .06, 0x59646f, 0);
-    intSolid(V.id, vx + vW / 2 - 3.0, vz + 5.0, 2.1, .3);
-    /* ---- holding cells: the SO runs the county jail, DPS a single
-       temporary hold, so the sheriff gets three and the trooper post one ---- */
-    var vCells = (V.id === 'so') ? 3 : 1;
-    for(q = 0; q < vCells; q++){
-      var vcz = vz + 1.0 + q * 4.0;
-      VB.box(vx - vW / 2 + 2.1, vH / 2, vcz - 2.0, 4.2, vH, .22, shade(V.wall, .94), 0);
-      intSolid(V.id, vx - vW / 2 + 2.1, vcz - 2.0, 2.1, .2);
-      var bq2;
-      for(bq2 = 0; bq2 < 8; bq2++){
-        VB.box(vx - vW / 2 + .35 + bq2 * .52, 1.35, vcz, .07, 2.7, .07, 0x59646f, 0);
-      }
-      VB.box(vx - vW / 2 + 2.1, 2.78, vcz, 4.2, .16, .16, 0x59646f, 0);
-      intSolid(V.id, vx - vW / 2 + 2.1, vcz, 2.1, .18);
-      VB.box(vx - vW / 2 + 1.3, .40, vcz - 1.2, 1.9, .30, 1.3, 0x8a9096, 0);
-      VB.box(vx - vW / 2 + 3.3, .35, vcz - 1.5, .5, .70, .5, 0xdfe3e6, 0);
-    }
-    /* booking desk facing the cells */
-    VB.box(vx - vW / 2 + 7.0, .85, vz + 3.0, 1.7, 1.7, 4.4, 0x6d5f45, 0);
-    intSolid(V.id, vx - vW / 2 + 7.0, vz + 3.0, .95, 2.3);
-    VB.box(vx - vW / 2 + 7.0, 1.78, vz + 3.0, 2.1, .12, 4.8, 0x574b36, 0);
-
-    /* ---- motor pool bay off the north wall ---- */
-    var vgz = vz - vD / 2 - 8;
-    VB.plate(vx + 7, .03, vgz, 15, 15, 0x6e737a, 0);
-    VB.box(vx + 7, vH, vgz, 15, .3, 15, 0xcfccc4, 0);
-    VB.box(vx + 7, vH / 2, vgz - 7.5, 15, vH, .4, shade(V.wall, .96), 0);
-    VB.box(vx + 14.5, vH / 2, vgz, .4, vH, 15, shade(V.wall, .96), 0);
-    VB.box(vx + 7, .18, vgz, 4.8, .36, 2.1, 0x4a5058, 0);
-    VB.box(vx + 13, .75, vgz - 4.5, 1.1, 1.5, 2.8, V.flagA, 0);
-    intSolid(V.id, vx + 13, vgz - 4.5, .65, 1.5);
-    VB.plate(vx + 7, .05, vgz + 7.0, 11, .4, 0xd6b83c, 0);
-
-    /* exit mat */
-    VB.plate(vx, .06, vz - vD / 2 + 1.4, 3.6, 1.6, 0x8d1f2b, 0);
-    scene.add(new THREE.Mesh(VB.geo(), new THREE.MeshLambertMaterial({ vertexColors:true })));
-    INTERIORS[V.id] = {
-      x:vx, z:vz, name:V.name,
-      spawnX:vx, spawnZ:vz - vD / 2 + 3.0,
-      deskX:vx, deskZ:vz - vD / 2 + 6.4,
-      jailX:vx - vW / 2 + 5.6, jailZ:vz + 3.0,
-      garageX:vx + 7, garageZ:vz - vD / 2 - 4,
-      exitX:vx, exitZ:vz - vD / 2 + 1.4,
-      lockerX:vx - 5.6, lockerZ:vz + vD / 2 - 3.4,
-      armoryX:vx + vW / 2 - 3.0, armoryZ:vz + 5.2,
-      /* bounds open north into the bay, like the PD room */
-      bounds:{ x0:vx - vW / 2 + .8, x1:vx + 14.5 - .8, z0:vz - vD / 2 - 15, z1:vz + vD / 2 - .8 }
-    };
+  return { x:ax, z:az + 62 };
+}
+/* like intFindSpot, but the cleared box is offset from the returned point
+   by dxOff on X -- for buildings whose mass is not centred on their anchor */
+function intFindSpotOffset(ax, az, w, d, dxOff){
+  var tries = [[0, 70], [0, -70], [70, 0], [-70, 0], [0, 100], [0, -100],
+               [100, 0], [-100, 0], [70, 70], [-70, 70], [70, -70], [-70, -70],
+               [0, 135], [135, 0], [-135, 0], [0, -135],
+               [150, 90], [-150, 90], [150, -90], [-150, -90]];
+  var i;
+  for(i = 0; i < tries.length; i++){
+    var x = ax + tries[i][0], z = az + tries[i][1];
+    if(typeof footprintClear === 'function' &&
+       footprintClear(x + dxOff, z, w, d, 0, 8)) return { x:x, z:z };
   }
+  return { x:ax, z:az + 70 };
+}
+function stationAnchor(kind){
+  var i;
+  for(i = 0; i < LANDMARKS.length; i++){
+    if(LANDMARKS[i].kind === kind) return { x:LANDMARKS[i].x, z:LANDMARKS[i].z };
+  }
+  return null;
 }
 
-/* ---- enter / exit ---- */
+/* ============================================================
+   STATIONS  --  rebuilt from scratch
+   One parameterised builder produces every station, so the PD, the
+   Sheriff's Office and the DPS post are structurally identical and a
+   fix to one is a fix to all. Previous versions grew by patching and
+   ended up with doors on garage walls, an open side you could walk
+   out of, and prompt triggers that did not line up with the fittings.
+
+   Layout, front (-Z) to back (+Z):
+     front wall with the ONLY doorway, on -Z
+     lobby with the counter
+     locker bank on the left, armoury cage on the right
+     cell block across the back
+     garage bay attached on the +X flank, with its own vehicle door
+   Everything is enclosed. The only ways in are the front door and the
+   garage mouth.
+   ============================================================ */
+var STATION_DEFS = [
+  { id:'pd',  kind:'pd',  name:'CYPRESS FALLS POLICE',
+    wall:0xdad6cc, trim:0x1b2a44, floor:0xb9b2a4, brick:0x8d5a3c, cells:3 },
+  { id:'so',  kind:'so',  name:'BAYARD COUNTY SHERIFF',
+    wall:0xd9d4c4, trim:0x2f4a2a, floor:0xb4ad9d, brick:0x7d6a4c, cells:3 },
+  { id:'dps', kind:'dps', name:'STATE HIGHWAY PATROL',
+    wall:0xd6d2c8, trim:0x5a1f26, floor:0xb2ab9c, brick:0x8a7256, cells:1 }
+];
+
+function buildStation(scene, D0){
+  var W = 28, D = 34, H = 4.2;          /* main room */
+  var GW = 16, GD = 18;                 /* garage bay, on the +X flank */
+  var id = D0.id;
+  var i, j;
+
+  /* clear ground for the room AND its bay, tested as one parcel */
+  /* The parcel is not centred on the room: the garage hangs off the +X
+     flank and the apron extends past that. Clear the whole envelope,
+     offset so the test box actually covers what gets built. */
+  var anch = stationAnchor(D0.kind) || INT_BASE;
+  var envW = W + GW + 26, envD = D + 12;
+  var envOff = (GW + 26) / 2;                 /* centre of the envelope */
+  var spot = intFindSpotOffset(anch.x, anch.z, envW, envD, envOff);
+  var ix = spot.x, iz = spot.z;
+  var B = new Builder();
+
+  var x0 = ix - W / 2, x1 = ix + W / 2;
+  var z0 = iz - D / 2, z1 = iz + D / 2;
+  /* garage sits off the +X wall, aligned to the back half of the room */
+  var gx = x1 + GW / 2, gz = iz + D / 2 - GD / 2;
+
+  /* ---------- exterior shell ---------- */
+  B.box(ix, H / 2, iz, W + 1.2, H + .3, D + 1.2, D0.brick, 0);
+  B.box(gx, H / 2, gz, GW + 1.2, H + .3, GD + 1.2, D0.brick, 0);
+  B.box(ix, H + .55, iz, W + 1.8, .70, D + 1.8, shade(D0.brick, .74), 0);
+  B.box(gx, H + .55, gz, GW + 1.8, .70, GD + 1.8, shade(D0.brick, .74), 0);
+  B.box(ix, H + .18, iz, W + .9, .30, D + .9, 0x6e737a, 0);
+  B.box(gx, H + .18, gz, GW + .9, .30, GD + .9, 0x6e737a, 0);
+
+  /* ---------- floors and ceilings ---------- */
+  B.plate(ix, .02, iz, W, D, jitCol(D0.floor, .03), 0);
+  B.box(ix, H, iz, W, .26, D, 0xcfccc4, 0);
+  B.plate(gx, .02, gz, GW, GD, 0x6e737a, 0);
+  B.box(gx, H, gz, GW, .26, GD, 0xcfccc4, 0);
+
+  /* ---------- walls ----------
+     Front (-Z) carries the pedestrian door. The +X wall is shared with
+     the garage and carries an internal opening. Everything else solid. */
+  var DOORW = 4;
+  /* front wall, split around the doorway */
+  B.box(ix - W / 4 - 1, H / 2, z0, W / 2 - DOORW / 2, H, .4, D0.wall, 0);
+  B.box(ix + W / 4 + 1, H / 2, z0, W / 2 - DOORW / 2, H, .4, D0.wall, 0);
+  B.box(ix, H - .55, z0, DOORW, 1.1, .4, D0.wall, 0);
+  intSolid(id, ix - W / 4 - 1, z0, (W / 2 - DOORW / 2) / 2, .3);
+  intSolid(id, ix + W / 4 + 1, z0, (W / 2 - DOORW / 2) / 2, .3);
+  /* back wall */
+  B.box(ix, H / 2, z1, W, H, .4, D0.wall, 0);
+  intSolid(id, ix, z1, W / 2, .3);
+  /* -X wall */
+  B.box(x0, H / 2, iz, .4, H, D, D0.wall, 0);
+  intSolid(id, x0, iz, .3, D / 2);
+  /* +X wall: solid except a 4m internal opening into the garage */
+  var gyz = gz;                          /* opening centred on the bay */
+  B.box(x1, H / 2, iz - D / 2 + (D - GD) / 2, .4, H, D - GD, D0.wall, 0);
+  intSolid(id, x1, iz - D / 2 + (D - GD) / 2, .3, (D - GD) / 2);
+  B.box(x1, H / 2, gyz - GD / 2 + (GD - 4) / 4, .4, H, (GD - 4) / 2, D0.wall, 0);
+  B.box(x1, H / 2, gyz + GD / 2 - (GD - 4) / 4, .4, H, (GD - 4) / 2, D0.wall, 0);
+  B.box(x1, H - .55, gyz, .4, 1.1, 4, D0.wall, 0);
+  intSolid(id, x1, gyz - GD / 2 + (GD - 4) / 4, .3, (GD - 4) / 4);
+  intSolid(id, x1, gyz + GD / 2 - (GD - 4) / 4, .3, (GD - 4) / 4);
+
+  /* garage outer walls: solid on three sides, vehicle door on +X */
+  B.box(gx, H / 2, gz - GD / 2, GW, H, .4, D0.wall, 0);
+  intSolid(id, gx, gz - GD / 2, GW / 2, .3);
+  B.box(gx, H / 2, gz + GD / 2, GW, H, .4, D0.wall, 0);
+  intSolid(id, gx, gz + GD / 2, GW / 2, .3);
+  /* vehicle door opening on the far +X wall */
+  var vdw = 5.0;
+  B.box(gx + GW / 2, H / 2, gz - GD / 4 - vdw / 4, .4, H, GD / 2 - vdw / 2, D0.wall, 0);
+  B.box(gx + GW / 2, H / 2, gz + GD / 4 + vdw / 4, .4, H, GD / 2 - vdw / 2, D0.wall, 0);
+  B.box(gx + GW / 2, H - .5, gz, .4, 1.0, vdw, D0.wall, 0);
+  intSolid(id, gx + GW / 2, gz - GD / 4 - vdw / 4, .3, (GD / 2 - vdw / 2) / 2);
+  intSolid(id, gx + GW / 2, gz + GD / 4 + vdw / 4, .3, (GD / 2 - vdw / 2) / 2);
+  /* roll-up shutter housing and rails around the vehicle door */
+  B.box(gx + GW / 2 - .3, 3.9, gz, .5, .45, vdw + .4, 0x6e757c, 0);
+  B.box(gx + GW / 2 - .3, 2.0, gz - vdw / 2, .16, 3.8, .14, 0x8a9096, 0);
+  B.box(gx + GW / 2 - .3, 2.0, gz + vdw / 2, .16, 3.8, .14, 0x8a9096, 0);
+  /* apron outside the bay */
+  B.plate(gx + GW / 2 + 6, .04, gz, 12, vdw + 2, C.asphaltOld, 0);
+  B.plate(gx + GW / 2 + 6, .05, gz - vdw / 2, 12, .16, C.line, 0);
+  B.plate(gx + GW / 2 + 6, .05, gz + vdw / 2, 12, .16, C.line, 0);
+  NOPARK.push({ x:gx, z:gz, hw:GW / 2 + 8, hd:GD / 2 + 4 });
+  NOPARK.push({ x:gx + GW / 2 + 6, z:gz, hw:9, hd:6 });
+
+  /* ---------- entrance dressing ---------- */
+  B.box(ix, 3.6, z0 - 1.9, 6.4, .22, 3.2, shade(D0.wall, .84), 0);
+  B.box(ix - 2.9, 1.8, z0 - 3.3, .18, 3.6, .18, 0x6d5f45, 0);
+  B.box(ix + 2.9, 1.8, z0 - 3.3, .18, 3.6, .18, 0x6d5f45, 0);
+  B.box(ix, H - .9, z0 - .68, 9.0, 1.1, .14, shade(D0.brick, .82), 0);
+  if(typeof addSign === 'function'){
+    addSign(ix, H - .9, z0 - .78, Math.PI, 8.0, .9, D0.name,
+            shade(D0.brick, .82), 0xffffff, 'flat');
+  }
+  /* trim band, split around the doorway so it never paints over it */
+  B.box(ix - W / 4 - 1, 1.0, z0 + .25, W / 2 - DOORW / 2 - .4, .5, .1, D0.trim, 0);
+  B.box(ix + W / 4 + 1, 1.0, z0 + .25, W / 2 - DOORW / 2 - .4, .5, .1, D0.trim, 0);
+
+  /* ---------- lobby ---------- */
+  var deskZ = z0 + 6.0;
+  B.box(ix, .55, deskZ, 7.2, 1.10, 1.1, 0x8a7a5c, 0);
+  intSolid(id, ix, deskZ, 3.6, .7);
+  B.box(ix, 1.14, deskZ, 7.6, .09, 1.4, 0x6d5f45, 0);
+  B.box(ix, .38, deskZ + 1.4, 6.4, .08, .9, 0x9c8a68, 0);
+  B.box(ix - 1.6, .46, deskZ + 2.0, .52, .10, .52, 0x2a2f38, 0);
+  B.box(ix - 1.6, .76, deskZ + 2.25, .52, .56, .08, 0x2a2f38, 0);
+  B.box(ix + 1.4, .74, deskZ + 1.4, .58, .40, .06, 0x1d2128, 0);
+  /* waiting bench and a plant */
+  B.box(ix - 8, .45, z0 + 3.2, 1.8, .12, .55, 0x8d7458, 0);
+  B.box(ix - 8, .72, z0 + 3.0, 1.8, .46, .10, 0x8d7458, 0);
+  B.cyl(ix + 8.4, 0, z0 + 3.0, .34, .30, .52, 8, 0x8a5a3a, 3);
+  if(typeof bTree === 'function') bTree(B, ix + 8.4, z0 + 3.0, .30);
+
+  /* ---------- locker room, left side ---------- */
+  var lockZ = iz + 1.0;
+  for(i = 0; i < 8; i++){
+    B.box(x0 + 1.4, 1.05, lockZ - 4.6 + i * 1.3, 1.4, 2.10, 1.2, 0x59646f, 0);
+    B.box(x0 + 2.15, 1.05, lockZ - 4.6 + i * 1.3, .08, 1.90, 1.0, 0x46505a, 0);
+  }
+  intSolid(id, x0 + 1.4, lockZ, .7, 5.4);
+  B.box(x0 + 4.6, .45, lockZ, .5, .10, 5.0, 0x8d7458, 0);   /* bench */
+  intSolid(id, x0 + 4.6, lockZ, .3, 2.5);
+  B.box(x0 + 1.0, 1.8, lockZ - 6.4, .10, 1.6, 1.2, 0xdfe6ec, 0);  /* mirror */
+
+  /* ---------- armoury cage, right side ---------- */
+  var armZ = iz - 2.0;
+  for(i = 0; i < 9; i++){
+    B.box(x1 - 3.2, 1.6, armZ - 2.4 + i * .6, .08, 3.2, .08, 0x59646f, 0);
+  }
+  B.box(x1 - 3.2, 3.25, armZ, .12, .16, 5.6, 0x59646f, 0);
+  intSolid(id, x1 - 3.2, armZ, .2, 2.8);
+  B.box(x1 - 1.4, .95, armZ, 2.4, 1.90, 4.8, 0x6e757c, 0);
+  intSolid(id, x1 - 1.4, armZ, 1.2, 2.4);
+
+  /* ---------- cell block, across the back ---------- */
+  var cellZ = z1 - 4.2;
+  for(i = 0; i < D0.cells; i++){
+    var cx = x0 + 3.6 + i * 5.0;
+    B.box(cx, H / 2, cellZ + 2.0, 4.6, H, .22, shade(D0.wall, .94), 0);
+    intSolid(id, cx, cellZ + 2.0, 2.3, .2);
+    for(j = 0; j < 8; j++){
+      B.box(cx - 2.0 + j * .58, 1.35, cellZ - 2.0, .07, 2.7, .07, 0x59646f, 0);
+    }
+    B.box(cx, 2.78, cellZ - 2.0, 4.6, .16, .16, 0x59646f, 0);
+    intSolid(id, cx, cellZ - 2.0, 2.3, .18);
+    B.box(cx - .8, .40, cellZ, 1.9, .30, 1.3, 0x8a9096, 0);
+    B.box(cx + 1.5, .35, cellZ + 1.2, .5, .70, .5, 0xdfe3e6, 0);
+  }
+  var bookX = x0 + 3.6 + D0.cells * 5.0 + 2.4;
+  B.box(bookX, .55, cellZ, 1.7, 1.10, 3.6, 0x6d5f45, 0);
+  intSolid(id, bookX, cellZ, .9, 1.8);
+
+  /* ---------- garage fittings ---------- */
+  B.box(gx - GW / 2 + 2.0, .55, gz - GD / 2 + 2.4, 3.4, 1.10, 1.0, 0x8a7a5c, 0);
+  intSolid(id, gx - GW / 2 + 2.0, gz - GD / 2 + 2.4, 1.7, .5);
+  B.box(gx - GW / 2 + 2.0, 2.1, gz - GD / 2 + 1.9, 3.0, 1.6, .10, 0x39434d, 0);
+  for(i = 0; i < 4; i++){
+    B.box(gx - GW / 2 + 1.2, .5 + i * .9, gz + 3.0, 1.4, .10, 4.0, 0x6e757c, 0);
+  }
+  intSolid(id, gx - GW / 2 + 1.2, gz + 3.0, .7, 2.0);
+  /* vehicle lift and bay markings */
+  B.box(gx + 1.0, .16, gz, 4.8, .32, 2.1, 0x4a5058, 0);
+  B.plate(gx + 1.0, .06, gz, 4.0, 11, C.line, 0);
+  B.box(gx + 1.0, H - .25, gz, 3.2, .14, .5, 0xfff6d8, 0);
+
+  scene.add(new THREE.Mesh(B.geo(), new THREE.MeshLambertMaterial({ vertexColors:true })));
+
+  INTERIORS[id] = {
+    x:ix, z:iz, name:D0.name, station:true,
+    /* triggers, each sited ON the fitting it belongs to */
+    spawnX:ix, spawnZ:z0 + 2.6,
+    deskX:ix, deskZ:deskZ - 1.4,
+    lockerX:x0 + 3.2, lockerZ:lockZ,
+    armoryX:x1 - 4.6, armoryZ:armZ,
+    jailX:x0 + 3.6, jailZ:cellZ - 3.4,
+    garageX:gx, garageZ:gz,
+    doorX:ix, doorZ:z0,
+    /* bounds cover the room AND the bay, so walking between them is
+       not treated as leaving the building */
+    bounds:{ x0:x0 + .6, x1:gx + GW / 2 - .6, z0:z0 + .6, z1:z1 - .6 }
+  };
+  return INTERIORS[id];
+}
+
+function buildInteriors(scene){
+  var i;
+  for(i = 0; i < STATION_DEFS.length; i++) buildStation(scene, STATION_DEFS[i]);
+  return INTERIORS;
+}
+
 function enterInterior(id){
   var it = INTERIORS[id];
   if(!it) return;
   if(!G.onFoot) exitVehicle();
   if(!G.onFoot){ toast('STEP OUT OF THE UNIT FIRST', 'bad'); return; }
+  /* Seamless: record where we came in, but do NOT move the player. Walking
+     through the doorway is the transition. */
   G.interior = id;
   G.returnX = G.player.x; G.returnZ = G.player.z; G.returnH = G.playerH;
-  G.player.x = it.spawnX; G.player.z = it.spawnZ; G.player.y = 0;
-  G.playerH = Math.PI / 2; G.camYaw = Math.PI / 2;
   toast((it.name || 'CYPRESS FALLS POLICE') + ' \u2014 E AT THE LOCKERS TO CHANGE', '');
 }
 function exitInterior(){
   if(!G.interior) return;
+  /* stepping back out of the doorway; position is already correct */
   G.interior = null;
-  G.player.x = G.returnX; G.player.z = G.returnZ;
-  G.player.y = roadHeightAt(G.player.x, G.player.z);
-  G.playerH = G.returnH; G.camYaw = G.returnH;
 }
 /* keep the player inside the room, run the door / locker / armory triggers */
 function updateInterior(dt){
+  /* Which room, if any, is the player physically standing in? No teleports:
+     the answer is simply whether they are inside its footprint. */
+  var inside = null, id;
+  for(id in INTERIORS){
+    if(!INTERIORS.hasOwnProperty(id)) continue;
+    var r = INTERIORS[id];
+    if(!r || !r.bounds) continue;
+    var b = r.bounds;
+    if(G.player.x > b.x0 - .6 && G.player.x < b.x1 + .6 &&
+       G.player.z > b.z0 - .6 && G.player.z < b.z1 + .6){ inside = id; break; }
+  }
+  if(inside !== G.interior){
+    if(inside){ enterInterior(inside); }
+    else { exitInterior(); }
+  }
   if(!G.interior){
-    /* outside: standing at the station's front door goes in */
-    /* Motor pool: pull up to the bay outside your station and the garage
-       opens on the spot, the way it does in a patrol sim -- no need to park,
-       walk in and find a trigger. */
+    /* motor pool: pull up to the bay and the garage opens */
     if(!G.onFoot && G.veh && !G.garageCool){
       var gs2 = nearestStation(G.player.x, G.player.z);
       if(gs2 && gs2.d < 26 && Math.abs(G.veh.spd) < 2.5){
@@ -13513,30 +14354,19 @@ function updateInterior(dt){
       var gs3 = nearestStation(G.player.x, G.player.z);
       if(!gs3 || gs3.d > 60) G.garageCool = false;
     }
-    if(G.onFoot && !G.stationDoor){
-      var ns = nearestStation(G.player.x, G.player.z);
-      if(ns && ns.d < 12 && INTERIORS[ns.lm.kind]){
-        G.stationDoor = true;
-        enterInterior(ns.lm.kind);
-        setTimeout(function(){ G.stationDoor = false; }, 1500);
-      }
-    }
     return;
   }
   var it = INTERIORS[G.interior];
-  if(!it) { G.interior = null; return; }
-  var b = it.bounds;
-  G.player.x = clamp(G.player.x, b.x0, b.x1);
-  G.player.z = clamp(G.player.z, b.z0, b.z1);
+  if(!it){ G.interior = null; return; }
   G.player.y = 0;
 
-  if(dist(G.player.x, G.player.z, it.exitX, it.exitZ) < 1.6){
-    exitInterior();
-    return;
-  }
   /* triggers show as prompts; ACT handles them */
-  G.intLocker = dist(G.player.x, G.player.z, it.lockerX, it.lockerZ) < 3.4;
-  G.intArmory = dist(G.player.x, G.player.z, it.armoryX, it.armoryZ) < 3.2;
+  /* prompts keyed to the fittings themselves, with generous but not
+     overlapping radii */
+  G.intLocker = it.lockerX !== undefined &&
+                dist(G.player.x, G.player.z, it.lockerX, it.lockerZ) < 3.6;
+  G.intArmory = it.armoryX !== undefined &&
+                dist(G.player.x, G.player.z, it.armoryX, it.armoryZ) < 3.2;
   G.intJail = it.jailX !== undefined && dist(G.player.x, G.player.z, it.jailX, it.jailZ) < 3.4;
   /* the front desk is where you sign on and off shift */
   G.intDesk = dist(G.player.x, G.player.z, it.deskX, it.deskZ) < 3.2;
@@ -13546,6 +14376,234 @@ function updateInterior(dt){
     setTimeout(function(){ G.dutyPrompted = false; }, 4000);
   }
   G.intGarage = it.garageX !== undefined && dist(G.player.x, G.player.z, it.garageX, it.garageZ) < 5.0;
+}
+
+
+/* ============================================================
+   SLIDING DOORS
+   The doorway used to be an untextured gap with a header floating over
+   it and nothing to walk through. These are real leaves that part when
+   you approach and close behind you, with collision while shut.
+   ============================================================ */
+var DOORS = [];
+function buildDoors(scene){
+  DOORS = [];
+  var ids = [], id;
+  for(id in INTERIORS){
+    if(INTERIORS.hasOwnProperty(id) && INTERIORS[id] && INTERIORS[id].bounds) ids.push(id);
+  }
+  var i;
+  for(i = 0; i < ids.length; i++){
+    var it = INTERIORS[ids[i]];
+    if(!it) continue;
+    /* Use the door position the builder recorded. Deriving it from the
+       bounds put the leaves on whichever wall happened to be the minimum
+       -Z edge -- which, once the garage extended the bounds, was the
+       garage flank. */
+    if(it.doorX === undefined) continue;
+    var dx = it.doorX, dz = it.doorZ;
+    var g = new THREE.Group();
+    var leaves = [];
+    var k;
+    for(k = 0; k < 2; k++){
+      var B = new Builder();
+      /* A single flat slab read as grey nothing from inside and was almost
+         invisible from outside. Build it as a real glazed leaf: tinted pane,
+         a stile frame around it, a kick plate, and push bars on BOTH faces. */
+      B.box(0, 1.55, 0, 1.78, 2.62, .05, 0x8fb6cc, 0);          /* pane */
+      B.box(0, 1.55, .045, 1.78, 2.62, .012, 0xbcd8e6, 0);      /* outer sheen */
+      B.box(0, 1.55, -.045, 1.78, 2.62, .012, 0x7ea6bc, 0);     /* inner tint */
+      /* stiles and rails so the leaf has an edge you can see */
+      B.box(-.95, 1.55, 0, .16, 3.06, .10, 0x2f3740, 0);
+      B.box( .95, 1.55, 0, .16, 3.06, .10, 0x2f3740, 0);
+      B.box(0, 3.02, 0, 2.06, .18, .10, 0x2f3740, 0);
+      B.box(0, .30, 0, 2.06, .60, .10, 0x39434d, 0);            /* kick plate */
+      /* push bars, one each side, so it reads as a door from inside too */
+      B.box((k ? -.72 : .72), 1.20, .075, .07, .90, .07, 0xc6ccd2, 0);
+      B.box((k ? -.72 : .72), 1.20, -.075, .07, .90, .07, 0xc6ccd2, 0);
+      var m = new THREE.Mesh(B.geo(), new THREE.MeshLambertMaterial({
+        vertexColors:true, transparent:true, opacity:.82
+      }));
+      m.userData.home = (k ? -1 : 1) * 1.0;
+      m.position.set(dx + m.userData.home, 0, dz);
+      g.add(m);
+      leaves.push(m);
+    }
+    scene.add(g);
+    DOORS.push({ id:ids[i], x:dx, z:dz, leaves:leaves, open:0 });
+  }
+  return DOORS;
+}
+function updateDoors(dt){
+  var i, k;
+  for(i = 0; i < DOORS.length; i++){
+    var d = DOORS[i];
+    var near = dist(G.player.x, G.player.z, d.x, d.z) < 4.6;
+    var want = near ? 1 : 0;
+    var was = d.open;
+    d.open += (want - d.open) * Math.min(1, dt * 6);
+    if(was < .5 && d.open >= .5 && typeof Audio_door === 'function') Audio_door();
+    for(k = 0; k < d.leaves.length; k++){
+      var lf = d.leaves[k];
+      lf.position.x = d.x + lf.userData.home * (1 + d.open * 1.05);
+    }
+  }
+}
+/* a closed door is solid; an open one is not */
+function resolveDoors(np, r){
+  var i;
+  for(i = 0; i < DOORS.length; i++){
+    var d = DOORS[i];
+    if(d.open > .45) continue;
+    var dx = np.x - d.x, dz = np.z - d.z;
+    var ox = (2.2 + r) - Math.abs(dx);
+    var oz = (.25 + r) - Math.abs(dz);
+    if(ox <= 0 || oz <= 0) continue;
+    if(oz < ox) np.z += dz < 0 ? -oz : oz;
+    else np.x += dx < 0 ? -ox : ox;
+  }
+}
+
+/* ============================================================
+   BUSINESS INTERIORS
+   Small walk-in rooms behind shopfronts across the map, using the same
+   seamless model as the stations: no teleport, the doorway is the
+   threshold. Kept deliberately simple -- a counter, some fittings, a
+   clerk -- so they can be placed in quantity without wrecking the
+   frame budget.
+   ============================================================ */
+var SHOP_KINDS = {
+  diner:  { n:'DINER',        wall:0xe4dccb, accent:0xb03a2e, floor:0xb9b2a4 },
+  store:  { n:'CONVENIENCE',  wall:0xdfd8c8, accent:0x1a7a3c, floor:0xc2bbab },
+  burger: { n:'BURGERS',      wall:0xe8e2d2, accent:0xd4342c, floor:0xbdb6a6 },
+  donut:  { n:'DONUTS',       wall:0xe8e2d2, accent:0xe86ba8, floor:0xc2bbab },
+  bank:   { n:'BANK LOBBY',   wall:0xe2dccd, accent:0x2f4a6b, floor:0xb2ab9c }
+};
+
+function buildShopInterior(scene, kind, ax, az, tag){
+  var K = SHOP_KINDS[kind] || SHOP_KINDS.store;
+  var W = 16, D = 14, H = 3.6;
+  var spot = intFindSpot(ax, az, W, D);
+  var x = spot.x, z = spot.z;
+  var B = new Builder();
+  var i;
+
+  /* shell: exterior skin, parapet, roof */
+  B.box(x, H / 2, z, W + 1.0, H + .25, D + 1.0, jitCol(K.wall, .04), 0);
+  B.box(x, H + .45, z, W + 1.5, .55, D + 1.5, shade(K.wall, .72), 0);
+  B.box(x, H + .14, z, W + .7, .26, D + .7, 0x6e737a, 0);
+  /* accent band above the shopfront */
+  B.box(x, H - .6, z - D / 2 - .55, W + 1.0, .9, .14, K.accent, 0);
+
+  /* floor and ceiling */
+  B.plate(x, .02, z, W, D, jitCol(K.floor, .04), 0);
+  B.box(x, H, z, W, .26, D, 0xcfccc4, 0);
+
+  /* walls, with a 4m doorway in the front */
+  B.box(x - W / 4 - 1, H / 2, z - D / 2, W / 2 - 2, H, .35, K.wall, 0);
+  B.box(x + W / 4 + 1, H / 2, z - D / 2, W / 2 - 2, H, .35, K.wall, 0);
+  B.box(x, H - .45, z - D / 2, 4, .9, .35, K.wall, 0);
+  B.box(x, H / 2, z + D / 2, W, H, .35, K.wall, 0);
+  B.box(x - W / 2, H / 2, z, .35, H, D, K.wall, 0);
+  B.box(x + W / 2, H / 2, z, .35, H, D, K.wall, 0);
+  intSolid(tag, x - W / 4 - 1, z - D / 2, W / 4 - 1, .25);
+  intSolid(tag, x + W / 4 + 1, z - D / 2, W / 4 - 1, .25);
+  intSolid(tag, x, z + D / 2, W / 2, .25);
+  intSolid(tag, x - W / 2, z, .25, D / 2);
+  intSolid(tag, x + W / 2, z, .25, D / 2);
+
+  /* glazing either side of the door so it reads as a shopfront */
+  B.box(x - W / 4 - 1, 1.9, z - D / 2 - .20, W / 2 - 2.4, 2.4, .08, C.glass, 0);
+  B.box(x + W / 4 + 1, 1.9, z - D / 2 - .20, W / 2 - 2.4, 2.4, .08, C.glass, 0);
+
+  /* --- fittings --- */
+  /* service counter across the back */
+  B.box(x, .55, z + D / 2 - 3.2, W - 5, 1.10, 1.0, 0x8a7a5c, 0);
+  B.box(x, 1.14, z + D / 2 - 3.2, W - 4.6, .10, 1.3, shade(0x8a7a5c, .82), 0);
+  intSolid(tag, x, z + D / 2 - 3.2, (W - 5) / 2, .5);
+  /* till */
+  B.box(x - 2.4, 1.32, z + D / 2 - 3.2, .55, .30, .45, 0x39434d, 0);
+
+  if(kind === 'diner' || kind === 'burger'){
+    /* booths down one side */
+    for(i = 0; i < 3; i++){
+      var bz = z - D / 2 + 4 + i * 3.2;
+      B.box(x - W / 2 + 2.2, .45, bz, 2.6, .14, 1.2, K.accent, 0);
+      B.box(x - W / 2 + 2.2, 1.00, bz - .75, 2.6, 1.10, .16, shade(K.accent, .88), 0);
+      B.box(x - W / 2 + 2.2, 1.00, bz + .75, 2.6, 1.10, .16, shade(K.accent, .88), 0);
+      B.box(x - W / 2 + 2.2, .72, bz, 1.6, .08, 1.0, 0xdfd8c8, 0);
+      intSolid(tag, x - W / 2 + 2.2, bz, 1.3, .9);
+    }
+    /* kitchen pass and stools */
+    for(i = 0; i < 4; i++){
+      B.cyl(x - 3 + i * 2, 0, z + D / 2 - 4.6, .22, .20, .72, 8, 0x6e757c, 3);
+      B.cyl(x - 3 + i * 2, .72, z + D / 2 - 4.6, .30, .30, .12, 10, K.accent, 3);
+    }
+  } else if(kind === 'store'){
+    /* aisles of shelving */
+    for(i = 0; i < 3; i++){
+      var sx2 = x - 4.5 + i * 4.5;
+      B.box(sx2, .90, z - 1, 1.1, 1.80, 6.0, 0x9aa0a6, 0);
+      intSolid(tag, sx2, z - 1, .55, 3.0);
+      var j;
+      for(j = 0; j < 4; j++){
+        B.box(sx2, .45 + j * .45, z - 1, 1.2, .07, 6.0, shade(0x9aa0a6, .86), 0);
+      }
+    }
+    /* chiller cabinets along the back wall */
+    B.box(x, 1.05, z + D / 2 - 1.0, W - 4, 2.10, 1.0, 0x8fb6c4, 0);
+    intSolid(tag, x, z + D / 2 - 1.0, (W - 4) / 2, .5);
+  } else if(kind === 'donut'){
+    /* display case and a coffee bar */
+    B.box(x, .70, z + D / 2 - 4.6, 6.0, 1.40, .9, 0xdfe3e6, 0);
+    B.box(x, 1.05, z + D / 2 - 4.6, 5.6, .70, 1.0, C.glass, 0);
+    intSolid(tag, x, z + D / 2 - 4.6, 3.0, .5);
+    for(i = 0; i < 3; i++){
+      B.box(x - 3 + i * 3, .50, z - 3, 1.0, .10, 1.0, 0x8a7a5c, 0);
+      B.cyl(x - 3 + i * 3, 0, z - 3, .12, .12, .50, 6, 0x6e757c, 3);
+    }
+  } else if(kind === 'bank'){
+    /* teller line with glazed screens */
+    B.box(x, 1.35, z + D / 2 - 3.2, W - 5, .70, .12, C.glass, 0);
+    for(i = 0; i < 3; i++){
+      B.box(x - 3.6 + i * 3.6, 1.45, z + D / 2 - 3.2, .12, .90, .30, 0x39434d, 0);
+    }
+    /* rope line */
+    for(i = 0; i < 4; i++){
+      B.cyl(x - 3 + i * 2, 0, z - 2, .12, .12, .95, 8, 0x9aa0a6, 3);
+    }
+  }
+
+  /* signage over the door */
+  if(typeof addSign === 'function'){
+    addSign(x, H - .6, z - D / 2 - .64, Math.PI, W * .55, .8,
+            K.n, K.accent, 0xffffff, 'flat');
+  }
+
+  scene.add(new THREE.Mesh(B.geo(), new THREE.MeshLambertMaterial({ vertexColors:true })));
+
+  INTERIORS[tag] = {
+    x:x, z:z, name:K.n, shop:true,
+    doorX:x, doorZ:z - D / 2,
+    bounds:{ x0:x - W / 2 + .6, x1:x + W / 2 - .6, z0:z - D / 2 + .6, z1:z + D / 2 - .6 }
+  };
+  return INTERIORS[tag];
+}
+
+/* place a handful across the map, on ground that is actually clear */
+function buildShopInteriors(scene){
+  var picks = [
+    ['diner',  -640,  260], ['store',   680,  300], ['burger', -1120, 900],
+    ['donut',  -180,  480], ['store',  1260, -260], ['diner',  1420,  980],
+    ['bank',    140,  160], ['store', -1580,  420], ['burger',  460, -340],
+    ['donut',   900,  240]
+  ];
+  var i, made = 0;
+  for(i = 0; i < picks.length; i++){
+    var tag = 'shop' + i;
+    if(buildShopInterior(scene, picks[i][0], picks[i][1], picks[i][2], tag)) made++;
+  }
+  return made;
 }
 /* ============================================================
    RAIL
@@ -14116,6 +15174,246 @@ function k9Steer(x, z, curH, wantH, reach){
   return best;
 }
 /* ============================================================
+   TRAFFIC STOP PROCEDURE
+   The LSPDFR / Police Simulator loop: you do not just press a button and
+   get an outcome. You position the car, approach on a side, make contact,
+   ask for documents, run them, and decide. Each step has its own prompt
+   and its own risk, and the driver's demeanour reacts to how you handle
+   it.
+   ============================================================ */
+
+var STOP = {
+  active:false, veh:null, rec:null,
+  phase:'none',        /* positioned | approach | contact | docs | run | decide | done */
+  side:'driver',
+  t:0, tension:0, compliance:1,
+  docs:false, ranPlate:false, ranLicense:false,
+  askedReason:false, warned:false,
+  notes:[]
+};
+
+var STOP_DEMEANOUR = ['calm', 'nervous', 'irritated', 'talkative', 'silent'];
+
+function stopBegin(veh){
+  if(!veh) return false;
+  STOP.active = true;
+  STOP.veh = veh;
+  STOP.rec = veh.driver || veh.rec || {};
+  STOP.phase = 'positioned';
+  STOP.t = 0;
+  STOP.side = 'driver';
+  STOP.docs = false;
+  STOP.ranPlate = false;
+  STOP.ranLicense = false;
+  STOP.askedReason = false;
+  STOP.warned = false;
+  STOP.notes = [];
+  STOP.demeanour = pick(STOP_DEMEANOUR);
+  /* how twitchy this driver is, and how much they will cooperate */
+  var r = STOP.rec;
+  STOP.tension = (r.warrants && r.warrants.length ? .45 : 0) +
+                 (r.contraband ? .35 : 0) +
+                 (r.impaired > .1 ? .25 : 0) +
+                 (STOP.demeanour === 'nervous' ? .15 : 0) +
+                 (STOP.demeanour === 'irritated' ? .20 : 0);
+  STOP.compliance = clamp(1 - STOP.tension * .6, .15, 1);
+  dispatchSay(G.callsign + ' out with a vehicle, ' + (veh.plate || 'unknown plate') + '.', 2);
+  return true;
+}
+
+function stopEnd(reason){
+  STOP.active = false;
+  STOP.phase = 'none';
+  STOP.veh = null;
+  setPrompt('');
+}
+
+/* the officer's position relative to the stopped car decides the phase */
+function stopUpdate(dt){
+  if(!STOP.active || !STOP.veh){ return; }
+  var v = STOP.veh;
+  STOP.t += dt;
+
+  /* the driver gives up waiting if you never make contact */
+  if(STOP.phase === 'positioned' && STOP.t > 75){
+    toast('THE DRIVER GAVE UP WAITING AND LEFT', 'bad');
+    addDiscipline(2, 'abandoned a traffic stop');
+    stopEnd('abandoned');
+    return;
+  }
+  if(!G.onFoot){
+    if(STOP.phase !== 'positioned' && STOP.phase !== 'done'){
+      setPrompt('RETURN TO THE VEHICLE ON FOOT');
+    }
+    return;
+  }
+
+  var d = dist(G.player.x, G.player.z, v.x, v.z);
+  /* which side are you on? left of the car's heading is the driver side */
+  var rel = Math.sin(v.h) * (G.player.x - v.x) - Math.cos(v.h) * (G.player.z - v.z);
+  STOP.side = rel < 0 ? 'driver' : 'passenger';
+
+  if(STOP.phase === 'positioned'){
+    if(d < 12){
+      STOP.phase = 'approach';
+      toast('APPROACHING \u2014 STAY BEHIND THE B-PILLAR', '');
+    } else {
+      setPrompt('APPROACH THE VEHICLE');
+    }
+    return;
+  }
+
+  if(STOP.phase === 'approach'){
+    if(d < 3.2){
+      STOP.phase = 'contact';
+      var greet = {
+        calm:'Afternoon. Licence and registration, please.',
+        nervous:'Is there a problem, officer?',
+        irritated:'What did I do? I was going with traffic.',
+        talkative:'Hey there! Beautiful day. What can I do for you?',
+        silent:'(the driver stares straight ahead)'
+      }[STOP.demeanour];
+      toast(greet, '');
+      /* approaching on the passenger side is safer on a fast road */
+      if(STOP.side === 'passenger' && v.edge && v.edge.lim >= 50){
+        STOP.notes.push('passenger-side approach on a high-speed road');
+        addXP(30, 'safe approach');
+      }
+    } else {
+      setPrompt('WALK UP TO THE ' + (STOP.side === 'driver' ? 'DRIVER' : 'PASSENGER') + ' WINDOW');
+    }
+    return;
+  }
+
+  if(STOP.phase === 'contact'){
+    setPrompt('<b>E</b> ask for documents &middot; <b>R</b> run the plate &middot; <b>T</b> explain the stop');
+    return;
+  }
+  if(STOP.phase === 'docs'){
+    setPrompt('<b>R</b> run the licence &middot; <b>Y</b> issue a citation &middot; <b>U</b> verbal warning' +
+              (STOP.rec.impaired > .1 ? ' &middot; <b>F</b> field sobriety' : ''));
+    return;
+  }
+  if(STOP.phase === 'decide'){
+    setPrompt('<b>Y</b> citation &middot; <b>U</b> warning &middot; <b>H</b> arrest &middot; <b>G</b> release');
+    return;
+  }
+}
+
+/* ---- the actions themselves ---- */
+function stopAskDocs(){
+  if(!STOP.active || STOP.phase !== 'contact') return false;
+  STOP.askedReason = true;
+  if(chance(STOP.compliance)){
+    STOP.docs = true;
+    STOP.phase = 'docs';
+    toast('DRIVER HANDS OVER LICENCE AND REGISTRATION', 'good');
+    addXP(25, 'obtained documents');
+  } else {
+    STOP.tension += .12;
+    toast({
+      nervous:'"I think I left my wallet at home."',
+      irritated:'"Am I being detained? What is this about?"',
+      silent:'(the driver does not move)'
+    }[STOP.demeanour] || '"Hold on, let me find it."', 'bad');
+  }
+  return true;
+}
+function stopExplain(){
+  if(!STOP.active) return false;
+  STOP.askedReason = true;
+  STOP.tension = Math.max(0, STOP.tension - .18);
+  STOP.compliance = clamp(STOP.compliance + .15, 0, 1);
+  toast('YOU EXPLAIN THE REASON FOR THE STOP', 'good');
+  addXP(20, 'explained the stop');
+  return true;
+}
+function stopRunPlate(){
+  if(!STOP.active) return false;
+  if(STOP.ranPlate){ toast('PLATE ALREADY RUN', ''); return true; }
+  STOP.ranPlate = true;
+  var r = STOP.rec;
+  var hits = [];
+  if(r.warrants && r.warrants.length) hits.push('WARRANT: ' + r.warrants[0]);
+  if(r.suspended) hits.push('LICENCE SUSPENDED');
+  if(r.stolen) hits.push('REPORTED STOLEN');
+  if(!hits.length) hits.push('NO WANTS OR WARRANTS');
+  toast(hits.join(' \u2014 '), hits[0].indexOf('NO ') === 0 ? 'good' : 'bad');
+  dispatchSay('Returns on ' + (STOP.veh.plate || 'that plate') + ': ' + hits.join(', '), 2);
+  addXP(30, 'ran the plate');
+  if(hits[0].indexOf('NO ') !== 0) STOP.tension += .2;
+  if(STOP.phase === 'docs') STOP.phase = 'decide';
+  return true;
+}
+function stopFieldSobriety(){
+  if(!STOP.active || !STOP.docs) return false;
+  var imp = STOP.rec.impaired || 0;
+  var fail = chance(clamp(imp * 1.6, 0, .95));
+  if(fail){
+    toast('FAILED FIELD SOBRIETY \u2014 PROBABLE CAUSE FOR DWI', 'bad');
+    STOP.rec.arrestable = true;
+    addXP(80, 'DWI investigation');
+  } else {
+    toast('PASSED FIELD SOBRIETY', 'good');
+    addXP(30, 'field sobriety');
+  }
+  STOP.phase = 'decide';
+  return true;
+}
+function stopCitation(){
+  if(!STOP.active) return false;
+  if(!STOP.askedReason){
+    addDiscipline(1, 'issued a citation without explaining the stop');
+    toast('YOU NEVER TOLD THEM WHY THEY WERE STOPPED', 'bad');
+  }
+  var fine = ri(85, 320);
+  G.cash += Math.round(fine * .1);
+  toast('CITATION ISSUED \u2014 $' + fine, 'good');
+  addXP(90, 'citation issued');
+  dispatchSay(G.callsign + ' clear, citation issued.', 3);
+  stopEnd('citation');
+  return true;
+}
+function stopWarning(){
+  if(!STOP.active) return false;
+  toast('VERBAL WARNING GIVEN', 'good');
+  addXP(45, 'verbal warning');
+  easeDiscipline(1);
+  dispatchSay(G.callsign + ' clear, warning issued.', 3);
+  stopEnd('warning');
+  return true;
+}
+function stopRelease(){
+  if(!STOP.active) return false;
+  var r = STOP.rec;
+  if(r.warrants && r.warrants.length && STOP.ranPlate){
+    addDiscipline(3, 'released a driver with an active warrant');
+    toast('YOU RELEASED A WANTED DRIVER', 'bad');
+  } else {
+    toast('DRIVER RELEASED', '');
+    addXP(15, 'stop concluded');
+  }
+  stopEnd('release');
+  return true;
+}
+function stopArrest(){
+  if(!STOP.active) return false;
+  var r = STOP.rec;
+  var justified = (r.warrants && r.warrants.length) || r.arrestable || r.stolen ||
+                  (r.contraband && STOP.ranPlate);
+  if(!justified){
+    addDiscipline(4, 'arrest without probable cause');
+    toast('NO PROBABLE CAUSE FOR AN ARREST', 'bad');
+    return true;
+  }
+  toast('SUSPECT UNDER ARREST', 'good');
+  addXP(160, 'arrest on a traffic stop');
+  G.prisoner = { name:(r.name || 'Unknown'), charge:(r.warrants && r.warrants[0]) || 'DWI' };
+  dispatchSay(G.callsign + ' has one in custody, en route to booking.', 1);
+  stopEnd('arrest');
+  return true;
+}
+/* ============================================================
    ENGINE / PLAYER / INPUT / MAIN LOOP
    ============================================================ */
 var renderer, scene, camera, sun, hemi, ambient, skyMesh, cloudMesh, rainSys, fogCol, GRAIN = null;
@@ -14395,7 +15693,10 @@ function updateCamera(dt){
     }
     if(G.officerMesh) G.officerMesh.visible = true;
     if(camera.up && camera.up.set) camera.up.set(0, 1, 0);
-    var back = mode === 'close' ? 3.1 : 4.7, up = mode === 'close' ? 1.85 : 2.35;
+    /* On foot the default sat 4.7m back and 2.35m up, which framed the
+       officer as a small figure in the middle distance. Pull in to roughly
+       an over-the-shoulder distance. */
+    var back = mode === 'close' ? 2.3 : 3.2, up = mode === 'close' ? 1.55 : 1.80;
     /* pull the camera out a little as he speeds up */
     back += Math.min(G.player.spd, 4.3) * .16;
     tx = G.player.x - Math.cos(ph) * back;
@@ -14493,8 +15794,56 @@ function updateMirrorCam(dt){
   G.mirrorT = (G.mirrorT || 0) + dt * .35;
   G.officerMesh.rotation.y = -G.playerH + Math.PI / 2 + Math.sin(G.mirrorT) * .55;
 }
+/* ---- simple shadows ----
+   A soft dark disc under each vehicle and person. Cheap, and it does more
+   for grounding objects than any amount of lighting work. */
+var SHADOW_GEO = null, SHADOW_MAT = null;
+function makeShadow(r){
+  if(!SHADOW_GEO){
+    SHADOW_GEO = new THREE.CircleGeometry(1, 14);
+    SHADOW_GEO.rotateX(-Math.PI / 2);
+    SHADOW_MAT = new THREE.MeshBasicMaterial({
+      color:0x000000, transparent:true, opacity:.26, depthWrite:false
+    });
+  }
+  var m = new THREE.Mesh(SHADOW_GEO, SHADOW_MAT);
+  m.scale.set(r, 1, r);
+  m.renderOrder = 2;
+  return m;
+}
+function attachShadow(obj, r){
+  if(!obj || obj.userData.shadow) return;
+  var s = makeShadow(r);
+  s.position.y = .03;
+  obj.add(s);
+  obj.userData.shadow = s;
+}
+function updateShadows(){
+  var i;
+  for(i = 0; i < G.vehicles.length; i++){
+    var v = G.vehicles[i];
+    if(v.mesh && !v.mesh.userData.shadow) attachShadow(v.mesh, (v.P ? v.P.len : 4.8) * .34);
+  }
+  for(i = 0; i < G.traffic.length; i++){
+    var t2 = G.traffic[i];
+    if(t2.mesh && !t2.mesh.userData.shadow) attachShadow(t2.mesh, (t2.P ? t2.P.len : 4.8) * .34);
+  }
+  if(G.parked) for(i = 0; i < G.parked.length; i++){
+    var p2 = G.parked[i];
+    if(p2.mesh && !p2.mesh.userData.shadow) attachShadow(p2.mesh, (p2.P ? p2.P.len : 4.8) * .34);
+  }
+  for(i = 0; i < G.peds.length; i++){
+    var pd2 = G.peds[i];
+    if(pd2.mesh && !pd2.mesh.userData.shadow) attachShadow(pd2.mesh, .42);
+  }
+  if(G.officerMesh && !G.officerMesh.userData.shadow) attachShadow(G.officerMesh, .46);
+}
 function rebuildOfficer(){
-  if(G.officerMesh){ scene.remove(G.officerMesh); }
+  var wasVisible;
+  if(G.officerMesh){
+    wasVisible = G.officerMesh.visible;
+    scene.remove(G.officerMesh);
+  }
   var a = G.appear, u = UNIFORM_COLS[a.uniform] || UNIFORM_COLS.navy;
   var m = buildPerson({
     cop:true,
@@ -14504,7 +15853,13 @@ function rebuildOfficer(){
     female:a.sex === 'f', build:a.build, hair:a.hair, glasses:a.glasses !== 'none'
   });
   G.officerMesh = m;
-  m.visible = false;
+  /* Do not blanket-hide the rebuilt model. Every appearance change rebuilds
+     it, so pinning visible=false made the character vanish the instant you
+     picked new clothing -- exactly when you most need to see it. Carry the
+     previous visibility, and always show it in the locker mirror. */
+  m.visible = G.mirror ? true : (wasVisible !== undefined ? wasVisible : !!G.onFoot);
+  m.position.set(G.player.x, G.player.y, G.player.z);
+  m.rotation.y = -G.playerH + Math.PI / 2;
   scene.add(m);
 }
 
@@ -14559,7 +15914,11 @@ function exitVehicle(){
   if(Math.abs(v.spd) > 3){ toast('SLOW DOWN FIRST', 'bad'); return; }
   G.onFoot = true;
   G.veh = null;
-  v.throttle = 0; v.brake = 1;
+  /* Do NOT leave the brake held. Reverse is 'brake applied while stopped',
+     so a parked car with brake=1 pinned drove itself backwards the moment
+     you stepped out. Park it properly instead. */
+  v.throttle = 0; v.brake = 0; v.hand = 1; v.spd = 0;
+  v.parkedBrake = true;
   var sx = v.x - Math.sin(v.h) * 2.0, sz = v.z + Math.cos(v.h) * 2.0;
   G.player.x = sx; G.player.z = sz; G.player.y = v.y;
   G.player.spd = 0;
@@ -14571,6 +15930,7 @@ function exitVehicle(){
   setPrompt('');
 }
 function enterVehicle(v){
+  if(v){ v.parkedBrake = false; v.hand = 0; }
   G.onFoot = false;
   G.veh = v;
   G.player.spd = 0;
@@ -14686,6 +16046,16 @@ function bindInput(){
   tap($('btnWpn'), toggleWeaponWheel);
   tap($('btnPause'), togglePause);
 
+  /* pedals read GAS/BRAKE in a car and SPRINT/JUMP on foot */
+  G.footLabels = false;
+  tap($('btnTools'), function(){
+    G.toolsOpen = !G.toolsOpen;
+    var b = document.body;
+    b.className = G.toolsOpen ? ('tools ' + b.className)
+                              : b.className.replace(/\btools\b\s*/g, '');
+    var tb = $('btnTools');
+    if(tb) tb.className = 'tsm' + (G.toolsOpen ? ' on' : '');
+  });
   tap($('btnRun'), toggleRun);
   tap($('btnExit'), function(){
     if(G.interior){ exitInterior(); return; }
@@ -14829,6 +16199,16 @@ function onKey(k, e){
   if(k === 'z'){ toggleWeaponWheel(); return; }
   if(k === 'b' && !K['shift']){ requestBackup(Pursuit.active ? 'pursuit' : 'general'); return; }
   if(k === 'k'){ if(K['shift']) k9Search(); else k9Toggle(); return; }
+  if(STOP.active && G.onFoot && !G.menuOpen){
+    if(k === 'e'){ if(stopAskDocs()) return; }
+    if(k === 't'){ if(stopExplain()) return; }
+    if(k === 'r'){ if(stopRunPlate()) return; }
+    if(k === 'f'){ if(stopFieldSobriety()) return; }
+    if(k === 'y'){ if(stopCitation()) return; }
+    if(k === 'u'){ if(stopWarning()) return; }
+    if(k === 'g'){ if(stopRelease()) return; }
+    if(k === 'h'){ if(stopArrest()) return; }
+  }
   if(k === 'r' && G.onFoot && !G.menuOpen){ toggleRun(); return; }
   if(k === 'h' && K['shift']){ requestAir(); return; }
   if(k === 'r' && K['shift']){ reloadWeapon(); return; }
@@ -15014,6 +16394,14 @@ function controlVehicle(v, dt){
   G.stats.miles += Math.abs(v.spd) * dt / 1609;
 }
 function controlFoot(dt){
+  /* jump: brake pedal on touch, space on a keyboard */
+  if((TOUCH.brake || K[' ']) && G.onFoot && (G.jumpT || 0) <= 0 && (G.airT || 0) <= 0){
+    G.vy = 4.35;
+    G.airT = .01;
+    G.jumpT = .30;
+    if(typeof Audio_step === 'function') Audio_step();
+  }
+  if(G.jumpT > 0) G.jumpT -= dt;
   var mx = 0, mz = 0;
   if(K['w'] || K['arrowup']) mz += 1;
   if(K['s'] || K['arrowdown']) mz -= 1;
@@ -15030,7 +16418,8 @@ function controlFoot(dt){
   /* Run is a toggle, the way a patrol sim does it -- holding a second
      control while steering on a phone is unworkable. The stick's own
      deflection still governs speed inside whichever gait you are in. */
-  var wantRun = G.runToggle || K['shift'];
+  /* on foot the pedals are repurposed: GAS sprints, BRAKE jumps */
+  var wantRun = G.runToggle || K['shift'] || TOUCH.gas;
   var walkTop = 1.85, runTop = 4.30;
 
   if(mag > .06){
@@ -15043,8 +16432,12 @@ function controlFoot(dt){
       G.inputHeld = true;
       G.ctrlYaw = G.camYaw;
     }
+    /* Stick up is mz=+1, which atan2(mx,mz) reports as 0 -- already
+       "straight ahead" relative to the camera. Subtracting a further 90
+       degrees rotated the entire mapping, so pushing right walked you
+       forward and up walked you left. */
     var moveAng = Math.atan2(mx, mz);
-    var wa = angWrap(G.ctrlYaw + moveAng - Math.PI / 2);
+    var wa = angWrap(G.ctrlYaw + moveAng);
     G.moveAng = wa;
     var off = Math.abs(angDiff(wa, G.playerH));
     /* turn rate falls off with speed, so you arc at a run and pivot at a walk */
@@ -15069,14 +16462,26 @@ function controlFoot(dt){
   if(G.player.spd > .01){
     var np = { x:G.player.x + Math.cos(G.playerH) * G.player.spd * dt,
                z:G.player.z + Math.sin(G.playerH) * G.player.spd * dt };
+    /* one continuous world: furniture indoors, buildings outdoors, both
+       always active so the doorway is a real threshold either way */
     if(G.interior) resolveInteriorSolids(G.interior, np, .40);
-    else resolveSolid(np, .42);
+    resolveSolid(np, .42);
+    resolveDoors(np, .40);
     /* stop dead against a wall rather than grinding along at full speed */
     var moved = dist(np.x, np.z, G.player.x, G.player.z);
     if(moved < G.player.spd * dt * .35) G.player.spd *= .35;
     G.player.x = np.x; G.player.z = np.z;
   }
-  G.player.y = roadHeightAt(G.player.x, G.player.z);
+  /* airborne: integrate the hop, land back on the ground plane */
+  var ground = G.interior ? 0 : roadHeightAt(G.player.x, G.player.z);
+  if((G.airT || 0) > 0 || (G.vy || 0) !== 0){
+    G.vy = (G.vy || 0) - 11.5 * dt;
+    G.player.y = (G.player.y === undefined ? ground : G.player.y) + G.vy * dt;
+    G.airT = (G.airT || 0) + dt;
+    if(G.player.y <= ground){ G.player.y = ground; G.vy = 0; G.airT = 0; }
+  } else {
+    G.player.y = ground;
+  }
   G.player.h = G.playerH;
   if(G.officerMesh){
     G.officerMesh.position.set(G.player.x, G.player.y, G.player.z);
@@ -15275,7 +16680,18 @@ function tick(ts){
   }
 
   /* time */
-  G.time += dt * G.timeScale;
+  if(G.liveClock){
+    /* Take the time of day straight from the device and keep the day count.
+       Easing across the midnight wrap drove G.time negative, which made the
+       clock read -5:-10, so set the time-of-day component outright. */
+    var now = new Date();
+    var live = now.getHours() * 3600 + now.getMinutes() * 60 + now.getSeconds()
+             + now.getMilliseconds() / 1000;
+    var dayNo = Math.max(0, Math.floor(G.time / 86400));
+    G.time = dayNo * 86400 + live;
+  } else {
+    G.time += dt * G.timeScale;
+  }
   if(G.time > 86400) G.time -= 86400;
 
   /* weather */
@@ -15337,6 +16753,12 @@ function tick(ts){
   updateAir(dt);
   try { updateAmbience(dt); } catch(eA){ reportError('ambience: ' + eA.message, '', 0, 0, eA); }
   try { updateTrain(dt); } catch(eT){ reportError('train: ' + eT.message, '', 0, 0, eT); }
+  try { stopUpdate(dt); } catch(eSt){ reportError('stop: ' + eSt.message, '', 0, 0, eSt); }
+  try { updateBirds(dt); } catch(eB){ reportError('birds: ' + eB.message, '', 0, 0, eB); }
+  try { updateNpcEngines(dt); } catch(eN){ reportError('npceng: ' + eN.message, '', 0, 0, eN); }
+  try { updateCityAmbience(dt); } catch(eC){ reportError('ambience: ' + eC.message, '', 0, 0, eC); }
+  try { updateShadows(); } catch(eS){ reportError('shadows: ' + eS.message, '', 0, 0, eS); }
+  try { updateDoors(dt); } catch(eD){ reportError('doors: ' + eD.message, '', 0, 0, eD); }
   try { updateK9(dt); } catch(eK){ reportError('k9: ' + eK.message, '', 0, 0, eK); }
   try { gpsUpdate(dt); } catch(eG){ reportError('gps: ' + eG.message, '', 0, 0, eG); }
   if(!G.onFoot && G.veh && typeof nearestStation === 'function'){
@@ -15457,8 +16879,8 @@ function boot(){
   loadGame();
 
   var steps = [
-    ['Surveying Bayard County', function(){ buildWaterData(); layoutRoads(); }],
-    ['Platting the road network', function(){ buildGraph(); buildRoadHash(); }],
+    ['Surveying Bayard County', function(){ buildWaterData(); layoutRoads(); dedupeRoads(); }],
+    ['Platting the road network', function(){ buildGraph(); dedupeEdges(); buildRoadHash(); }],
     ['Grading terrain', function(){ initChunks(); buildTerrain(); }],
     ['Paving roads and shoulders', function(){ buildRoads(); }],
     ['Raising Cypress Falls', function(){ fillDistricts(); }],
@@ -15466,7 +16888,7 @@ function boot(){
     ['Starting the render engine', function(){ initEngine(); }],
     ['Clearing the roadways', function(){ sweepRoadSolids(); }],
     ['Laying the rail', function(){ buildRailPath(); buildRailGeometry(); buildRailCrossings(); }],
-    ['Baking the world', function(){ bakeChunks(scene); buildWater(scene); buildSigns(scene); buildInteriors(scene); buildTrain(scene); }],
+    ['Baking the world', function(){ bakeChunks(scene); buildWater(scene); buildSigns(scene); buildBirds(scene); buildInteriors(scene); buildShopInteriors(scene); clearInteriorSolids(); buildDoors(scene); buildTrain(scene); }],
     ['Issuing your equipment', function(){
         rebuildOfficer();
         setWeather('clear');
