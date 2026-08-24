@@ -1142,6 +1142,15 @@ Builder.prototype.quad = function(a, b, c, d, col){
 };
 /* axis-aligned box (optionally rotated about Y) centered at x,y,z */
 Builder.prototype.box = function(x, y, z, sx, sy, sz, col, rot){
+  /* A builder called with a missing argument produced NaN vertices, which
+     collapsed the whole chunk's bounding sphere and made it vanish. Catch
+     it at the source rather than letting it reach the geometry. */
+  if(!isFinite(x) || !isFinite(y) || !isFinite(z) || !isFinite(sx) || !isFinite(sy) || !isFinite(sz) || !isFinite(col)){
+    if(typeof reportError === 'function'){
+      reportError('box(): non-finite argument, skipped', '', 0, 0, null);
+    }
+    return this;
+  }
   var hx = sx/2, hy = sy/2, hz = sz/2;
   var co = 1, si = 0;
   if(rot){ co = Math.cos(rot); si = Math.sin(rot); }
@@ -1907,7 +1916,11 @@ function buildGraph(){
     /* Signalise only where two major roads actually meet. Signalising every
        junction touching a major road put 504 sets of lights on the map and
        the grid seized up; everything else is stop-controlled instead. */
-    if(big >= 3 || hasMajor >= 2){
+    /* Signalise where two genuinely major roads cross, or where three or
+       more busy approaches meet. Signalising every junction touching an
+       arterial put ~500 sets of lights on a county-sized map and left a
+       third of all traffic stopped at any moment. */
+    if(big >= 3 || (hasMajor >= 2 && n.e.length >= 4)){
       n.light = { phase:(wrand() < 0.5 ? 0 : 1), t:wrng(0, 22), axis:0 };
       /* dominant axis = direction of the widest edge */
       var we = EDGES[n.e[0]], bw = -1;
@@ -1933,6 +1946,18 @@ function assignStopControl(){
     var nd = NODES[i];
     if(nd.e.length < 3 || nd.light || nd.stop) continue;
     if((nd.y || 0) > 2) continue;
+    /* Do not put a stop sign on every junction. A quiet residential
+       crossing runs on right-of-way, not four-way stops -- signing all of
+       them left half the traffic stationary at any moment and dragged
+       average speed to ~40% of the posted limit. Control a junction only
+       where a genuinely busier road is involved. */
+    var hasBusy = false, q;
+    for(q = 0; q < nd.e.length; q++){
+      var tq = EDGES[nd.e[q]].type;
+      if(tq === 'collector' || tq === 'arterial' || tq === 'highway' ||
+         tq === 'freeway' || tq === 'frontage'){ hasBusy = true; break; }
+    }
+    if(!hasBusy) continue;
     nd.stop = true;
     n++;
   }
@@ -2652,8 +2677,21 @@ function signalHeadPos(n, idx){
   var k = ap[idx % ap.length];
   var ea = k.ang;                       /* toward the far end of that road */
   var w = k.e.w;
-  /* mast on the right-hand kerb as seen by a driver arriving on this leg */
-  var nx = -Math.sin(ea), nz = Math.cos(ea);
+  /* Mast on the right-hand kerb as seen by a driver arriving on this leg.
+     ea points from the node OUT along the leg, so the driver's heading is
+     ea+PI and their right-hand side is (sin ea, -cos ea). The previous
+     vector was exactly the negative of that, putting 1476 of 1905 signal
+     heads on the driver's LEFT -- which is why they read as being on the
+     wrong side of the road. */
+  var nx = Math.sin(ea), nz = -Math.cos(ea);
+  /* On a skewed leg the naive perpendicular can still land on the wrong
+     side, so verify against the driver's actual right-hand vector and flip
+     if it disagrees rather than assuming the geometry is square. */
+  (function(){
+    var dh = ea + Math.PI;
+    var rx = -Math.sin(dh), rz = Math.cos(dh);
+    if(nx * rx + nz * rz < 0){ nx = -nx; nz = -nz; }
+  })();
   var back = mw / 2 + 1.6;              /* just outside the junction box */
   var poleX = n.x + Math.cos(ea) * back + nx * (w / 2 + 1.2);
   var poleZ = n.z + Math.sin(ea) * back + nz * (w / 2 + 1.2);
@@ -4514,8 +4552,44 @@ function buildRoads(){
     /* curbs + sidewalks */
     if(RT[e.type].sw && !elev){
       var so = w / 2 + 1.6;
-      B.plate(mx + nx * so, my + .12, mz + nz * so, L, 3.0, C.sidewalk, ang);
-      B.plate(mx - nx * so, my + .12, mz - nz * so, L, 3.0, C.sidewalk, ang);
+      /* Pavements ran the FULL length of the edge, so at a junction they
+         carried straight on across the crossing carriageway -- the footway
+         appeared to run over the road instead of stopping at the kerb and
+         resuming on the far side. Pull each end back by the half-width of
+         the widest road it meets, and mark a crossing in the gap. */
+      var backA = 0, backB = 0, kk;
+      var nodeA = NODES[e.a], nodeB = NODES[e.b];
+      for(kk = 0; kk < nodeA.e.length; kk++){
+        var ea = EDGES[nodeA.e[kk]];
+        if(ea !== e && (ea.w / 2 + 1.2) > backA) backA = ea.w / 2 + 1.2;
+      }
+      for(kk = 0; kk < nodeB.e.length; kk++){
+        var eb = EDGES[nodeB.e[kk]];
+        if(eb !== e && (eb.w / 2 + 1.2) > backB) backB = eb.w / 2 + 1.2;
+      }
+      var swLen = Math.max(4, L - backA - backB);
+      var swShift = (backA - backB) * .5;
+      var smx = mx + Math.cos(ang) * swShift, smz = mz + Math.sin(ang) * swShift;
+      B.plate(smx + nx * so, my + .12, smz + nz * so, swLen, 3.0, C.sidewalk, ang);
+      B.plate(smx - nx * so, my + .12, smz - nz * so, swLen, 3.0, C.sidewalk, ang);
+      /* zebra crossing across this edge at any controlled junction */
+      (function(){
+        var ends = [[nodeA, e.a, 1], [nodeB, e.b, -1]];
+        var q;
+        for(q = 0; q < ends.length; q++){
+          var nd = ends[q][0], sgn = ends[q][2];
+          if(!nd.light && !nd.stop) continue;
+          if(nd.e.length < 3) continue;
+          var back = (sgn > 0 ? backA : backB) + 1.4;
+          var bx = (sgn > 0 ? a.x : b.x) + Math.cos(ang) * back * sgn;
+          var bz = (sgn > 0 ? a.z : b.z) + Math.sin(ang) * back * sgn;
+          var bar;
+          for(bar = 0; bar < 6; bar++){
+            var off = -w / 2 + 1.0 + bar * ((w - 2.0) / 5);
+            B.plate(bx + nx * off, my + .07, bz + nz * off, 1.9, .42, C.line, ang);
+          }
+        }
+      })();
       B.box(mx + nx * (w / 2 + .12), my + .09, mz + nz * (w / 2 + .12), L, .22, .25, 0xb6bcc2, ang);
       B.box(mx - nx * (w / 2 + .12), my + .09, mz - nz * (w / 2 + .12), L, .22, .25, 0xb6bcc2, ang);
     }
@@ -4529,6 +4603,7 @@ function buildRoads(){
         var side = (s % 2) ? 1 : -1;
         var sx = lx + nx * side * (w / 2 + 2.4), sz2 = lz + nz * side * (w / 2 + 2.4);
         bStreetLight(CB(sx, sz2), sx, sz2, ang + (side > 0 ? Math.PI * 1.5 : Math.PI * .5));
+        addFurnitureSolid(sx, sz2, .22, 9);
       }
     }
   }
@@ -4755,6 +4830,17 @@ function plotReserved(x, z, hw, hd){
   return false;
 }
 var COURT_SPOT = null;
+function findClearOffset(ax, az, w, d, dxOff, pad){
+  var tries = [[0,0],[0,70],[0,-70],[70,0],[-70,0],[0,120],[0,-120],[120,0],[-120,0],
+               [90,90],[-90,90],[90,-90],[-90,-90],[0,170],[170,0],[-170,0],[0,-170]];
+  var i;
+  for(i = 0; i < tries.length; i++){
+    var x = ax + tries[i][0], z = az + tries[i][1];
+    if(footprintClear(x + dxOff, z, w, d, 0, pad || 8)) return { x:x, z:z, moved:i };
+  }
+  return { x:ax, z:az, moved:-1 };
+}
+var STATION_SPOT = {};
 function reserveCivicPlots(){
   RESERVED = [];
   /* Pick the site FIRST -- the origin is a road junction, so pinning the
@@ -4764,6 +4850,23 @@ function reserveCivicPlots(){
   COURT_SPOT = findClear(0, 0, 190, 190, 0, 14);
   if(COURT_SPOT.moved < 0) COURT_SPOT = { x:0, z:0, moved:0 };
   reservePlot(COURT_SPOT.x, COURT_SPOT.z, 82, 82, 'courthouse');
+
+  /* The three walk-in agencies need room for the building AND its garage
+     wing AND the apron. Claim those parcels now so the district fill does
+     not put a tower or a house on them, and record the exact spot so the
+     station is built THERE -- previously a legacy exterior shell went at
+     the landmark and the walk-in room went somewhere else entirely, which
+     is why there were two police stations 70m apart, only one with a
+     garage. */
+  STATION_SPOT = {};
+  var seeds = [['pd', -210, 175], ['so', 215, -170], ['dps', 880, -1120]];
+  var si;
+  for(si = 0; si < seeds.length; si++){
+    var sp = findClearOffset(seeds[si][1], seeds[si][2], 96, 60, 26, 10);
+    if(sp.moved < 0) sp = { x:seeds[si][1], z:seeds[si][2], moved:0 };
+    STATION_SPOT[seeds[si][0]] = sp;
+    reservePlot(sp.x + 13, sp.z, 66, 40, 'station_' + seeds[si][0]);
+  }
 }
 function fillDistricts(){
   var i, d;
@@ -5080,20 +5183,23 @@ function placeLandmarks(){
   bCourthouse(CB(ccl.x, ccl.z), ccl.x, ccl.z);
   LM('Bayard County Courthouse', ccl.x, ccl.z, 'court', true);
 
-  var stc1 = findClear(-210, 175, 96, 78, 0, 8);
-  bPoliceStation(CB(stc1.x, stc1.z), stc1.x, stc1.z, 0, 'pd');
-  LM('Cypress Falls Police Department', stc1.x, stc1.z + 25, 'pd', true);
+  /* No legacy exterior here -- buildStation() raises the real building
+     with its garage wing on the reserved plot. Two stations 70m apart,
+     only one with a garage, was the bug. */
+  var stc1 = STATION_SPOT.pd;
+  LM('Cypress Falls Police Department', stc1.x, stc1.z, 'pd', true);
 
-  var stc2 = findClear(215, -170, 96, 78, Math.PI, 8);
-  bPoliceStation(CB(stc2.x, stc2.z), stc2.x, stc2.z, Math.PI, 'so');
-  LM('Bayard County Sheriff\'s Office', stc2.x, stc2.z - 25, 'so', true);
+  /* No legacy exterior here -- buildStation() raises the real building
+     with its garage wing on the reserved plot. Two stations 70m apart,
+     only one with a garage, was the bug. */
+  var stc2 = STATION_SPOT.so;
+  LM("Bayard County Sheriff's Office", stc2.x, stc2.z, 'so', true);
 
   bJail(CB(330, -280), 330, -280, 0);
   LM('Bayard County Detention Center', 330, -300, 'jail', true);
 
-  var stc3 = findClear(880, -1120, 96, 78, Math.PI / 2, 8);
-  bPoliceStation(CB(stc3.x, stc3.z), stc3.x, stc3.z, Math.PI / 2, 'pd');
-  LM('State Highway Patrol \u2013 Region 7', stc3.x, stc3.z, 'dps', true);
+  var stc3 = STATION_SPOT.dps;
+  LM('Texas DPS \u2013 Bayard District', stc3.x, stc3.z, 'dps', true);
 
   var stc4 = findClear(-1180, 420, 96, 78, 0, 8);
   bPoliceStation(CB(stc4.x, stc4.z), stc4.x, stc4.z, 0, 'pd');
@@ -5184,6 +5290,108 @@ function placeLandmarks(){
     bFastFood(CB(fcl.x, fcl.z), fcl.x, fcl.z, FF[i][2], FF[i][3]);
     LM(FF[i][3], fcl.x, fcl.z, 'food', false);
   }
+
+  /* ============================================================
+     OUTLYING DEVELOPMENT
+     A third of the county had nothing within 140m -- large stretches read
+     as empty prairie with roads running through them. This seeds the gaps
+     with the things that actually sit on the edge of a North Texas town:
+     subdivisions, strip centres, churches, self-storage and light
+     industrial. Everything is placed on ground proven clear first.
+     ============================================================ */
+  (function fillOutskirts(){
+    var gx, gz, made = 0;
+    for(gx = -2100; gx <= 2100; gx += 300){
+      for(gz = -2100; gz <= 2100; gz += 300){
+        /* leave the built-up core and the reserved plots alone */
+        if(Math.sqrt(gx * gx + gz * gz) < 900) continue;
+        if(typeof plotReserved === 'function' && plotReserved(gx, gz, 90, 90)) continue;
+        /* is there already something close? then this is not a gap */
+        var occupied = false, q;
+        for(q = 0; q < SOLIDS.length; q++){
+          var sq = SOLIDS[q];
+          if(Math.abs(sq.x - gx) < 150 && Math.abs(sq.z - gz) < 150){ occupied = true; break; }
+        }
+        if(occupied) continue;
+        /* must be near a road, or it is unreachable scenery */
+        var nearRoad = false, e2;
+        for(e2 = 0; e2 < EDGES.length; e2++){
+          var ed = EDGES[e2];
+          var na = NODES[ed.a], nb = NODES[ed.b];
+          var mx2 = (na.x + nb.x) / 2, mz2 = (na.z + nb.z) / 2;
+          if(Math.abs(mx2 - gx) < 190 && Math.abs(mz2 - gz) < 190){ nearRoad = true; break; }
+        }
+        if(!nearRoad) continue;
+
+        var roll = wrand();
+        var cl;
+        if(roll < .44){
+          /* a small subdivision: a handful of houses on their own lots */
+          var hi;
+          for(hi = 0; hi < 7; hi++){
+            var hx = gx + wrng(-95, 95), hz = gz + wrng(-95, 95);
+            if(!footprintClear(hx, hz, 30, 26, 0, 5)) continue;
+            /* Blender-modelled ranch house, ported to Builder calls */
+            var hr = mRanchHouse(CB(hx, hz), hx, hz, wrand() < .5 ? 0 : Math.PI, null);
+            addSolid(hx, hz, hr.hw, hr.hd, 8, 0);
+            if(wrand() < .5) bTree(CB(hx, hz), hx + wrng(-14, 14), hz + wrng(-14, 14), wrng(.9, 1.4));
+          }
+          made++;
+        } else if(roll < .64){
+          cl = findClear(gx, gz, 92, 46, 0, 8);
+          if(cl.moved >= 0){
+            /* Blender-modelled strip centre */
+            var sr = mStripCentre(CB(cl.x, cl.z), cl.x, cl.z, 0, null);
+            addSolid(cl.x, cl.z, sr.hw, sr.hd, 7, 0);
+            LM('Strip Center', cl.x, cl.z, 'shop', false);
+            made++;
+          }
+        } else if(roll < .76){
+          cl = findClear(gx, gz, 60, 52, 0, 8);
+          if(cl.moved >= 0){
+            /* Blender-modelled church */
+            var chr = mChurch(CB(cl.x, cl.z), cl.x, cl.z, 0, null);
+            addSolid(cl.x, cl.z, chr.hw, chr.hd, 10, 0);
+            LM('Community Church', cl.x, cl.z, 'church', false);
+            made++;
+          }
+        } else if(roll < .88){
+          cl = findClear(gx, gz, 74, 44, 0, 8);
+          if(cl.moved >= 0){
+            var zr = bSelfStorage(CB(cl.x, cl.z), cl.x, cl.z, 0);
+            addSolid(cl.x, cl.z, zr.hw, zr.hd, 5, 0);
+            made++;
+          }
+        } else {
+          cl = findClear(gx, gz, 84, 60, 0, 8);
+          if(cl.moved >= 0){
+            /* bWarehouse(B, x, z, rot, w, d) -- calling it without w and d
+               left both undefined, so every vertex it produced was NaN and
+               the whole chunk's bounding sphere collapsed. */
+            var wr = bWarehouse(CB(cl.x, cl.z), cl.x, cl.z, 0, 52, 34);
+            addSolid(cl.x, cl.z, (wr && wr.hw) || 24, (wr && wr.hd) || 16, 9, 0);
+            made++;
+          }
+        }
+      }
+    }
+    return made;
+  })();
+
+  /* --- water tower: the landmark a Texas town is recognised by --- */
+  (function(){
+    var wt = findClear(-1180, 760, 26, 26, 0, 12);
+    if(wt.moved >= 0){
+      mWaterTower(CB(wt.x, wt.z), wt.x, wt.z);
+      addSolid(wt.x, wt.z, 4.2, 4.2, 24, 0);
+      LM('Cypress Falls Water Tower', wt.x, wt.z, 'tower', true);
+    }
+    var wt2 = findClear(940, -640, 26, 26, 0, 12);
+    if(wt2.moved >= 0){
+      mWaterTower(CB(wt2.x, wt2.z), wt2.x, wt2.z);
+      addSolid(wt2.x, wt2.z, 4.2, 4.2, 24, 0);
+    }
+  })();
 
   /* --- linear greenways in the open ground along the arterials --- */
   var GREEN = [[-620, 260, 0, 'CYPRESS GREENWAY'],
@@ -5465,6 +5673,31 @@ function updateChunkVis(px, pz, viewDist){
    ============================================================ */
 /* the interior rooms sit behind each station; do not let the station's own
    exterior collider cover the room the player is meant to walk into */
+/* Nothing may stand on the railway. A freight train clipping through a
+   warehouse is the same class of bug as a building in a road -- the track
+   was laid first and the district fill did not know about it. */
+/* Street furniture was decoration with no collision: you drove through
+   light poles and benches. Register the ones that should stop a car. */
+function addFurnitureSolid(x, z, r, h){
+  addSolid(x, z, r, r, h || 4, 0);
+}
+function clearRailSolids(){
+  if(typeof RAIL === 'undefined' || !RAIL || !RAIL.pts) return 0;
+  var removed = 0, k, i;
+  for(k = 0; k < RAIL.pts.length; k++){
+    var p = RAIL.pts[k];
+    for(i = SOLIDS.length - 1; i >= 0; i--){
+      var s = SOLIDS[i];
+      /* 7m of clearance either side of the centreline */
+      if(Math.abs(s.x - p.x) > s.hw + 7) continue;
+      if(Math.abs(s.z - p.z) > s.hd + 7) continue;
+      SOLIDS.splice(i, 1);
+      removed++;
+    }
+  }
+  if(removed && typeof rebuildSolidGrid === 'function') rebuildSolidGrid();
+  return removed;
+}
 function clearInteriorSolids(){
   if(typeof INTERIORS === 'undefined') return 0;
   var id, n = 0, i;
@@ -5878,10 +6111,10 @@ function attachDoorText(grp, P, liv){
   var hw = P.wid / 2 + .028;
   var geo = new THREE.PlaneGeometry(w, h);
   var L = new THREE.Mesh(geo, mat);
-  L.position.set(doorX, doorY, hw);
+  L.position.set(doorX, doorY, hw + .026);
   grp.add(L);
   var R = new THREE.Mesh(geo, mat);
-  R.position.set(doorX, doorY, -hw);
+  R.position.set(doorX, doorY, -(hw + .026));
   R.rotation.y = Math.PI;
   grp.add(R);
   /* tailgate / rear text */
@@ -5929,24 +6162,30 @@ var PROFILES = {
      axles and a centred cabin, which is why it read as a generic three-box
      saloon instead of a Crown Victoria. The cabin is set well back, the
      roof is long and almost flat, and the beltline is high and straight. */
-  cv: VP({ len:5.42, wid:1.98, wb:2.93, wr:.375, track:.84,
-    axleF:1.79, axleR:-1.14,
-    /* Rendered and measured: the body side was 0.67m tall under only 0.36m
-       of glass, which reads as a slab with a cabin perched on it. The real
-       car is close to the reverse -- about 0.55m of bodyside under 0.47m of
-       glasshouse -- so the beltline drops and the roof comes up. */
-    /* Rendered again: the cabin only spanned about a fifth of the length and
-       sat behind the rear axle, and the whole car sat too low on its wheels.
-       On the real car the greenhouse covers roughly the middle THIRD -- from
-       just behind the front axle to just ahead of the rear one -- and the
-       sill clears the tyre centre. Both corrected here. */
-    sill:.52, beltY:1.06, roofY:1.62, hoodY:1.04, deckY:1.07,
-    /* flat top deck from the base of the windscreen right to the tail */
-    body:[[-2.71,.34],[-2.71,.92],[-2.66,1.06],[-1.50,1.09],[1.40,1.09],[2.62,1.04],[2.71,.88],[2.71,.34]],
-    /* windscreen base ahead of the front axle, C-pillar over the rear one:
-       a long roof spanning the middle of the car, not a small box at the back */
-    cabin:[[-1.34,1.09],[-.86,1.60],[1.02,1.62],[1.52,1.09]],
-    nose:2.71, tail:-2.71, hoodX:1.55, deckX:-1.58, inset:.19 }),
+  cv: VP({
+    /* ---- ported from the Blender model ----
+       Thirteen lofted cross-sections were modelled against the real P71
+       and then reduced to this profile. The numbers that matter and were
+       measured in Blender: 5.40m long, 1.98m wide, 2.91m wheelbase, and
+       crucially a 0.92m front overhang against a 1.57m rear -- a 1.71:1
+       ratio. That short nose over a long deck is what makes it read as a
+       Panther car rather than a generic saloon. */
+    len:5.40, wid:1.98, wb:2.91, wr:.35, track:.805,
+    axleF:1.78, axleR:-1.13,
+    sill:.50, beltY:1.07, roofY:1.47, hoodY:1.02, deckY:1.06,
+    /* silhouette traced from the Blender stations: low nose, rising cowl,
+       flat cabin, long flat deck, dropping to the tail panel */
+    body:[[-2.70,.32],[-2.60,.99],[-2.40,1.045],[-2.05,1.06],
+          [-1.62,1.065],[-1.00,1.07],[.10,1.07],[.95,1.068],
+          [1.52,1.055],[1.90,1.02],[2.25,.985],[2.56,.945],[2.70,.885],[2.70,.32]],
+    /* formal roofline: upright A-pillar, near-vertical C-pillar, roof
+       spanning the middle third */
+    cabin:[[-1.62,1.07],[-1.30,1.435],[.92,1.455],[1.52,1.07]],
+    nose:2.70, tail:-2.70, hoodX:1.55, deckX:-1.62, inset:.055,
+    /* greenhouse tapers inward toward the roof -- 88% of beltline width,
+       measured as 114mm of tumblehome per side in Blender */
+    tumble:.88
+  }),
 
   /* --- mid-size FWD sedan --- */
   sedan: VP({ len:4.88, wid:1.84, wb:2.72, wr:.34, track:.80,
@@ -6104,7 +6343,9 @@ function flank(B, x, y, sx, sy, hw, col, lift){
 }
 /* decal across the nose or tail (YZ plane at a given X) */
 function faceDecal(B, x, y, sz, sy, col, dir){
-  var xx = x + (dir > 0 ? .012 : -.012);
+  /* 12mm was inside the same depth band as the door lettering and the
+     body mouldings, so the livery bands fought them. Stand further off. */
+  var xx = x + (dir > 0 ? .030 : -.030);
   if(dir > 0){
     B.quad([xx, y - sy / 2, -sz / 2], [xx, y - sy / 2, sz / 2],
            [xx, y + sy / 2, sz / 2], [xx, y + sy / 2, -sz / 2], col);
@@ -6167,8 +6408,8 @@ function detailCrownSedan(B, P, hw, paint, trim, liv){
   }
   /* gold accent stripe along the flank, above the moulding */
   if(liv === 'pd' || liv === 'so'){
-    B.box(0, P.sill + .50, hw + .010, P.len * .78, .035, .015, 0xc8a24a, 0);
-    B.box(0, P.sill + .50, -(hw + .010), P.len * .78, .035, .015, 0xc8a24a, 0);
+    /* removed: full-length side line -- it ran straight through the door livery */
+    /* removed: full-length side line -- it ran straight through the door livery */
   }
 
   var chrome = 0xb9bec4, dark = 0x14171b;
@@ -6201,17 +6442,17 @@ function detailCrownSedan(B, P, hw, paint, trim, liv){
     /* Drip rail, tucked to the very edge of the roof. It used to sit .16 in
        from the flank at full roof height, running right alongside the
        lightbar -- which read as a second, doubled bar. */
-    B.box((c0 + c3) / 2, P.roofY - .045, hw - .055, Math.abs(c3 - c0) * .92, .028, .030, chrome, 0);
-    B.box((c0 + c3) / 2, P.roofY - .045, -(hw - .055), Math.abs(c3 - c0) * .92, .028, .030, chrome, 0);
+    /* removed: drip-rail chrome read as a grey bar along the roof/window join */
+    /* removed: drip-rail chrome read as a grey bar along the roof/window join */
     /* window chrome surround */
-    B.box((c0 + c3) / 2, P.beltY + .015, hw - .13, Math.abs(c3 - c0) * .88, .03, .05, chrome, 0);
-    B.box((c0 + c3) / 2, P.beltY + .015, -(hw - .13), Math.abs(c3 - c0) * .88, .03, .05, chrome, 0);
+    /* duplicate removed -- the reference detail pass already builds this,
+       and two copies a centimetre apart fought for depth */
     /* B-pillar */
-    B.box((c0 + c3) / 2 + .10, (P.beltY + P.roofY) / 2, hw - .12, .07, P.roofY - P.beltY, .04, dark, 0);
-    B.box((c0 + c3) / 2 + .10, (P.beltY + P.roofY) / 2, -(hw - .12), .07, P.roofY - P.beltY, .04, dark, 0);
+    /* duplicate removed -- the reference detail pass already builds this,
+       and two copies a centimetre apart fought for depth */
     /* padded C-pillar, the giveaway on this shape */
-    B.box(c0 + .18, (P.beltY + P.roofY) / 2 + .04, hw - .11, .34, P.roofY - P.beltY - .06, .05, shade(paint, .74), 0);
-    B.box(c0 + .18, (P.beltY + P.roofY) / 2 + .04, -(hw - .11), .34, P.roofY - P.beltY - .06, .05, shade(paint, .74), 0);
+    /* removed: duplicate body-coloured pillar slab floating over the side glass */
+    /* removed: duplicate body-coloured pillar slab floating over the side glass */
   }
 
   /* --- flanks: wheel-arch lips and a body-side moulding --- */
@@ -6219,50 +6460,31 @@ function detailCrownSedan(B, P, hw, paint, trim, liv){
   var axRd = (P.axleR !== undefined) ? P.axleR : -P.wb / 2;
   for(i = 0; i < 2; i++){
     var axd = i ? axFd : axRd;
-    B.box(axd, P.wr + .30, hw - .01, P.wr * 2.5, .06, .05, shade(paint, .70), 0);
-    B.box(axd, P.wr + .30, -(hw - .01), P.wr * 2.5, .06, .05, shade(paint, .70), 0);
+    B.box(axd, P.wr + .30, hw + .014, P.wr * 2.5, .06, .022, shade(paint, .70), 0);
+    B.box(axd, P.wr + .30, -(hw + .014), P.wr * 2.5, .06, .022, shade(paint, .70), 0);
   }
-  B.box(0, P.sill + .34, hw + .005, P.len * .70, .055, .02, shade(paint, .66), 0);
-  B.box(0, P.sill + .34, -(hw + .005), P.len * .70, .055, .02, shade(paint, .66), 0);
+  /* removed: full-length side line -- it ran straight through the door livery */
+  /* removed: full-length side line -- it ran straight through the door livery */
   /* fuel door */
-  B.box(P.tail + .70, P.beltY - .26, hw + .006, .22, .20, .012, shade(paint, .88), 0);
+  B.box(P.tail + .70, P.beltY - .26, hw + .034, .22, .20, .020, shade(paint, .88), 0);
 
   /* --- reference details: things the real car has that were missing --- */
   if(P.cabin){
     var cA = P.cabin[3][0], cC = P.cabin[0][0];
     /* chrome window surround along the beltline, both flanks */
-    B.box((cA + cC) / 2, P.beltY + .015, hw - .045, Math.abs(cA - cC) * .96, .028, .028, refChrome, 0);
-    B.box((cA + cC) / 2, P.beltY + .015, -(hw - .045), Math.abs(cA - cC) * .96, .028, .028, refChrome, 0);
+    /* removed: duplicate beltline chrome sitting high on the flank */
+    /* removed: duplicate beltline chrome sitting high on the flank */
     /* B-pillar, blacked out as on the real car */
     B.box((cA + cC) / 2 + .18, (P.beltY + P.roofY) / 2, hw - .035, .055, P.roofY - P.beltY, .03, 0x14171b, 0);
     B.box((cA + cC) / 2 + .18, (P.beltY + P.roofY) / 2, -(hw - .035), .055, P.roofY - P.beltY, .03, 0x14171b, 0);
-    /* --- side glass ---
-       The flank was a bare slab between the beltline and the roof. A real
-       Panther has two door windows split by the B-pillar, a fixed quarter
-       light at the back, and chrome running the whole opening. */
-    var gTop = P.roofY - .10, gBot = P.beltY + .055;
-    var gH = gTop - gBot, gY = (gTop + gBot) / 2;
-    var bP = (cA + cC) / 2 + .18;                    /* B-pillar */
+    /* Side glass is built generically in buildCarBody for every vehicle;
+       adding a second set here gave the Crown Victoria two coplanar layers
+       that flickered against each other. Only the mirrors belong here. */
     var sQ;
     for(sQ = 0; sQ < 2; sQ++){
-      var sz3 = sQ ? (hw - .035) : -(hw - .035);
-      /* front door glass */
-      var fW = Math.abs(cA - bP) - .30;
-      B.box((cA + bP) / 2 - .06, gY, sz3, fW, gH, .028, 0x1c2630, 0);
-      B.box((cA + bP) / 2 - .06, gBot + .012, sz3 - (sQ ? -.012 : .012), fW, .035, .030, refChrome, 0);
-      /* rear door glass */
-      var rW = Math.abs(bP - cC) - .58;
-      B.box((bP + cC) / 2 - .10, gY, sz3, rW, gH, .028, 0x1c2630, 0);
-      B.box((bP + cC) / 2 - .10, gBot + .012, sz3 - (sQ ? -.012 : .012), rW, .035, .030, refChrome, 0);
-      /* fixed quarter light behind the rear door */
-      B.box(cC + .20, gY, sz3, .26, gH * .86, .026, 0x1c2630, 0);
-      /* division bar between the rear door glass and the quarter light */
-      B.box(cC + .36, gY, sz3, .045, gH, .034, refChrome, 0);
-      /* chrome along the top of the opening, under the drip rail */
-      B.box((cA + cC) / 2, gTop - .012, sz3, Math.abs(cA - cC) * .94, .030, .030, refChrome, 0);
-      /* mirror on the front door */
-      B.box(cA - .16, P.beltY + .10, sz3 + (sQ ? .10 : -.10), .10, .13, .16, shade(paint, .96), 0);
-      B.box(cA - .19, P.beltY + .10, sz3 + (sQ ? .15 : -.15), .03, .10, .12, 0x2b3a48, 0);
+      var sgn = sQ ? 1 : -1;
+      B.box(cA - .14, P.beltY + .055, sgn * (hw + .05), .07, .05, .07, shade(paint, .92), 0);
+      B.box(cA - .19, P.beltY + .10, sgn * (hw + .13), .09, .12, .15, shade(paint, .96), 0);
     }
   }
   /* chrome door handles, front and rear, both sides */
@@ -6273,8 +6495,8 @@ function detailCrownSedan(B, P, hw, paint, trim, liv){
     B.box(-.72, P.beltY - .20, hz2, .22, .045, .022, refChrome, 0);
   }
   /* rocker chrome under the doors */
-  B.box(0, P.sill + .04, hw - .01, P.len * .58, .035, .022, refChrome, 0);
-  B.box(0, P.sill + .04, -(hw - .01), P.len * .58, .035, .022, refChrome, 0);
+  /* removed: rocker chrome stood 34mm proud of the flank and read as a grey bar bolted to the side */
+  /* removed: rocker chrome stood 34mm proud of the flank and read as a grey bar bolted to the side */
 
   /* --- rear ---
      The tail is a busy piece of real estate: it carries the lamps, the plate
@@ -6305,9 +6527,14 @@ function detailCrownSedan(B, P, hw, paint, trim, liv){
     var wsx = P.cabin[2][0] - .18;
     var wsy = P.beltY + .16;
     /* the combined sticker sits in the driver-side lower corner */
-    B.box(wsx, wsy, hw - .30, .10, .16, .16, 0xdfe3e6, 0);
-    B.box(wsx + .002, wsy + .045, hw - .30, .09, .05, .13, 0x2f6d3a, 0);
-    B.box(wsx + .002, wsy - .045, hw - .30, .09, .05, .13, 0xb03a2e, 0);
+    /* On the windscreen, driver-side lower corner -- these were at hw-.30,
+       which is 30cm inside the body, so they sat buried in the cabin. */
+    /* chw (cabin half-width) is not in scope here; the cabin is inset from
+       the body flank by ~0.19, so derive it from hw. */
+    var stz = (hw - .19) - .06;
+    B.box(wsx, wsy, stz, .10, .16, .020, 0xdfe3e6, 0);
+    B.box(wsx + .012, wsy + .045, stz, .085, .05, .016, 0x2f6d3a, 0);
+    B.box(wsx + .012, wsy - .045, stz, .085, .05, .016, 0xb03a2e, 0);
   }
   /* trunk shut line */
   B.box(P.deckX + .06, P.deckY + .012, 0, .022, .02, P.wid * .78, shade(paint, .78), 0);
@@ -6336,14 +6563,25 @@ function buildCarBody(def, liv, paintOverride){
     var frontBotX = c[3][0], frontBotY = c[3][1];
     var rearTopX = c[1][0], rearTopY = c[1][1];
     var rearBotX = c[0][0], rearBotY = c[0][1];
-    /* windshield */
-    B.quad([frontBotX, frontBotY, -chw + .02], [frontBotX, frontBotY, chw - .02],
-           [frontTopX, frontTopY, chw - .02], [frontTopX, frontTopY, -chw + .02], glass);
-    /* backlight */
-    B.quad([rearBotX, rearBotY, chw - .02], [rearBotX, rearBotY, -chw + .02],
-           [rearTopX, rearTopY, -chw + .02], [rearTopX, rearTopY, chw - .02], glass);
+    /* Windshield and backlight were drawn exactly coplanar with the
+       extruded cabin face, so the two surfaces fought for depth and the
+       windows flickered. Push each one out along its own normal. */
+    var fdx = frontTopX - frontBotX, fdy = frontTopY - frontBotY;
+    var fl = Math.sqrt(fdx * fdx + fdy * fdy) || 1;
+    var fnx = (fdy / fl) * .018, fny = (-fdx / fl) * .018;
+    B.quad([frontBotX + fnx, frontBotY + fny, -chw + .02],
+           [frontBotX + fnx, frontBotY + fny, chw - .02],
+           [frontTopX + fnx, frontTopY + fny, chw - .02],
+           [frontTopX + fnx, frontTopY + fny, -chw + .02], glass);
+    var rdx = rearTopX - rearBotX, rdy = rearTopY - rearBotY;
+    var rl = Math.sqrt(rdx * rdx + rdy * rdy) || 1;
+    var rnx = (-rdy / rl) * .018, rny = (rdx / rl) * .018;
+    B.quad([rearBotX + rnx, rearBotY + rny, chw - .02],
+           [rearBotX + rnx, rearBotY + rny, -chw + .02],
+           [rearTopX + rnx, rearTopY + rny, -chw + .02],
+           [rearTopX + rnx, rearTopY + rny, chw - .02], glass);
     /* side glass */
-    var gz = chw + .006;
+    var gz = chw + .016;
     B.quad([rearTopX + .06, rearTopY - .04, gz], [frontTopX - .06, frontTopY - .04, gz],
            [frontBotX - .16, frontBotY + .06, gz], [rearBotX + .16, rearBotY + .06, gz], glass);
     B.quad([frontTopX - .06, frontTopY - .04, -gz], [rearTopX + .06, rearTopY - .04, -gz],
@@ -6647,7 +6885,7 @@ function buildVehicle(defId, liv, tint){
          deeper than the wheel and sat outboard of it, so it simply covered
          the wheel -- which is why they looked like black squares that never
          turned. */
-      AB.box(ax2, P.wr * .95, az2 * .55, P.wr * 1.9, P.wr * 1.25, .09, 0x14171b, 0);
+      AB.box(ax2, P.wr * .95, az2 * .42, P.wr * 1.9, P.wr * 1.25, .09, 0x14171b, 0);
     }
     grp.add(new THREE.Mesh(AB.geo(), vehVCMat()));
   }
@@ -7070,7 +7308,8 @@ function def_topSpeed(def){ return def.top * MPH2MPS; }
 
 Vehicle.prototype.physics = function(dt){
   /* a vehicle left in park does not creep, roll or reverse on its own */
-  if(this.parkedBrake && this.kind === 'player' && G.veh !== this){
+  /* any vehicle left in park holds position, not just the player's */
+  if(this.parkedBrake && G.veh !== this){
     this.spd = 0; this.throttle = 0; this.brake = 0;
     return;
   }
@@ -7095,8 +7334,9 @@ Vehicle.prototype.physics = function(dt){
   if(this.brake > 0){
     var bf = this.brake * 13 * grip;
     if(this.spd > 0.15){
-      /* still rolling forward: this is braking */
-      this.spd = Math.max(this.spd - bf * dt, 0);
+      /* still rolling forward: this is braking. Weight moves forward, so
+         the front bites harder as you slow. */
+      this.spd = Math.max(this.spd - bf * (1 + this.brake * .35) * dt, 0);
     } else {
       /* Stopped or already reversing, with the brake still held: this is
          REVERSE. The old code drove speed back toward zero here, so holding
@@ -7119,7 +7359,9 @@ Vehicle.prototype.physics = function(dt){
      takes time to build and to stop, and the front tyres wash out (push
      wide) instead of the whole car rotating. */
   var spdF = clamp(1 - Math.abs(this.spd) / (maxS * 1.05), .16, 1);
-  var maxSteer = (.40 + def.hand * .16) * spdF;
+  /* Real cars run out of front grip long before the rack runs out of
+     travel, and the faster you go the less lock you can use. */
+  var maxSteer = (.36 + def.hand * .14) * spdF;
 
   /* rack rate: a quick car still needs a beat to go lock to lock, and it
      centres faster than it turns */
@@ -7133,7 +7375,9 @@ Vehicle.prototype.physics = function(dt){
 
   /* front-end wash: beyond what the tyres can hold the car understeers
      rather than turning tighter */
-  var maxLat = 8.6 * grip * (.75 + def.hand * .5);
+  /* lateral grip budget, reduced as the tyres are already busy putting
+     power down -- that is what makes a car push wide under throttle */
+  var maxLat = 8.2 * grip * (.75 + def.hand * .5) * (1 - this.throttle * .16);
   var need = Math.abs(target * this.spd);
   if(need > maxLat) target *= maxLat / need;
 
@@ -7167,7 +7411,15 @@ Vehicle.prototype.physics = function(dt){
     this.slip = Math.max(0, this.slip - dt * 1.4);
   }
   turn *= (1 - this.slip * .38);
-  this.h += turn * dt;
+  /* Hard yaw-rate ceiling. When a car crosses onto a new edge the lane
+     target jumps, the steering controller saturates and the heading could
+     swing hundreds of degrees in a frame -- cars visibly snapped round at
+     junctions. A real vehicle cannot rotate faster than its speed and
+     wheelbase permit, so cap it at that physical limit. */
+  var maxYawRate = (Math.abs(this.spd) / Math.max(P.wb, 1.5)) * 1.25 + 0.35;
+  var applied = clamp(turn, -maxYawRate, maxYawRate);
+  this.yaw = applied;
+  this.h += applied * dt;
   var driftA = this.slip * .34 * sign(eff);
   var mvA = this.h + driftA;
 
@@ -7421,7 +7673,62 @@ function inAnyInterior(x, z, pad){
   }
   return false;
 }
+/* ============================================================
+   PEDESTRIAN ROUTING
+   People were picking a random edge at every junction, so they wandered
+   without ever going anywhere. Give each one a destination and route to
+   it over the footway graph, the way GTA crowds head somewhere and then
+   pick a new errand.
+   ============================================================ */
+function pedPickDestination(p){
+  /* somewhere worth walking to: a shop, a park, a civic building */
+  var wants = ['shop', 'park', 'church', 'school', 'pd', 'court', 'tower'];
+  var pool = [], i;
+  for(i = 0; i < LANDMARKS.length; i++){
+    var lm = LANDMARKS[i];
+    if(wants.indexOf(lm.kind) < 0) continue;
+    var d = dist(lm.x, lm.z, p.x, p.z);
+    if(d > 30 && d < 620) pool.push(lm);
+  }
+  if(!pool.length) return null;
+  return pick(pool);
+}
+function pedRouteTo(p, tx, tz){
+  var from = nearestEdge(p.x, p.z), to = nearestEdge(tx, tz);
+  if(from.e < 0 || to.e < 0) return null;
+  var r = gpsRoute(p.x, p.z, tx, tz);
+  return (r && r.length > 1) ? r : null;
+}
+function pedAdvanceRoute(p){
+  /* which edge should we take next to follow the route? */
+  if(!p.route || p.routeI >= p.route.length - 1) return null;
+  var na = p.route[p.routeI], nb = p.route[p.routeI + 1];
+  var nd = NODES[na], k;
+  for(k = 0; k < nd.e.length; k++){
+    var e = EDGES[nd.e[k]];
+    if(e.a === nb || e.b === nb){ p.routeI++; return e; }
+  }
+  p.route = null;
+  return null;
+}
 Ped.prototype.update = function(dt){
+  if(this.destCool > 0) this.destCool -= dt;
+  /* Pick a destination here rather than only at one edge-transition branch
+     -- peds walking the other way never reached that branch, so nobody was
+     ever routed anywhere. */
+  if(!this.route && this.destCool <= 0){
+    var pd = pedPickDestination(this);
+    if(pd){
+      this.route = pedRouteTo(this, pd.x, pd.z);
+      this.routeI = 0;
+      this.dest = this.route ? pd : null;
+    }
+    this.destCool = rng(8, 26);
+  }
+  /* arrived? then find something else to do */
+  if(this.dest && dist(this.x, this.z, this.dest.x, this.dest.z) < 14){
+    this.route = null; this.dest = null; this.destCool = rng(12, 45);
+  }
   var p = this;
   this.t += dt;
   if(this.stunT > 0){
@@ -7469,16 +7776,29 @@ Ped.prototype.update = function(dt){
       /* cross when the traffic on the street you are stepping into is stopped */
       clear = !lightGreen(nd, ne);
     }
+    /* How long have we been standing here? A pedestrian who has waited a
+       while will take a smaller gap, and eventually will cross regardless
+       -- the old test needed no moving car within 16m+ of the junction,
+       which on any busy street is never true, so they stood there forever. */
+    this.kerbT = (this.kerbT || 0) + dt;
     if(clear){
-      /* still look both ways: no crossing in front of a close, fast car */
+      var patience = clamp(1 - this.kerbT / 14, 0, 1);
+      var need = 6 + patience * 10;               /* 16m fresh, 6m impatient */
       var q;
       for(q = 0; q < G.traffic.length; q++){
         var tv2 = G.traffic[q];
         if(Math.abs(tv2.spd) < 2) continue;
-        if(dist(tv2.x, tv2.z, nd.x, nd.z) < 16 + Math.abs(tv2.spd) * 1.2){ clear = false; break; }
+        /* only cars actually heading for this junction matter */
+        var tdx = nd.x - tv2.x, tdz = nd.z - tv2.z;
+        if(Math.cos(tv2.h) * tdx + Math.sin(tv2.h) * tdz < 0) continue;
+        if(dist(tv2.x, tv2.z, nd.x, nd.z) < need + Math.abs(tv2.spd) * .5){ clear = false; break; }
       }
     }
+    /* last resort: after 20 seconds, go. Standing on a kerb forever is
+       worse than a driver having to brake. */
+    if(this.kerbT > 20) clear = true;
     if(clear && this.t > .35){
+      this.kerbT = 0;
       this.crossOK = true;
       this.tt = 1;
       this.setState('walk');
@@ -7562,6 +7882,7 @@ Ped.prototype.pickEdge = function(){
   this.pdir = chance(.5) ? 1 : -1;
   this.lane = rng(-.75, .75);
   this.avoid = 0;
+  this.route = null; this.routeI = 0; this.dest = null; this.destCool = rng(0, 12);
 };
 Ped.prototype.followEdge = function(dt, spdF){
   var e = this.edge;
@@ -7590,8 +7911,29 @@ Ped.prototype.followEdge = function(dt, spdF){
   if(this.tt >= 1){
     var nn = b, opts = [], i;
     for(i = 0; i < nn.e.length; i++) if(nn.e[i] !== e.i) opts.push(nn.e[i]);
-    if(opts.length === 0) { this.dir *= -1; this.tt = 0; return; }
-    var next = EDGES[pick(opts)];
+    if(opts.length === 0) { this.pdir *= -1; return; }
+    /* Follow the route if we have one; wander only when we do not. */
+    var next = null;
+    if(!this.route){
+      if(!this.destCool || this.destCool <= 0){
+        var dest = pedPickDestination(this);
+        if(dest){
+          this.route = pedRouteTo(this, dest.x, dest.z);
+          this.routeI = 0;
+          this.dest = dest;
+        }
+        this.destCool = rng(6, 20);
+      }
+    }
+    if(this.route){
+      var want = pedAdvanceRoute(this);
+      if(want && opts.indexOf(want.i) >= 0) next = want;
+      else if(want) next = want;
+      if(this.route && this.routeI >= this.route.length - 1){
+        this.route = null; this.dest = null; this.destCool = rng(10, 40);
+      }
+    }
+    if(!next) next = EDGES[pick(opts)];
     /* Turning onto a different street means stepping off the kerb. At a
        signal, wait for the light; at anything else, wait for a gap. This is
        what stops people strolling straight through moving traffic. */
@@ -7670,6 +8012,7 @@ function spawnTrafficAt(edgeIdx, t, dir){
   v.rec = getVehRecord(v.plate);
   v.driver = DB.people[v.rec.ownerId] || makePerson({ minA:18 });
   if(v.behav === 'drunk'){ v.driver.impaired = rng(.09, .24); v.rec.notes.push('OBSERVED WEAVING'); }
+  v.speedBias = rng(.92, 1.04);
   v.speedTarget = e.lim * MPH2MPS * (v.behav === 'speeder' ? rng(1.18, 1.42) :
                    (v.behav === 'reckless' ? rng(1.25, 1.6) : (v.behav === 'drunk' ? rng(.6, 1.15) : rng(.88, 1.06))));
   v.wander = 0;
@@ -7724,7 +8067,15 @@ function trafficUpdate(v, dt){
   } else { v.deadT = 0; v.jamT = 0; }
   if(v.stopNode !== undefined && v.stopCleared && v.t < .2) v.stopNode = -1;
   updateStuck(v, dt);
-  if(v.pulled){ v.throttle = 0; v.brake = 1; v.steer = 0; return; }
+  if(v.pulled){
+    /* Reverse is 'brake held while stopped', so pinning the brake on a
+       pulled-over car made it creep backwards away from the stop. Hold it
+       with the parking brake instead once it has actually stopped. */
+    v.throttle = 0; v.steer = 0;
+    if(Math.abs(v.spd) > .2){ v.brake = 1; }
+    else { v.brake = 0; v.spd = 0; v.parkedBrake = true; }
+    return;
+  }
 
   /* advance param along edge from real position */
   var dx = b.x - a.x, dz = b.z - a.z, L2 = dx * dx + dz * dz || 1;
@@ -7761,6 +8112,7 @@ function trafficUpdate(v, dt){
         v.errandT = rng(18, 70);
       }
       v.edge = best;
+      v.nextEdge = null;
       v.dir = (NODES[best.a].i === nn.i) ? 1 : -1;
       v.lane = laneOffset(best, v.dir);
       e = v.edge;
@@ -7833,7 +8185,102 @@ function trafficUpdate(v, dt){
   } else v.offT = 0;
 
   /* target speed */
+  /* speedTarget was fixed at spawn from whichever road the car appeared on
+     and never updated, so traffic ignored the posted limit of the road it
+     was actually driving on -- ~36% of the limit on arterials, and highway
+     limits never reached at all. Track the CURRENT edge instead. */
+  if(v.edge && v.edge.lim && !v.fleeing){
+    var wantSpd = v.edge.lim * MPH2MPS * (v.behav === 'speeder' ? 1.22
+                : (v.behav === 'reckless' ? 1.35
+                : (v.behav === 'drunk' ? .85 : (v.speedBias || 1))));
+    v.speedTarget = (v.speedTarget === undefined) ? wantSpd
+                  : v.speedTarget + (wantSpd - v.speedTarget) * Math.min(1, dt * 1.1);
+  }
   var tgt = v.fleeing ? v.def.top * MPH2MPS * rng(.86, .98) : v.speedTarget;
+
+  /* ---- yield to pedestrians ----
+     Traffic never looked at G.peds at all: cars drove through people on
+     crossings and gave way to nobody. Slow for anyone in or stepping into
+     the carriageway ahead, and stop for anyone actually on it. */
+  (function(){
+    var i, fx = Math.cos(v.h), fz = Math.sin(v.h);
+    var nx = -fz, nz = fx;
+    for(i = 0; i < G.peds.length; i++){
+      var p = G.peds[i];
+      if(p.down) continue;
+      var dx = p.x - v.x, dz = p.z - v.z;
+      var ahead = dx * fx + dz * fz;
+      if(ahead < 0.5 || ahead > 26) continue;
+      var lat = Math.abs(dx * nx + dz * nz);
+      /* how wide a corridor matters shrinks with distance */
+      if(lat > 2.2) continue;
+      /* someone waiting at a kerb about to step out counts too */
+      var stopping = (lat < 1.8) || (p.state === 'cross');
+      var allow = stopping ? Math.max(0, (ahead - 4.5) * .50)
+                           : Math.max(4.0, (ahead - 2.5) * .70);
+      if(allow < tgt){
+        tgt = allow;
+        v.brakeReason = 'pedestrian';
+      }
+    }
+  })();
+
+  /* Decide the turn EARLY. The corner logic needs to know which way the
+     car will go while it is still approaching, not at the moment it
+     arrives -- otherwise there is no distance left to slow down in and
+     the heading has to snap round. */
+  if(v.edge && !v.nextEdge){
+    var endN = NODES[v.dir > 0 ? v.edge.b : v.edge.a];
+    var dToEnd = (1 - clamp(v.t, 0, 1)) * (v.edge.len || 40);
+    if(endN && dToEnd < 42 && endN.e.length > 1){
+      var cand = [], ci;
+      for(ci = 0; ci < endN.e.length; ci++){
+        if(endN.e[ci] !== v.edge.i) cand.push(EDGES[endN.e[ci]]);
+      }
+      if(cand.length){
+        var aN = NODES[v.edge.a], bN = NODES[v.edge.b];
+        var inAng = Math.atan2(bN.z - aN.z, bN.x - aN.x);
+        if(v.dir < 0) inAng += Math.PI;
+        var pickE = cand[0], bestS = -9, cj;
+        for(cj = 0; cj < cand.length; cj++){
+          var ce = cand[cj];
+          var co = (NODES[ce.a] === endN) ? NODES[ce.b] : NODES[ce.a];
+          var cang = Math.atan2(co.z - endN.z, co.x - endN.x);
+          var sc = Math.cos(angDiff(cang, inAng));
+          if(ce.type === 'freeway' || ce.type === 'arterial') sc += .3;
+          if(sc > bestS){ bestS = sc; pickE = ce; }
+        }
+        v.nextEdge = pickE;
+      }
+    }
+  }
+
+  /* ---- corner speed ----
+     A car that keeps highway speed into a 90 degree turn has to snap its
+     heading round to stay on the lane. Slow for the bend the way a driver
+     does, and the turn happens smoothly instead. */
+  if(v.edge && v.dir !== undefined){
+    var nEdge = v.nextEdge;
+    if(nEdge && nEdge !== v.edge){
+      var na = NODES[v.edge.a], nb = NODES[v.edge.b];
+      var curAng = Math.atan2(nb.z - na.z, nb.x - na.x);
+      if(v.dir < 0) curAng += Math.PI;
+      var oa = NODES[nEdge.a], ob = NODES[nEdge.b];
+      var nxtAng = Math.atan2(ob.z - oa.z, ob.x - oa.x);
+      var turnAmt = Math.abs(angDiff(nxtAng, curAng));
+      if(turnAmt > Math.PI * .55) turnAmt = Math.PI - turnAmt;
+      /* Only genuinely sharp turns need slowing. A .35rad threshold fired
+         on almost every bend and dragged average speed from 52% of the
+         limit to 41%; a driver does not lift for a 20 degree kink. */
+      if(turnAmt > .62){
+        var cornerV = clamp(17.0 - turnAmt * 6.0, 6.5, 17.0);
+        var dEnd = (1 - clamp(v.t, 0, 1)) * (v.edge.len || 40);
+        var blend = clamp(1 - (dEnd - 5) / 16, 0, 1);
+        var want = tgt + (cornerV - tgt) * blend;
+        if(want < tgt){ tgt = want; if(!v.brakeReason) v.brakeReason = 'corner'; }
+      }
+    }
+  }
   if(v.pulling) tgt = Math.min(tgt, 6);
   if(G.weather === 'rain' || G.weather === 'storm') tgt *= .86;
   if(G.weather === 'fog') tgt *= .78;
@@ -8240,7 +8687,26 @@ function buildPerson(opts){
   var child = !!opts.child;
   var female = !!opts.female;
   var S = child ? .62 : (female ? .955 : 1);
-  var bulk = 1 + ((opts.build === 2) ? .18 : ((opts.build === 0) ? -.08 : ((opts.build === 3) ? .07 : 0)));
+  /* ---- body types, ported from the Blender NPC set ----
+     Everyone was one silhouette with a single 'bulk' multiplier, so a
+     crowd read as identical people. These are the proportions that
+     actually differ between bodies -- height, shoulder width, waist and
+     limb thickness -- measured off the six Blender models. */
+  var BODY_TYPES = [
+    { n:'slim',     h:0.978, sh:0.87, wa:0.88, lb:0.87 },
+    { n:'average',  h:1.000, sh:1.00, wa:1.00, lb:1.00 },
+    { n:'heavy',    h:0.989, sh:1.13, wa:1.38, lb:1.20 },
+    { n:'tall',     h:1.067, sh:1.04, wa:1.00, lb:1.03 },
+    { n:'short',    h:0.910, sh:0.94, wa:0.97, lb:0.97 },
+    { n:'athletic', h:1.022, sh:1.09, wa:0.94, lb:1.07 }
+  ];
+  var bt = BODY_TYPES[(opts.bodyType !== undefined)
+            ? clamp(opts.bodyType, 0, BODY_TYPES.length - 1)
+            : ri(0, BODY_TYPES.length - 1)];
+  S = S * bt.h;
+  var bulk = (1 + ((opts.build === 2) ? .18 : ((opts.build === 0) ? -.08 :
+             ((opts.build === 3) ? .07 : 0)))) * bt.wa;
+  var shoulderMul = bt.sh, limbMul = bt.lb;
 
   var skin = opts.skin !== undefined ? opts.skin : pick(SKINS);
   var hair = opts.hairCol !== undefined ? opts.hairCol : pick(HAIRS);
@@ -8258,7 +8724,7 @@ function buildPerson(opts){
   var torsoH = .60 * S;
   var shoulderY = hipY + torsoH;
   var headR = .13 * S;
-  var torsoW = .42 * S * bulk;
+  var torsoW = .42 * S * bulk * shoulderMul;
   var torsoD = .24 * S * bulk;
 
   /* ---- torso ---- */
@@ -8295,6 +8761,9 @@ function buildPerson(opts){
   }
   var torso = mkPart(T, mat);
   torso.position.y = hipY;
+  /* everything parented to the torso works in torso-local space, so its
+     pivot height has to be subtracted from world-space Y values */
+  var torsoPivotY = hipY;
   g.add(torso);
 
   /* ---- duty belt / waist ---- */
@@ -8394,16 +8863,30 @@ function buildPerson(opts){
      headR BELOW the pivot. Placing the pivot only .28*headR above the
      shoulders buried nearly three quarters of the head in the torso. Lift it
      clear: half a head, plus the neck stub, plus a little daylight. */
-  neck.position.y = shoulderY + headR * 1.06 + .06 * S;
+  /* ---- rig hierarchy ----
+     The neck was a SIBLING of the torso, so its rotation was absolute and
+     the head never followed the body's lean -- which is the whole reason the
+     head kept snapping back at a run. Rebuilding this in Blender confirmed
+     it: parented properly, a 25 degree torso lean carries the head 0.286m
+     with it. Attach the neck to the TORSO and work in torso-local space. */
+  /* The head geometry is already centred on this pivot with its base
+     headR below it, so lifting the pivot a full head above the shoulders
+     left a visible gap -- the head floated. Seat it so the skull base
+     meets the top of the neck stub. */
+  /* The head box is 2*headR tall centred on this pivot, so its base sits
+     headR below. At .62 the base landed 54mm INSIDE the torso and the head
+     sank into the shirt; at 1.06 it floated. Seat the base level with the
+     shoulders and let the neck stub cover the join. */
+  neck.position.y = (shoulderY + headR * .98) - torsoPivotY;
   var head = mkPart(H, mat);
   neck.add(head);
-  g.add(neck);
+  torso.add(neck);
   /* neck stub */
   var NK = new Builder();
   NK.box(0, 0, 0, headR * .74, .18 * S, headR * .74, shade(skin, .92), 0);
   var nk = mkPart(NK, mat);
-  nk.position.y = shoulderY + .07 * S;
-  g.add(nk);
+  nk.position.y = (shoulderY + .07 * S) - torsoPivotY;
+  torso.add(nk);
 
   /* ---- limbs ----
      Each is a pivot Group at the joint with the mesh hung below it, so a
@@ -8462,7 +8945,7 @@ function buildPerson(opts){
                      armL:armL, armR:armR, legL:legL, legR:legR,
                      elbowL:armL.userData.joint, elbowR:armR.userData.joint,
                      kneeL:legL.userData.joint, kneeR:legR.userData.joint,
-                     hipY:hipY, neckY:shoulderY + headR * 1.06 + .06 * S, S:S };
+                     hipY:hipY, neckY:(shoulderY + headR * .98) - hipY, S:S };
   return g;
 }
 
@@ -8571,7 +9054,18 @@ function animatePerson(mesh, st, dt){
     /* torso counter-rotates against the pelvis and leans into the run */
     r.torso.rotation.y = sL * lamp * .11;
     r.torso.rotation.x = moving ? .03 + run * .20 : 0;
-    r.neck.rotation.x = moving ? -.02 - run * .10 : Math.sin(phase * .35) * .04;
+    /* The neck is a sibling of the torso, not a child, so a negative tilt
+       here is absolute -- at a run it threw the head backwards while the
+       body leaned forward. A runner's head stays level or drops slightly,
+       so tip it gently forward and let it settle when walking. */
+    /* The neck is a SIBLING of the torso, so its rotation is absolute. When
+       the torso leans forward at a run the head must lean with it or it
+       appears to snap backwards. Track the torso's lean and add only a
+       small independent nod. */
+    /* The neck is a CHILD of the torso now, so it inherits the lean --
+       adding it again would double-count. Only the independent nod belongs
+       here. */
+    r.neck.rotation.x = moving ? (.02 + run * .03) : Math.sin(phase * .35) * .02;
     r.neck.rotation.y = moving ? Math.sin(phase) * .04 : Math.sin(phase * .22) * .30;
   }
 
@@ -8579,7 +9073,9 @@ function animatePerson(mesh, st, dt){
   var bob = moving ? (Math.abs(Math.sin(phase)) * (.030 + run * .045)) : 0;
   r.torso.position.y = r.hipY + bob * S;
   r.belt.position.y = r.hipY + bob * S;
-  r.neck.position.y = (r.neckY || (r.hipY + .62 * S)) + bob * S;
+  /* neckY is TORSO-LOCAL now (the neck is a child of the torso), so adding
+       hipY again pushed the head a full hip-height into the air. */
+    r.neck.position.y = (r.neckY !== undefined ? r.neckY : (.62 * S)) + bob * S;
   mesh.position.y = (st.y || 0);
 }
 
@@ -8647,7 +9143,7 @@ function ragdollUpdate(p, dt){
   rig.kneeR.rotation.x = r.kneeR * k;
   rig.torso.position.y = rig.hipY;
   rig.belt.position.y = rig.hipY;
-  rig.neck.position.y = rig.neckY || (rig.hipY + .62 * S);
+  rig.neck.position.y = (rig.neckY !== undefined ? rig.neckY : (.62 * S));
 
   if(fall >= 1) r.settled = true;
   return true;
@@ -8915,8 +9411,22 @@ function snapToLane(v){
   var dir = Math.abs(angDiff(ang, v.h)) < Math.PI / 2 ? 1 : -1;
   v.edge = e; v.dir = dir; v.t = n.t;
   var lp = lanePoint(e, dir, clamp(n.t, .02, .98), 0);
-  v.x = lp.x; v.z = lp.z;
-  v.h = dir > 0 ? lp.ang : lp.ang + Math.PI;
+  var wantH = dir > 0 ? lp.ang : lp.ang + Math.PI;
+  /* This is a recovery for a wedged car, but it was hard-setting position
+     AND heading every time it fired -- at speed that reads as the car
+     spinning round instantly at a junction. Only teleport when the car is
+     effectively stopped (where nobody can see it); otherwise nudge it back
+     toward the lane and let the steering do the rest. */
+  if(Math.abs(v.spd) < 0.4){
+    /* effectively stopped: a teleport is invisible */
+    v.x = lp.x; v.z = lp.z;
+    v.h = wantH;
+  } else {
+    v.x += (lp.x - v.x) * .25;
+    v.z += (lp.z - v.z) * .25;
+    var dH = angDiff(wantH, v.h);
+    v.h = angWrap(v.h + clamp(dH, -0.09, 0.09));
+  }
   v.spd = Math.min(v.spd, 6);
   v.stuck = 0;
 }
@@ -11823,6 +12333,41 @@ function drawMinimap(){
   gpsDraw(g, zoom);
   g.restore();
   /* --- place names, full map only (they would be unreadable on the HUD) --- */
+  /* --- agency markers: stations must be findable on the map --- */
+  (function(){
+    var i, marks = [
+      { k:'pd',    c:'#3f7fd0', t:'PD'  },
+      { k:'so',    c:'#3f9f5a', t:'SO'  },
+      { k:'dps',   c:'#c05050', t:'DPS' },
+      { k:'jail',  c:'#9a7ac0', t:'JAIL'},
+      { k:'court', c:'#c8a24a', t:'CT'  },
+      { k:'hosp',  c:'#d06f8f', t:'H'   }
+    ];
+    for(i = 0; i < LANDMARKS.length; i++){
+      var lm = LANDMARKS[i], mk = null, q;
+      for(q = 0; q < marks.length; q++) if(marks[q].k === lm.kind) mk = marks[q];
+      if(!mk) continue;
+      var r = (full ? 11 : 8) / zoom;
+      g.beginPath();
+      g.arc(lm.x, lm.z, r, 0, TAU);
+      g.fillStyle = mk.c;
+      g.fill();
+      g.lineWidth = 2.4 / zoom;
+      g.strokeStyle = 'rgba(8,12,18,.85)';
+      g.stroke();
+      if(full){
+        g.save();
+        g.translate(lm.x, lm.z);
+        g.scale(1 / zoom, 1 / zoom);
+        g.font = 'bold 10px ui-monospace, Menlo, monospace';
+        g.textAlign = 'center'; g.textBaseline = 'middle';
+        g.fillStyle = '#0b1016';
+        g.fillText(mk.t, 0, 0);
+        g.restore();
+      }
+    }
+  })();
+
   if(full) drawMapLabels(g, zoom, view, px, pz);
 
   /* --- player arrow, always centre, always up --- */
@@ -12355,6 +12900,42 @@ function liveryLabel(liv){
            unmarked:'Unmarked \u2014 no exterior markings', ctso:'Marked \u2014 Constable' }[liv] || liv;
 }
 function menuGarage(b){
+  /* If you cannot find your unit -- left across town, stuck, or you simply
+     lost it -- have it brought to the bay. This is the motor pool; that is
+     what a motor pool is for. */
+  (function(){
+    var row = document.createElement('div');
+    row.className = 'mrow';
+    var btn = document.createElement('button');
+    btn.className = 'mbtn';
+    btn.textContent = 'BRING MY UNIT TO THE BAY';
+    btn.onclick = function(){
+      var st = nearestStation(G.player.x, G.player.z);
+      var bx, bz, bh;
+      if(st && INTERIORS[st.lm.kind] && INTERIORS[st.lm.kind].garageX !== undefined){
+        var it = INTERIORS[st.lm.kind];
+        bx = it.garageX; bz = it.garageZ; bh = 0;
+      } else {
+        bx = G.player.x + Math.cos(G.playerH) * 6;
+        bz = G.player.z + Math.sin(G.playerH) * 6;
+        bh = G.playerH;
+      }
+      if(!G.cruiser){ toast('NO UNIT ASSIGNED', 'bad'); return; }
+      if(G.veh === G.cruiser) exitVehicle();
+      G.cruiser.x = bx; G.cruiser.z = bz;
+      G.cruiser.y = roadHeightAt(bx, bz);
+      G.cruiser.h = bh;
+      G.cruiser.spd = 0;
+      G.cruiser.parkedBrake = true;
+      G.cruiser.dmg = 0;
+      G.cruiser.tiresOut = 0;
+      G.cruiser.sync();
+      toast('UNIT DELIVERED TO THE BAY \u2014 REPAIRED AND FUELLED', 'good');
+      closeMenu();
+    };
+    row.appendChild(btn);
+    b.appendChild(row);
+  })();
   hd(b, 'Fleet & Garage', 'Vehicles unlock by rank and are bought outright. Liveries change your agency look.');
   var i;
   for(i = 0; i < VEHICLES.length; i++){
@@ -12747,6 +13328,19 @@ function gpsDraw(g, zoom){
 function drawMapLabels(g, zoom, view, px, pz){
   var i;
   g.save();
+  /* Labels were drawn unconditionally and piled on top of each other at
+     low zoom. Keep a list of what has already been placed and skip any
+     label whose box overlaps one that is already down. */
+  var PLACED = [];
+  function fits(lx, lz, w, h){
+    var q;
+    for(q = 0; q < PLACED.length; q++){
+      var p = PLACED[q];
+      if(Math.abs(lx - p.x) * 2 < (w + p.w) && Math.abs(lz - p.z) * 2 < (h + p.h)) return false;
+    }
+    PLACED.push({ x:lx, z:lz, w:w, h:h });
+    return true;
+  }
   g.textAlign = 'center';
   g.textBaseline = 'middle';
   /* district names, larger and spaced out */
@@ -12932,12 +13526,19 @@ function updateEngineAudio(v, dt){
 
 /* ---------- siren ---------- */
 var SIR = { osc:null, gain:null, on:false, t:0, mode:0, horn:null, hgain:null };
-var SIREN_MODES = ['WAIL', 'YELP', 'PHASER', 'HI-LO', 'PIERCER', 'AIR HORN', 'RUMBLER', 'MANUAL'];
+var /* American patterns only. Hi-lo is the European two-tone, and every
+   unimplemented mode in the old list fell through to it -- which is why
+   the siren sounded British whatever you selected. */
+SIREN_MODES = ['WAIL', 'YELP', 'PRIORITY', 'AIR HORN'];
 function buildSiren(){
   try {
     SIR.gain = AC.createGain(); SIR.gain.gain.value = 0;
     var f = AC.createBiquadFilter(); f.type = 'bandpass'; f.frequency.value = 1100; f.Q.value = .6;
     SIR.gain.connect(f); f.connect(MASTER);
+    SIR.osc2 = AC.createOscillator(); SIR.osc2.type = 'square'; SIR.osc2.frequency.value = 1050;
+    var g2s = AC.createGain(); g2s.gain.value = .32;
+    SIR.osc2.connect(g2s); g2s.connect(SIR.gain);
+    SIR.osc2.start();
     SIR.osc = AC.createOscillator(); SIR.osc.type = 'sawtooth'; SIR.osc.frequency.value = 700;
     var sh = AC.createGain(); sh.gain.value = .5;
     SIR.osc.connect(sh); sh.connect(SIR.gain);
@@ -12962,21 +13563,33 @@ function updateSiren(dt){
       return;
     }
     SIR.t += dt;
-    var m = G.sirenMode || 0, f = 700;
-    if(m === 0){ /* wail */
-      var w = (Math.sin(SIR.t * Math.PI * 2 / 4.4) + 1) / 2;
-      f = 560 + w * 900;
-    } else if(m === 1){ /* yelp */
-      var y = (SIR.t * 5.6) % 1;
-      f = 640 + y * 850;
-    } else if(m === 2){ /* phaser */
-      var p = (SIR.t * 13) % 1;
-      f = 720 + p * 620;
-    } else { /* hi-lo */
-      f = (Math.floor(SIR.t * 1.9) % 2) ? 700 : 1030;
+    var m = G.sirenMode || 0, f = 700, lvl = .13;
+    if(m === 0){
+      /* WAIL: a slow continuous sweep, about 11 seconds a cycle on a real
+         Federal Q-style electronic head */
+      var w = (Math.sin(SIR.t * Math.PI * 2 / 5.2) + 1) / 2;
+      f = 640 + w * 860;
+    } else if(m === 1){
+      /* YELP: the same sweep run roughly six times faster */
+      var y = (SIR.t * 6.2) % 1;
+      var ye = y < .5 ? (y * 2) : (2 - y * 2);
+      f = 680 + ye * 820;
+    } else if(m === 2){
+      /* PRIORITY / phaser: very rapid, used to clear a junction */
+      var p = (SIR.t * 14.5) % 1;
+      var pe = p < .5 ? (p * 2) : (2 - p * 2);
+      f = 780 + pe * 640;
+      lvl = .14;
+    } else {
+      /* AIR HORN: a low, steady blast rather than a sweep */
+      f = 300 + Math.sin(SIR.t * 40) * 14;
+      lvl = .16;
     }
     SIR.osc.frequency.value = f;
-    SIR.gain.gain.value = lerp(SIR.gain.gain.value, .10, .15);
+    /* a second voice a fifth up gives the sound body -- a single saw through
+       a narrow bandpass reads as a thin whine */
+    if(SIR.osc2) SIR.osc2.frequency.value = f * 1.5;
+    SIR.gain.gain.value = lerp(SIR.gain.gain.value, lvl, .15);
     SIR.hgain.gain.value = lerp(SIR.hgain.gain.value, G.hornDown ? .085 : 0, .35);
   } catch(e){}
 }
@@ -12991,7 +13604,7 @@ function buildAmbience(){
     for(i = 0; i < len; i++){
       var wn = Math.random() * 2 - 1;
       last = (last + .02 * wn) / 1.02;
-      d[i] = last * 3.2;
+      d[i] = last * 1.9;   /* was 3.2 -- read as a harsh rushing hiss */
     }
     AMB.src = AC.createBufferSource(); AMB.src.buffer = buf; AMB.src.loop = true;
     AMB.filt = AC.createBiquadFilter(); AMB.filt.type = 'lowpass'; AMB.filt.frequency.value = 700;
@@ -13230,7 +13843,7 @@ function updateCityAmbience(dt){
   var hr = G.hour || 12;
   var quiet = (hr < 6 || hr > 22);
   /* how often, and how loud */
-  CITY_NEXT = (urban ? rng(7, 16) : rng(16, 34)) * (quiet ? 1.7 : 1);
+  CITY_NEXT = (urban ? rng(5, 11) : rng(11, 24)) * (quiet ? 1.5 : 1);
   var roll = wrand();
   var g = (urban ? .07 : .045) * (quiet ? .6 : 1);
   if(urban){
@@ -14395,6 +15008,223 @@ var STATION_DEFS = [
     wall:0xd6d2c8, trim:0x5a1f26, floor:0xb2ab9c, brick:0x8a7256, cells:1 }
 ];
 
+/* ============================================================
+   MAP KIT  --  ported from Blender
+   Modelled in Blender against real North Texas roadside forms, then
+   translated into Builder calls. Blender is Z-up, the game is Y-up, so
+   a Blender (x, y, z) sized (sx, sy, sz) becomes B.box(x, z, y, sx, sz, sy).
+   ============================================================ */
+
+/* strip centre: the commonest roadside form in a town this size */
+function mStripCentre(B, x, z, rot, wall){
+  var W = 34, D = 12, H = 5, i;
+  var c1 = wall || 0xb8a37a;
+  B.box(x, H / 2, z, W, H, D, c1, rot);
+  B.box(x, H + 0.55, z, W + 0.6, 1.1, D + 0.6, shade(c1, .82), rot);
+  for(i = 0; i < 7; i++){
+    var bx = x - W / 2 + W * (i + 0.5) / 7;
+    B.box(bx, 1.9, z - D / 2 - 0.06, W / 7 - 1.1, 2.6, 0.12, C.glass, rot);
+  }
+  B.box(x, 3.5, z - D / 2 - 1.5, W, 0.22, 3.0, shade(c1, .74), rot);
+  for(i = 0; i < 5; i++){
+    B.box(x - W / 2 + W * (i + 0.5) / 5, 1.75, z - D / 2 - 2.9, 0.18, 3.5, 0.18, 0x6e757c, rot);
+  }
+  B.box(x - 6, H + 1.5, z + 2, 3.0, 1.2, 2.4, 0x9099a2, rot);
+  B.box(x + 7, H + 1.3, z - 1, 2.2, 0.9, 1.8, 0x9099a2, rot);
+  return { hw:W / 2, hd:D / 2 + 3 };
+}
+
+/* ranch house: low, wide, hipped roof, attached garage, porch */
+function mRanchHouse(B, x, z, rot, wall){
+  var W = 16, D = 10, H = 3;
+  var c1 = wall || jitCol(0x8d5a3c, .10);
+  B.box(x, H / 2, z, W, H, D, c1, rot);
+  B.roof(x, H, z, W + 0.9, D + 0.9, 1.9, shade(c1, .66), rot, true);
+  B.box(x + W / 2 + 3.2, 1.4, z - 1.0, 6.4, 2.8, 6.6, c1, rot);
+  B.roof(x + W / 2 + 3.2, 2.8, z - 1.0, 6.9, 7.1, 1.1, shade(c1, .66), rot, true);
+  B.box(x + W / 2 + 3.2, 1.15, z - 4.34, 5.0, 2.1, 0.16, shade(c1, .78), rot);
+  B.box(x - 3.0, 2.7, z - D / 2 - 1.3, 6.0, 0.18, 2.6, shade(c1, .72), rot);
+  B.box(x - 5.6, 1.35, z - D / 2 - 2.4, 0.16, 2.7, 0.16, 0xdfd8c8, rot);
+  B.box(x - 0.4, 1.35, z - D / 2 - 2.4, 0.16, 2.7, 0.16, 0xdfd8c8, rot);
+  B.box(x - 5.5, 1.7, z - D / 2 - 0.05, 2.2, 1.3, 0.10, C.glass, rot);
+  B.box(x + 4.5, 1.7, z - D / 2 - 0.05, 2.2, 1.3, 0.10, C.glass, rot);
+  return { hw:W / 2 + 3.5, hd:D / 2 + 1 };
+}
+
+/* gas station: kiosk plus a canopy on four columns */
+function mGasStation(B, x, z, rot){
+  var i, j;
+  B.box(x - 9, 2.0, z, 10, 4.0, 8.0, 0xdfd8c8, rot);
+  B.box(x - 9, 4.35, z, 10.6, 0.7, 8.6, 0xb03a2e, rot);
+  B.box(x - 9, 1.9, z - 4.06, 6.0, 2.6, 0.12, C.glass, rot);
+  B.box(x + 5, 5.4, z, 16.0, 0.55, 11.0, 0xe8e4dc, rot);
+  B.box(x + 5, 5.05, z, 16.4, 0.28, 11.4, 0xb03a2e, rot);
+  for(i = 0; i < 2; i++) for(j = 0; j < 2; j++){
+    B.box(x - 1.5 + i * 13, 2.7, z - 4 + j * 8, 0.5, 5.4, 0.5, 0xdfe3e6, rot);
+  }
+  for(j = 0; j < 2; j++){
+    B.plate(x + 5, 0.06, z - 2.6 + j * 5.2, 3.6, 4.6, 0x9099a2, rot);
+    B.box(x + 5, 0.85, z - 2.6 + j * 5.2, 1.1, 1.7, 3.4, 0xc9ccd0, rot);
+  }
+  return { hw:13, hd:6 };
+}
+
+/* water tower: the landmark every small Texas town has */
+function mWaterTower(B, x, z){
+  var a;
+  for(a = 0; a < 4; a++){
+    var ang = Math.PI / 4 + a * Math.PI / 2;
+    B.cyl(x + Math.cos(ang) * 3.4, 0, z + Math.sin(ang) * 3.4,
+          0.22, 0.22, 18.0, 6, 0x8a9096, 3);
+  }
+  for(a = 0; a < 2; a++){
+    var yy = 5.0 + a * 6.0;
+    B.box(x, yy, z, 7.2, 0.16, 0.16, 0x8a9096, 0);
+    B.box(x, yy, z, 0.16, 0.16, 7.2, 0x8a9096, 0);
+  }
+  B.cyl(x, 16.9, z, 0.8, 4.6, 2.2, 14, 0xc9ccd0, 3);
+  B.cyl(x, 18.0, z, 4.6, 4.6, 5.2, 14, 0xdfe3e6, 3);
+  B.cyl(x, 23.2, z, 4.6, 0.6, 2.0, 14, 0xc9ccd0, 3);
+  return { hw:5, hd:5 };
+}
+
+/* downtown midrise: brick, window bands, cornice, setback penthouse */
+function mMidrise(B, x, z, rot, wall){
+  var c1 = wall || jitCol(0x8d5a3c, .08), f;
+  B.box(x, 11.0, z, 18, 22, 16, c1, rot);
+  B.box(x, 22.4, z, 19.2, 0.9, 17.2, shade(c1, .74), rot);
+  B.box(x, 24.0, z, 13, 2.4, 11, shade(c1, .90), rot);
+  for(f = 0; f < 6; f++){
+    var yy = 3.6 + f * 3.2;
+    B.box(x, yy, z - 8.06, 15.5, 1.7, 0.12, C.glass, rot);
+    B.box(x, yy, z + 8.06, 15.5, 1.7, 0.12, C.glass, rot);
+    B.box(x - 9.06, yy, z, 0.12, 1.7, 13.5, C.glass, rot);
+    B.box(x + 9.06, yy, z, 0.12, 1.7, 13.5, C.glass, rot);
+  }
+  B.box(x, 1.7, z - 8.2, 16, 3.4, 0.3, C.glass, rot);
+  B.box(x, 4.0, z - 8.9, 16.5, 0.25, 1.6, 0x8d1f2b, rot);
+  return { hw:9.6, hd:8.6 };
+}
+
+/* church: gable, bell tower, spire */
+function mChurch(B, x, z, rot, wall){
+  var c1 = wall || 0xe4dccb;
+  B.box(x, 3.5, z, 12, 7, 20, c1, rot);
+  B.roof(x, 7, z, 12.6, 20.6, 3.2, 0x6e6a62, rot, false);
+  B.box(x, 6.0, z - 11.0, 4.4, 12, 4.4, c1, rot);
+  B.cyl(x, 12.0, z - 11.0, 3.1, 0.15, 5.2, 4, 0x6e6a62, 3);
+  B.box(x, 3.0, z - 13.25, 2.2, 4.4, 0.16, 0x6d5f45, rot);
+  return { hw:6, hd:11.5 };
+}
+
+/* ============================================================
+   INTERIOR PROPS  --  ported from Blender
+   These were modelled in Blender against a 1.80m officer and then
+   translated into the game's own Builder calls rather than shipped as
+   glTF: the geometry is identical, but it batches with everything else
+   and costs no loader and no file size.
+
+   Blender is Z-up, the game is Y-up, so a Blender (x, y, z) with size
+   (sx, sy, sz) becomes B.box(x, z, y, sx, sz, sy).
+   ============================================================ */
+
+/* reception counter: 1.10m body, 1.18m transaction top */
+function pReceptionCounter(B, x, z, rot, col){
+  var c1 = col || 0x6b4d2e, c2 = shade(c1, .82);
+  B.box(x, 0.55, z,        3.60, 1.10, 0.70, c1, rot);
+  B.box(x, 1.14, z + 0.10, 3.90, 0.08, 0.95, c2, rot);
+  B.box(x, 0.38, z + 0.55, 3.40, 0.05, 0.55, c2, rot);
+  B.box(x - 1.10, 0.80, z + 0.62, 0.55, 0.40, 0.06, 0x1d2128, rot);
+  B.box(x - 1.10, 0.60, z + 0.62, 0.26, 0.03, 0.16, 0x2a2f36, rot);
+  B.box(x + 0.90, 0.42, z + 0.60, 0.34, 0.04, 0.22, 0x39434d, rot);
+}
+
+/* locker bank: six 2.10m lockers with vents and handles */
+function pLockerBank(B, x, z, rot, col){
+  var c1 = col || 0x59646f, dr = shade(c1, .88), i, v;
+  for(i = 0; i < 6; i++){
+    var zz = z - 1.95 + i * 0.78;
+    B.box(x, 1.05, zz, 0.62, 2.10, 0.74, c1, rot);
+    B.box(x + 0.32, 1.05, zz, 0.03, 1.96, 0.68, dr, rot);
+    B.box(x + 0.35, 1.10, zz - 0.24, 0.04, 0.14, 0.05, 0xb9bec4, rot);
+    for(v = 0; v < 3; v++){
+      B.box(x + 0.34, 1.80 + v * 0.05, zz, 0.02, 0.015, 0.44, shade(c1, .74), rot);
+    }
+  }
+  B.box(x, 2.16, z, 0.68, 0.08, 4.80, shade(c1, .92), rot);
+}
+
+/* desk with pedestal, monitor and keyboard */
+function pDesk(B, x, z, rot, col){
+  var c1 = col || 0x8a7a5c;
+  B.box(x, 0.72, z, 1.60, 0.05, 0.80, c1, rot);
+  B.box(x - 0.72, 0.36, z, 0.06, 0.72, 0.74, shade(c1, .86), rot);
+  B.box(x + 0.72, 0.36, z, 0.06, 0.72, 0.74, shade(c1, .86), rot);
+  B.box(x + 0.42, 0.42, z + 0.05, 0.60, 0.55, 0.66, shade(c1, .90), rot);
+  B.box(x - 0.25, 0.98, z - 0.10, 0.56, 0.38, 0.05, 0x1d2128, rot);
+  B.box(x - 0.25, 0.77, z - 0.10, 0.24, 0.03, 0.16, 0x2a2f36, rot);
+  B.box(x - 0.20, 0.76, z + 0.22, 0.42, 0.02, 0.15, 0x39434d, rot);
+}
+
+/* office chair on a five-star base */
+function pChair(B, x, z, rot, col){
+  var c1 = col || 0x2a2f38, a;
+  B.box(x, 0.46, z, 0.50, 0.08, 0.50, c1, rot);
+  B.box(x, 0.75, z + 0.24, 0.48, 0.52, 0.06, c1, rot);
+  B.cyl(x, 0.03, z, 0.05, 0.05, 0.42, 8, 0x6e757c, 3);
+  for(a = 0; a < 5; a++){
+    var ang = a * (TAU / 5) + rot;
+    B.box(x + Math.cos(ang) * 0.16, 0.04, z + Math.sin(ang) * 0.16,
+          0.30, 0.04, 0.05, 0x6e757c, ang);
+  }
+}
+
+/* holding cell: nine bars, rails, back wall and bench */
+function pHoldingCell(B, x, z, rot, col){
+  var c1 = col || 0x59646f, i;
+  for(i = 0; i < 9; i++){
+    B.cyl(x - 1.90 + i * 0.475, 0, z, 0.028, 0.028, 2.70, 6, c1, 0);
+  }
+  B.box(x, 2.74, z, 4.30, 0.09, 0.08, c1, rot);
+  B.box(x, 0.02, z, 4.30, 0.06, 0.08, c1, rot);
+  B.box(x, 1.35, z + 1.90, 4.30, 2.70, 0.16, shade(c1, 1.28), rot);
+  B.box(x - 1.20, 0.42, z + 1.55, 1.90, 0.10, 0.55, 0x8a9096, rot);
+  B.box(x - 1.90, 0.20, z + 1.55, 0.08, 0.42, 0.50, 0x8a9096, rot);
+  B.box(x - 0.50, 0.20, z + 1.55, 0.08, 0.42, 0.50, 0x8a9096, rot);
+}
+
+/* armoury cage with weapon rack behind */
+function pArmouryCage(B, x, z, rot, col){
+  var c1 = col || 0x59646f, i, h, r;
+  for(i = 0; i < 10; i++){
+    B.cyl(x - 2.0 + i * 0.44, 0, z, 0.024, 0.024, 3.20, 6, c1, 0);
+  }
+  for(h = 0; h < 3; h++){
+    B.box(x, 0.4 + h * 1.2, z, 4.20, 0.05, 0.05, c1, rot);
+  }
+  B.box(x, 1.05, z + 1.20, 4.00, 2.10, 0.45, 0x6e757c, rot);
+  for(r = 0; r < 3; r++){
+    B.box(x, 0.55 + r * 0.62, z + 0.98, 3.80, 0.04, 0.05, shade(0x6e757c, .86), rot);
+  }
+}
+
+/* four-drawer filing cabinet */
+function pFilingCabinet(B, x, z, rot, col){
+  var c1 = col || 0x6e757c, d;
+  B.box(x, 0.68, z, 0.50, 1.36, 0.62, c1, rot);
+  for(d = 0; d < 4; d++){
+    B.box(x + 0.26, 0.22 + d * 0.32, z, 0.03, 0.28, 0.56, shade(c1, .90), rot);
+    B.box(x + 0.28, 0.22 + d * 0.32, z, 0.02, 0.03, 0.14, 0xb9bec4, rot);
+  }
+}
+
+/* water cooler */
+function pWaterCooler(B, x, z, rot){
+  B.box(x, 0.52, z, 0.34, 1.04, 0.34, 0xdfe3e6, rot);
+  B.cyl(x, 1.04, z, 0.16, 0.13, 0.52, 10, 0x8fc6e8, 3);
+  B.box(x, 0.72, z - 0.18, 0.10, 0.10, 0.06, 0x39434d, rot);
+}
+
 function buildStation(scene, D0){
   var W = 28, D = 34, H = 4.2;          /* main room */
   var GW = 16, GD = 18;                 /* garage bay, on the +X flank */
@@ -14405,10 +15235,13 @@ function buildStation(scene, D0){
   /* The parcel is not centred on the room: the garage hangs off the +X
      flank and the apron extends past that. Clear the whole envelope,
      offset so the test box actually covers what gets built. */
-  var anch = stationAnchor(D0.kind) || INT_BASE;
-  var envW = W + GW + 26, envD = D + 12;
-  var envOff = (GW + 26) / 2;                 /* centre of the envelope */
-  var spot = intFindSpotOffset(anch.x, anch.z, envW, envD, envOff);
+  /* Build on the plot reserved before the district fill, so the station,
+     its garage wing and the map landmark are all the same place. The old
+     search put the room wherever it found space, which left a legacy
+     exterior shell at the landmark and this building 70m behind it. */
+  var spot = (typeof STATION_SPOT !== 'undefined' && STATION_SPOT[D0.kind])
+             ? STATION_SPOT[D0.kind]
+             : (stationAnchor(D0.kind) || INT_BASE);
   var ix = spot.x, iz = spot.z;
   var B = new Builder();
 
@@ -14513,13 +15346,10 @@ function buildStation(scene, D0){
 
   /* ---------- lobby ---------- */
   var deskZ = z0 + 6.0;
-  B.box(ix, .55, deskZ, 7.2, 1.10, 1.1, 0x8a7a5c, 0);
-  intSolid(id, ix, deskZ, 3.6, .7);
-  B.box(ix, 1.14, deskZ, 7.6, .09, 1.4, 0x6d5f45, 0);
-  B.box(ix, .38, deskZ + 1.4, 6.4, .08, .9, 0x9c8a68, 0);
-  B.box(ix - 1.6, .46, deskZ + 2.0, .52, .10, .52, 0x2a2f38, 0);
-  B.box(ix - 1.6, .76, deskZ + 2.25, .52, .56, .08, 0x2a2f38, 0);
-  B.box(ix + 1.4, .74, deskZ + 1.4, .58, .40, .06, 0x1d2128, 0);
+  /* Blender-modelled reception counter, ported to Builder calls */
+  pReceptionCounter(B, ix, deskZ, 0, 0x8a7a5c);
+  intSolid(id, ix, deskZ, 1.9, .5);
+  pChair(B, ix - 1.6, deskZ + 2.0, Math.PI, 0x2a2f38);
   /* waiting bench and a plant */
   B.box(ix - 8, .45, z0 + 3.2, 1.8, .12, .55, 0x8d7458, 0);
   B.box(ix - 8, .72, z0 + 3.0, 1.8, .46, .10, 0x8d7458, 0);
@@ -14528,24 +15358,19 @@ function buildStation(scene, D0){
 
   /* ---------- locker room, left side ---------- */
   var lockZ = iz + 1.0;
-  for(i = 0; i < 8; i++){
-    B.box(x0 + 1.4, 1.05, lockZ - 4.6 + i * 1.3, 1.4, 2.10, 1.2, 0x59646f, 0);
-    B.box(x0 + 2.15, 1.05, lockZ - 4.6 + i * 1.3, .08, 1.90, 1.0, 0x46505a, 0);
-  }
-  intSolid(id, x0 + 1.4, lockZ, .7, 5.4);
+  /* Blender-modelled locker bank */
+  pLockerBank(B, x0 + 1.6, lockZ, 0, 0x59646f);
+  intSolid(id, x0 + 1.6, lockZ, .35, 2.45);
   B.box(x0 + 4.6, .45, lockZ, .5, .10, 5.0, 0x8d7458, 0);   /* bench */
   intSolid(id, x0 + 4.6, lockZ, .3, 2.5);
   B.box(x0 + 1.0, 1.8, lockZ - 6.4, .10, 1.6, 1.2, 0xdfe6ec, 0);  /* mirror */
 
   /* ---------- armoury cage, right side ---------- */
   var armZ = iz - 2.0;
-  for(i = 0; i < 9; i++){
-    B.box(x1 - 3.2, 1.6, armZ - 2.4 + i * .6, .08, 3.2, .08, 0x59646f, 0);
-  }
-  B.box(x1 - 3.2, 3.25, armZ, .12, .16, 5.6, 0x59646f, 0);
-  intSolid(id, x1 - 3.2, armZ, .2, 2.8);
-  B.box(x1 - 1.4, .95, armZ, 2.4, 1.90, 4.8, 0x6e757c, 0);
-  intSolid(id, x1 - 1.4, armZ, 1.2, 2.4);
+  /* Blender-modelled armoury cage with rack */
+  pArmouryCage(B, x1 - 3.2, armZ, Math.PI / 2, 0x59646f);
+  intSolid(id, x1 - 3.2, armZ, .2, 2.1);
+  intSolid(id, x1 - 1.6, armZ, .9, 2.0);
 
   /* ---------- cell block, across the back ---------- */
   var cellZ = z1 - 4.2;
@@ -14553,13 +15378,9 @@ function buildStation(scene, D0){
     var cx = x0 + 3.6 + i * 5.0;
     B.box(cx, H / 2, cellZ + 2.0, 4.6, H, .22, shade(D0.wall, .94), 0);
     intSolid(id, cx, cellZ + 2.0, 2.3, .2);
-    for(j = 0; j < 8; j++){
-      B.box(cx - 2.0 + j * .58, 1.35, cellZ - 2.0, .07, 2.7, .07, 0x59646f, 0);
-    }
-    B.box(cx, 2.78, cellZ - 2.0, 4.6, .16, .16, 0x59646f, 0);
-    intSolid(id, cx, cellZ - 2.0, 2.3, .18);
-    B.box(cx - .8, .40, cellZ, 1.9, .30, 1.3, 0x8a9096, 0);
-    B.box(cx + 1.5, .35, cellZ + 1.2, .5, .70, .5, 0xdfe3e6, 0);
+    /* Blender-modelled holding cell */
+    pHoldingCell(B, cx, cellZ - 2.0, 0, 0x59646f);
+    intSolid(id, cx, cellZ - 2.0, 2.15, .18);
   }
   var bookX = x0 + 3.6 + D0.cells * 5.0 + 2.4;
   B.box(bookX, .55, cellZ, 1.7, 1.10, 3.6, 0x6d5f45, 0);
@@ -14573,6 +15394,32 @@ function buildStation(scene, D0){
     B.box(gx - GW / 2 + 1.2, .5 + i * .9, gz + 3.0, 1.4, .10, 4.0, 0x6e757c, 0);
   }
   intSolid(id, gx - GW / 2 + 1.2, gz + 3.0, .7, 2.0);
+  /* Blender-modelled office fittings, ported to Builder calls */
+  var fc;
+  for(fc = 0; fc < 3; fc++){
+    pFilingCabinet(B, x1 - 1.2, iz - 6.5 + fc * 0.9, Math.PI / 2, 0x6e757c);
+    intSolid(id, x1 - 1.2, iz - 6.5 + fc * 0.9, .32, .28);
+  }
+  pWaterCooler(B, ix - 6.4, z0 + 5.2, 0);
+  intSolid(id, ix - 6.4, z0 + 5.2, .22, .22);
+  pDesk(B, ix + 5.2, iz - 3.0, 0, 0x8a7a5c);
+  intSolid(id, ix + 5.2, iz - 3.0, .85, .45);
+  pChair(B, ix + 5.2, iz - 3.9, 0, 0x2a2f38);
+
+  /* --- wayfinding to the motor pool ---
+     The bay works, but sits ~33m from the front door around a corner with
+     nothing indicating it exists, so it could not be found. Sign it and
+     paint a guide lane on the floor leading to it. */
+  if(typeof addSign === 'function'){
+    addSign(x1 - 0.28, 2.55, gyz, -Math.PI / 2, 3.0, .55,
+            'MOTOR POOL', D0.trim, 0xffffff, 'flat');
+    addSign(ix + 3.0, 2.40, z0 + 1.4, 0, 2.8, .45,
+            'MOTOR POOL  >', D0.trim, 0xffffff, 'flat');
+  }
+  B.plate((ix + gx) / 2, .055, gyz, Math.abs(gx - ix), .22, 0xd6b83c, 0);
+  B.plate(ix + 3.0, .055, (iz + gyz) / 2, .22, Math.abs(gyz - iz) + 3, 0xd6b83c, 0);
+  B.box(gx, 3.55, gz - GD / 2 + 0.6, 3.0, .38, .10, D0.trim, 0);
+
   /* vehicle lift and bay markings */
   B.box(gx + 1.0, .16, gz, 4.8, .32, 2.1, 0x4a5058, 0);
   B.plate(gx + 1.0, .06, gz, 4.0, 11, C.line, 0);
@@ -15629,6 +16476,7 @@ function stopRunPlate(){
   if(!STOP.active) return false;
   if(STOP.ranPlate){ toast('PLATE ALREADY RUN', ''); return true; }
   STOP.ranPlate = true;
+  if(typeof boloCheck === 'function' && STOP.veh) boloCheck(STOP.veh.plate);
   var r = STOP.rec;
   var hits = [];
   if(r.warrants && r.warrants.length) hits.push('WARRANT: ' + r.warrants[0]);
@@ -15725,7 +16573,8 @@ var PAD_MAP = {
   4:'lights',     /* LB             -- emergency lights                 */
   5:'siren',      /* RB             -- siren                            */
   8:'map',        /* back / select  -- full map                         */
-  9:'pause',      /* start          -- pause                            */
+  9:'pause',
+  11:'pit',      /* start          -- pause                            */
   12:'radar',     /* d-pad up       -- radar                            */
   13:'mdt',       /* d-pad down     -- MDT                              */
   14:'backup',    /* d-pad left     -- request backup                   */
@@ -15743,9 +16592,186 @@ function padAxis(gp, i){
   var v = gp.axes[i] || 0;
   return Math.abs(v) < .18 ? 0 : v;      /* deadzone */
 }
+/* ============================================================
+   PIT MANOEUVRE
+   Put your front quarter against the suspect's rear quarter and steer in.
+   Only works from behind and to the side, at a sensible speed -- ramming
+   head-on or at 90mph is not a PIT and is treated as a collision.
+   ============================================================ */
+/* ============================================================
+   BOLO
+   Dispatch puts out a description; a matching vehicle is actually on the
+   road somewhere. Running its plate, or spotting it, closes the loop.
+   ============================================================ */
+var BOLO = { active:false, plate:'', desc:'', veh:null, t:0, found:false, expires:0 };
+var BOLO_REASONS = [
+  'armed robbery at a convenience store',
+  'a hit and run with injuries',
+  'a stolen vehicle out of Dallas',
+  'an aggravated assault suspect',
+  'a child custody violation',
+  'a felony warrant service'
+];
+function boloIssue(){
+  if(BOLO.active) return false;
+  if(!G.traffic.length) return false;
+  /* pick a car actually driving around, so it can genuinely be found */
+  var v = G.traffic[ri(0, G.traffic.length - 1)];
+  if(!v || !v.plate) return false;
+  var rec = getVehRecord(v.plate);
+  rec.bolo = pick(BOLO_REASONS);
+  rec.notes.push('BOLO \u2013 ' + rec.bolo);
+  BOLO.active = true;
+  BOLO.plate = v.plate;
+  BOLO.desc = (v.def && v.def.n ? v.def.n : 'sedan');
+  BOLO.veh = v;
+  BOLO.found = false;
+  BOLO.t = 0;
+  BOLO.expires = rng(420, 900);
+  v.boloTarget = true;
+  dispatchSay('All units, BOLO: ' + BOLO.desc + ', plate ' + v.plate +
+              ', wanted for ' + rec.bolo + '. Approach with caution.', 1);
+  toast('BOLO ISSUED \u2014 ' + v.plate + ' (' + BOLO.desc.toUpperCase() + ')', '');
+  return true;
+}
+function boloCheck(plate){
+  if(!BOLO.active || BOLO.found) return false;
+  if(plate !== BOLO.plate) return false;
+  BOLO.found = true;
+  toast('THIS IS THE BOLO VEHICLE \u2014 ' + BOLO.plate, 'good');
+  dispatchSay(G.callsign + ' has the BOLO vehicle. Units start that way.', 1);
+  addXP(220, 'located a BOLO vehicle');
+  return true;
+}
+function boloClear(why){
+  if(!BOLO.active) return;
+  if(BOLO.veh) BOLO.veh.boloTarget = false;
+  BOLO.active = false;
+  BOLO.veh = null;
+  if(why) dispatchSay('All units, disregard the earlier BOLO. ' + why, 3);
+}
+function updateBolo(dt){
+  if(!BOLO.active){
+    /* a new one now and then while you are on duty */
+    BOLO.t += dt;
+    if(G.onDuty && BOLO.t > 240 && chance(dt * .012)){ BOLO.t = 0; boloIssue(); }
+    return;
+  }
+  BOLO.t += dt;
+  /* the car despawning ends it */
+  if(BOLO.veh && G.traffic.indexOf(BOLO.veh) < 0){ boloClear('That vehicle is out of the area.'); return; }
+  if(BOLO.t > BOLO.expires){ boloClear('That BOLO is cancelled.'); return; }
+  /* a reminder every couple of minutes */
+  if(!BOLO.found && Math.floor(BOLO.t / 150) !== BOLO.lastNag){
+    BOLO.lastNag = Math.floor(BOLO.t / 150);
+    if(BOLO.t > 150) dispatchSay('Reminder, BOLO still outstanding on plate ' + BOLO.plate + '.', 3);
+  }
+}
+function pitAttempt(){
+  if(G.onFoot || !G.veh){ toast('YOU ARE NOT IN A UNIT', 'bad'); return false; }
+  var t = Pursuit.active ? Pursuit.target : G.nearTarget;
+  if(!t){
+    /* fall back to the closest moving car ahead */
+    var i, best = null, bd = 12;
+    for(i = 0; i < G.traffic.length; i++){
+      var o = G.traffic[i];
+      var d = dist(o.x, o.z, G.veh.x, G.veh.z);
+      if(d < bd){ bd = d; best = o; }
+    }
+    t = best;
+  }
+  if(!t){ toast('NO VEHICLE IN RANGE', 'bad'); return false; }
+
+  var dx = t.x - G.veh.x, dz = t.z - G.veh.z;
+  var d2 = Math.sqrt(dx * dx + dz * dz);
+  if(d2 > 7.5){ toast('TOO FAR FOR A PIT', 'bad'); return false; }
+
+  /* where are we relative to them? */
+  var fx = Math.cos(t.h), fz = Math.sin(t.h);
+  /* dx points from us to them. If they are ahead of us along their own
+     heading, that dot product is POSITIVE -- negating it made "behind"
+     read as negative and every legitimate PIT was rejected. */
+  var along = (dx * fx + dz * fz);           /* positive = we are behind */
+  var across = (-dx * fz + dz * fx);         /* which side we are on */
+  var closing = Math.abs(G.veh.spd);
+
+  if(along < 0.4){
+    toast('PIT MUST BE FROM BEHIND', 'bad');
+    return false;
+  }
+  if(along > 3.4){
+    toast('GET YOUR NOSE TO THEIR REAR QUARTER', '');
+    return false;
+  }
+  if(closing < 7){ toast('TOO SLOW FOR A PIT', 'bad'); return false; }
+  if(closing > 31){
+    toast('TOO FAST \u2014 THAT IS A RAM, NOT A PIT', 'bad');
+    addDiscipline(3, 'unsafe ramming at speed');
+    t.dmg = clamp((t.dmg || 0) + .5, 0, 1);
+    G.veh.dmg = clamp((G.veh.dmg || 0) + .4, 0, 1);
+    return true;
+  }
+
+  /* how square are we to them? a good PIT is roughly parallel */
+  var ang = Math.abs(angDiff(G.veh.h, t.h));
+  var quality = clamp(1 - ang / .9, 0, 1) * clamp(1 - Math.abs(along - 1.6) / 2.2, .2, 1);
+  var spun = chance(.45 + quality * .5);
+
+  Audio_crash && Audio_crash(closing * .5);
+  if(spun){
+    /* the rear steps out and the car spins to a stop */
+    t.spinT = 2.4;
+    t.yaw = (across > 0 ? 1 : -1) * 2.6;
+    t.slip = 1;
+    t.spd *= .45;
+    t.fleeing = false;
+    t.pulled = true;
+    t.beingStopped = true;
+    t.felony = true;
+    G.stopVeh = t;
+    if(Pursuit.active) Pursuit.end('Suspect vehicle disabled by PIT.', true);
+    toast('PIT SUCCESSFUL \u2014 SUSPECT VEHICLE SPUN OUT', 'good');
+    addXP(200, 'successful PIT');
+    dispatchSay(G.callsign + ' PIT complete, vehicle is stopped.', 1);
+    if(typeof stopBegin === 'function') stopBegin(t);
+  } else {
+    t.slip = clamp((t.slip || 0) + .5, 0, 1);
+    t.spd *= .82;
+    G.veh.spd *= .88;
+    toast('CONTACT \u2014 THEY HELD IT', '');
+    addXP(30, 'PIT attempt');
+  }
+  G.veh.dmg = clamp((G.veh.dmg || 0) + .06, 0, 1);
+  return true;
+}
+/* a spun car keeps rotating for a moment, then settles */
+function updateSpin(dt){
+  var i;
+  for(i = 0; i < G.traffic.length; i++){
+    var v = G.traffic[i];
+    if(!v.spinT || v.spinT <= 0) continue;
+    v.spinT -= dt;
+    v.h = angWrap(v.h + v.yaw * dt);
+    v.yaw *= (1 - dt * 1.6);
+    v.spd *= (1 - dt * 1.3);
+    if(v.spinT <= 0){ v.yaw = 0; v.spd = 0; v.slip = 0; }
+  }
+}
 function updateGamepad(dt){
   if(!navigator.getGamepads) return;
-  var pads = navigator.getGamepads();
+  /* In an iframe without allow="gamepad", getGamepads() THROWS rather than
+     returning empty -- and this runs every frame, so it spammed the error
+     bar continuously. Try once, and if the platform refuses, stop asking. */
+  if(PAD.blocked) return;
+  var pads;
+  try {
+    pads = navigator.getGamepads();
+  } catch(e){
+    PAD.blocked = true;
+    PAD.blockReason = (e && e.message) ? e.message : 'gamepad access denied';
+    return;
+  }
+  if(!pads) return;
   var gp = null, i;
   for(i = 0; i < pads.length; i++) if(pads[i] && pads[i].connected){ gp = pads[i]; break; }
   if(!gp){
@@ -15806,7 +16832,11 @@ function updateGamepad(dt){
     else if(act === 'cuff'){
       /* there is no standalone cuff function -- cuffing is an option inside
          the on-foot contact menu, so open that instead */
-      if(typeof contactPedOnFoot === 'function') contactPedOnFoot();
+      /* contactPedOnFoot(p) needs a person. Calling it bare threw
+         "cannot read setState of undefined" the moment X was pressed. */
+      var cp = (typeof nearestPedTarget === 'function') ? nearestPedTarget() : null;
+      if(cp && typeof contactPedOnFoot === 'function') contactPedOnFoot(cp);
+      else if(G.onFoot) toast('NOBODY IN REACH', '');
       else doAction();
     }
     else if(act === 'weapon'){ if(G.weapon && G.weapon !== 'none') holster(); else drawWeapon('sidearm'); }
@@ -15814,6 +16844,7 @@ function updateGamepad(dt){
     else if(act === 'siren')  toggleSiren();
     else if(act === 'map')    toggleMap();
     else if(act === 'pause')  togglePause();
+    else if(act === 'pit')    pitAttempt();
     else if(act === 'radar')  Radar.toggle();
     else if(act === 'mdt')    openMenu('mdt');
     else if(act === 'backup') requestBackup(Pursuit.active ? 'pursuit' : 'general');
@@ -16921,6 +17952,7 @@ function onKey(k, e){
     if(k === 'g'){ if(stopRelease()) return; }
     if(k === 'h'){ if(stopArrest()) return; }
   }
+  if(k === 'p' && !G.onFoot && !G.menuOpen){ pitAttempt(); return; }
   if(k === 'r' && G.onFoot && !G.menuOpen){ toggleRun(); return; }
   if(k === 'h' && K['shift']){ requestAir(); return; }
   if(k === 'r' && K['shift']){ reloadWeapon(); return; }
@@ -16955,9 +17987,13 @@ function doAction(){
   /* inside the station */
   if(G.interior){
     if(G.intDesk){
-      key='desk';
-      html = G.onDuty ? pk('E','ACT') + ' sign off shift' : 'reporting for duty';
-      sticky = true;
+      /* This branch was assigning to key/html/sticky -- variables that belong
+         to the PROMPT builder, not to doAction. They are undeclared here, so
+         pressing ACT at the front desk threw "key is not defined" and popped
+         the red error bar. Do the actual desk action instead. */
+      if(G.onDuty) goOffDuty();
+      else goOnDuty();
+      return;
     }
     else if(G.intJail){ bookPrisoner(); return; }
     if(G.intGarage){ openMenu('garage'); return; }
@@ -17136,13 +18172,24 @@ function controlFoot(dt){
   var wantRun = G.runToggle || K['shift'] || TOUCH.gas || G.padSprint;
   var walkTop = 1.85, runTop = 4.30;
 
+  /* Was this input from the keyboard? WASD is used with a mouse, so the
+     player expects "forward" to follow wherever they are looking, updated
+     live. Freezing the frame is only correct for an analog stick, where
+     deriving it from a camera that auto-aligns onto the body creates a
+     feedback loop. */
+  var keyMove = !!(K['w'] || K['a'] || K['s'] || K['d'] ||
+                   K['arrowup'] || K['arrowdown'] || K['arrowleft'] || K['arrowright']);
   if(mag > .06){
     /* The input reference frame is FROZEN while a direction is held.
        Deriving it from the live camera yaw while the camera auto-aligns onto
        the body created a loop -- body chases camera, camera chases body -- and
        every stick direction except hard right spun on the spot. Snapshot the
        frame when input starts, re-sync when it stops. */
-    if(!G.inputHeld){
+    if(keyMove){
+      /* keyboard: follow the camera live */
+      G.inputHeld = true;
+      G.ctrlYaw = G.camYaw;
+    } else if(!G.inputHeld){
       G.inputHeld = true;
       G.ctrlYaw = G.camYaw;
     }
@@ -17303,7 +18350,10 @@ function populate(dt){
     var pbatch = G.peds.length < maxP * .6 ? 5 : 2, pdone = 0;
     var tr = 0;
     while(tr++ < 22 && pdone < pbatch){
-      var ang = Math.random() * TAU, r = rng(45, 190);
+      /* 45m is well inside your view, so people visibly popped into existence
+       in front of you. Spawn beyond sight and let them walk in, the way a
+       city feels continuous rather than assembled around the camera. */
+      var ang = Math.random() * TAU, r = rng(115, 310);
       var sx = px + Math.cos(ang) * r, sz = pz + Math.sin(ang) * r;
       if(Math.abs(sx) > WORLD - 60 || Math.abs(sz) > WORLD - 60) continue;
       if(inWater(sx, sz)) continue;
@@ -17470,6 +18520,8 @@ function tick(ts){
   updateAir(dt);
   try { updateAmbience(dt); } catch(eA){ reportError('ambience: ' + eA.message, '', 0, 0, eA); }
   try { updateTrain(dt); } catch(eT){ reportError('train: ' + eT.message, '', 0, 0, eT); }
+  try { updateBolo(dt); } catch(eBo){ reportError('bolo: ' + eBo.message, '', 0, 0, eBo); }
+  try { updateSpin(dt); } catch(eSp){ reportError('spin: ' + eSp.message, '', 0, 0, eSp); }
   try { updateGamepad(dt); } catch(eGp){ reportError('pad: ' + eGp.message, '', 0, 0, eGp); }
   try { sceneUpdate(dt); } catch(eSc){ reportError('scene: ' + eSc.message, '', 0, 0, eSc); }
   try { stopUpdate(dt); } catch(eSt){ reportError('stop: ' + eSt.message, '', 0, 0, eSt); }
@@ -17579,6 +18631,7 @@ function setLoad(pct, txt){
    a callback, which makes field bug reports useless. Capture the real message
    ourselves, show it once, and keep the frame loop alive instead of dying. */
 var ERRS = {}, ERRN = 0;
+var ERR_HIDE = null;
 function reportError(msg, src, line, col, err){
   var key = msg + '@' + line + ':' + col;
   if(ERRS[key]) { ERRS[key]++; return; }
@@ -17589,6 +18642,13 @@ function reportError(msg, src, line, col, err){
     bar.textContent = 'ERR ' + ERRN + ': ' + msg + '\nline ' + line + ':' + col +
                       (stack ? '\n' + stack : '');
     bar.style.display = 'block';
+    /* Do not leave it sitting over the HUD forever. Tap to dismiss, and it
+       clears itself after a few seconds -- a single non-fatal error should
+       not permanently cover the speedo and the street name. */
+    bar.style.cursor = 'pointer';
+    bar.onclick = function(){ bar.style.display = 'none'; };
+    if(ERR_HIDE) clearTimeout(ERR_HIDE);
+    ERR_HIDE = setTimeout(function(){ bar.style.display = 'none'; }, 9000);
   }
 }
 window.onerror = function(msg, src, line, col, err){
@@ -17622,7 +18682,7 @@ function boot(){
     ['Starting the render engine', function(){ initEngine(); }],
     ['Clearing the roadways', function(){ sweepRoadSolids(); }],
     ['Laying the rail', function(){ buildRailPath(); buildRailGeometry(); buildRailCrossings(); }],
-    ['Baking the world', function(){ bakeChunks(scene); buildWater(scene); buildSigns(scene); buildBirds(scene); buildInteriors(scene); buildShopInteriors(scene); clearInteriorSolids(); buildDoors(scene); buildTrain(scene); }],
+    ['Baking the world', function(){ bakeChunks(scene); buildWater(scene); buildSigns(scene); buildBirds(scene); buildInteriors(scene); buildShopInteriors(scene); clearInteriorSolids(); clearRailSolids(); buildDoors(scene); buildTrain(scene); }],
     ['Issuing your equipment', function(){
         rebuildOfficer();
         setWeather('clear');
