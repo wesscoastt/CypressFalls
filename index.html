@@ -4902,6 +4902,22 @@ function bPort(B, x, z){
 /* Mast-arm geometry and the live lamp pool were computing head positions from
    two different formulas, so the coloured lamps floated away from the housings.
    Both now call this. */
+/* how far short of a node's centre traffic on edge e must hold: at a
+   signal, behind the stop bar (behind the crosswalk); at a stop sign or a
+   plain junction, back from the edge of the widest road it meets */
+function nodeStopDist(n, e){
+  if(n._stopD === undefined){
+    if(n.light) n._stopD = signalMastWidth(n) / 2 + 4.3;
+    else {
+      var k, mw = 0;
+      for(k = 0; k < n.e.length; k++){ var oe = EDGES[n.e[k]]; if(oe !== e) mw = Math.max(mw, oe.w); }
+      n._stopD = mw / 2 + 2.2;
+    }
+  }
+  return n._stopD;
+}
+/* speed that still stops comfortably within d metres */
+function stopProfile(d){ return d <= .25 ? 0 : Math.sqrt(2 * 3.4 * d) * .92; }
 function signalMastWidth(n){
   var k, mw = 0;
   for(k = 0; k < n.e.length; k++) mw = Math.max(mw, EDGES[n.e[k]].w);
@@ -4982,12 +4998,12 @@ function signalHeadPos(n, idx){
    built as a separate batched pass after the world bakes.
    ============================================================ */
 
-var SIGNS = [], SIGN_MAX = 3400;
+var SIGNS = [], SIGN_MAX = 4400;
 /* Road furniture used to consume the whole sign budget before a single
    storefront was placed, leaving the map covered in speed limits and
    nothing else. Each category now gets its own allowance. */
-var SIGN_BUDGET = { road:2200, board:1200 };
-var SIGN_USED = { road:0, board:0 };
+var SIGN_BUDGET = { road:1400, board:1100, limit:2700 };
+var SIGN_USED = { road:0, board:0, limit:0 };
 function addSign(x, y, z, rot, w, h, txt, bg, fg, style, cat){
   cat = cat || 'board';
   if(SIGNS.length >= SIGN_MAX) return;
@@ -6328,13 +6344,16 @@ function bExitGantry(B, x, y0, z, hx, hz, exitNo, dest){
 }
 /* white regulatory speed limit sign */
 function bSpeedSign(B, x, z, rot, mph){
+  /* all three lines or no sign: running out of sign budget part way used
+     to leave boards reading SPEED LIMIT with no number, or a bare number */
+  if(SIGN_USED.limit + 3 > SIGN_BUDGET.limit || SIGNS.length + 3 > SIGN_MAX) return;
   B.cyl(x, 0, z, .09, .08, 2.7, 6, 0x9aa0a6, 3);
   B.box(x, 3.15, z, 1.15, 1.5, .09, 0xf2f2ee, rot);
   B.box(x, 3.15, z, 1.25, 1.6, .05, 0x2a2f36, rot);
   var px = Math.cos(rot + Math.PI / 2), pz = Math.sin(rot + Math.PI / 2);
-  addSign(x + px * .07, 3.52, z + pz * .07, rot, .95, .34, 'SPEED', 0xf2f2ee, 0x1a1d22, 'channel', 'road');
-  addSign(x + px * .07, 3.30, z + pz * .07, rot, .95, .28, 'LIMIT', 0xf2f2ee, 0x1a1d22, 'channel', 'road');
-  addSign(x + px * .07, 2.92, z + pz * .07, rot, .95, .62, String(mph || 45), 0xf2f2ee, 0x1a1d22, 'channel', 'road');
+  addSign(x + px * .07, 3.52, z + pz * .07, rot, .95, .34, 'SPEED', 0xf2f2ee, 0x1a1d22, 'channel', 'limit');
+  addSign(x + px * .07, 3.30, z + pz * .07, rot, .95, .28, 'LIMIT', 0xf2f2ee, 0x1a1d22, 'channel', 'limit');
+  addSign(x + px * .07, 2.92, z + pz * .07, rot, .95, .62, String(mph || 45), 0xf2f2ee, 0x1a1d22, 'channel', 'limit');
 }
 
 /* octagonal stop sign */
@@ -7906,16 +7925,19 @@ function buildRoads(){
       var ca = Math.atan2(co.z - cn.z, co.x - cn.x);
       var bx2 = cn.x + Math.cos(ca) * (cmw / 2 + 1.0);
       var bz2 = cn.z + Math.sin(ca) * (cmw / 2 + 1.0);
-      /* stop bar */
-      CBn.plate(bx2, .085, bz2, .55, ce.w * .92, C.line, ca);
-      /* zebra bars */
-      var zb;
+      /* crosswalk next to the junction, stop bar behind it -- the bar was
+         on the junction side, so traffic stopped at it sat on the crosswalk.
+         Traffic stops at this bar (see nodeStopDist). The bar covers the
+         approach lanes only. */
+      var zb, hx2 = -Math.sin(ca), hz2 = Math.cos(ca);
       for(zb = 0; zb < 6; zb++){
         var zo = -ce.w * .36 + zb * (ce.w * .72 / 5);
-        CBn.plate(bx2 + Math.cos(ca) * 1.9 - Math.sin(ca) * zo, .085,
-                  bz2 + Math.sin(ca) * 1.9 + Math.cos(ca) * zo,
+        CBn.plate(bx2 + Math.cos(ca) * 1.3 + hx2 * zo, .085,
+                  bz2 + Math.sin(ca) * 1.3 + hz2 * zo,
                   2.4, ce.w * .085, C.line, ca);
       }
+      /* traffic arriving here heads back along -ca; its lanes are on the -hx2 side */
+      CBn.plate(bx2 + Math.cos(ca) * 3.0 - hx2 * ce.w * .24, .085, bz2 + Math.sin(ca) * 3.0 - hz2 * ce.w * .24, .5, ce.w * .46, C.line, ca);
     }
   }
 
@@ -7942,9 +7964,26 @@ function buildRoads(){
     var s2x = sa.x + (sb.x - sa.x) * t2 - snx * offs;
     var s2z = sa.z + (sb.z - sa.z) * t2 - snz * offs;
     /* one sign per direction, and only where the limit is worth posting */
-    if(lim && lim >= 15){
-      bSpeedSign(CB(s1x, s1z), s1x, s1z, sang + Math.PI / 2, lim);
-      bSpeedSign(CB(s2x, s2z), s2x, s2z, sang - Math.PI / 2, lim);
+    /* only where the sign plainly belongs to this road: next to a side
+       street or a junction it read as the limit for the other road */
+    var ownsSign = function(px, pz){
+      var ne2 = nearestEdge(px, pz, 0);
+      if(ne2.e < 0) return false;
+      var oe = EDGES[ne2.e];
+      return oe === se || (oe.name === se.name && oe.lim === se.lim);
+    };
+    /* one posting every few hundred metres of the same road is what a
+       driver sees; a sign on every block used up the whole budget on the
+       first roads built and left later ones with none */
+    var sk1 = se.name + '|' + lim + '|' + Math.round(sang * 2 / Math.PI) + '|' + Math.round(s1x / 380) + '|' + Math.round(s1z / 380);
+    var sk2 = se.name + '|' + lim + '|' + Math.round((sang + Math.PI) * 2 / Math.PI) + '|' + Math.round(s2x / 380) + '|' + Math.round(s2z / 380);
+    if(!buildRoads.posted) buildRoads.posted = {};
+    var PST = buildRoads.posted;
+    if(lim && lim >= 15 && !PST[sk1]){ PST[sk1] = 1; if(ownsSign(s1x, s1z)) bSpeedSign(CB(s1x, s1z), s1x, s1z, sang + Math.PI / 2, lim); }
+    if(lim && lim >= 15 && !PST[sk2]){ PST[sk2] = 1; if(ownsSign(s2x, s2z)) bSpeedSign(CB(s2x, s2z), s2x, s2z, sang - Math.PI / 2, lim); }
+    if(false){
+      if(ownsSign(s1x, s1z)) bSpeedSign(CB(s1x, s1z), s1x, s1z, sang + Math.PI / 2, lim);
+      if(ownsSign(s2x, s2z)) bSpeedSign(CB(s2x, s2z), s2x, s2z, sang - Math.PI / 2, lim);
     }
   }
 
@@ -10201,7 +10240,7 @@ var LIVERY_ART = {
      over a big POLICE in white on the band, 911 EMERGENCY on the quarter,
      unit number and PATROL in black on the front fender. */
   pd:   { body:0xf6f7f8, panel:0xf6f7f8, roof:0xf6f7f8, stripe:0x1d4fb8, ink:0x121417, gold:0xc8a24a,
-          top:'', big:'', sub:'', emblem:'', rearTxt:'POLICE', rearInk:0x1d4fb8, num:false, tyler:true,
+          top:'', big:'', sub:'', emblem:'', rearTxt:'', rearInk:0x1d4fb8, num:false, tyler:true,
           blue:0x1d4fb8, black:0x111316, city:'CYPRESS FALLS' },
   /* Garland County Sheriff, in the Smith County (Tyler) pattern: a white car
      with a royal-blue band edged in gold that climbs from the bottom of the
@@ -10628,8 +10667,8 @@ var CAR_TEX = {};
    police kit) is rasterised into a z/y grid, plus the licence plate. Rear
    lettering and slashes are then placed only on cells that stay paint. */
 var REAR_MASK = {};
-function rearMask(bodyKey, S, plateY){
-  var mk = bodyKey + '|' + plateY;
+function rearMask(bodyKey, S, plateY, soft){
+  var mk = bodyKey + '|' + plateY + (soft ? '|s' : '');
   if(REAR_MASK[mk] !== undefined) return REAR_MASK[mk];
   var M = decodeModel(bodyKey + '_body');
   if(!M){ REAR_MASK[mk] = null; return null; }
@@ -10672,9 +10711,12 @@ function rearMask(bodyKey, S, plateY){
       }
     }
   }
-  mark(M, ['GLASS', 'CHROME', 'BLACK', 'DARK', 'HEAD', 'TAIL', 'AMBER']);
+  /* soft: only glass and lamps block (a band can run behind a badge or a
+     handle, the trim stands proud of it) */
+  var BL = soft ? ['GLASS', 'HEAD', 'TAIL', 'AMBER'] : ['GLASS', 'CHROME', 'BLACK', 'DARK', 'HEAD', 'TAIL', 'AMBER'];
+  mark(M, BL);
   var MP = decodeModel(bodyKey + '_pol');
-  if(MP) mark(MP, ['GLASS', 'CHROME', 'BLACK', 'DARK', 'HEAD', 'TAIL', 'AMBER']);
+  if(MP) mark(MP, soft ? ['HEAD', 'TAIL', 'AMBER'] : BL);
   /* the paint itself ends somewhere: rows with no rear paint are not usable */
   var paintRow = new Uint8Array(nz * ny), pp = M.pos, pg = M.groups.PAINT || [];
   (function(){
@@ -10689,7 +10731,7 @@ function rearMask(bodyKey, S, plateY){
       for(iz = Math.floor((za + hw) / CS); iz <= Math.ceil((zb + hw) / CS); iz++)
         if(iy >= 0 && iy < ny && iz >= 0 && iz < nz) grid[iy * nz + iz] = 1;
   }
-  block(-.25, .25, plateY - .16, plateY + .17);
+  if(!soft) block(-.25, .25, plateY - .16, plateY + .17);
   var fY = shTopY(S, S.tail) - .32;
   block(S.hw * .30 - .09, S.hw * .30 + .09, fY - .045, fY + .045);
   block(-S.hw * .30 - .09, -S.hw * .30 + .09, fY - .045, fY + .045);
@@ -10932,7 +10974,8 @@ function carLiveryTexture(P, S, bodyKey, liv){
       tBand(); g.clip();
       /* royal blue, a shade lighter along the top */
       var gr = g.createLinearGradient(0, py(reg, yT), 0, py(reg, yB));
-      gr.addColorStop(0, '#2c66da'); gr.addColorStop(.55, hexCss(A.blue)); gr.addColorStop(1, '#1b4299');
+      /* navy, with a brighter sheen along the top edge as on the real cars */
+      gr.addColorStop(0, '#3a62c4'); gr.addColorStop(.12, '#22398a'); gr.addColorStop(.6, '#1a2c6c'); gr.addColorStop(1, '#121f52');
       g.fillStyle = gr; g.fillRect(0, 0, W, H);
       g.restore();
       function tText(txt, x, y, hM, maxW, col, font){
@@ -11039,7 +11082,9 @@ function carLiveryTexture(P, S, bodyKey, liv){
     /* roof */
     g.fillStyle = hexCss(A.roof);
     g.fillRect(tx(c[1][0] - .05), ty0, tx(c[2][0] + .05) - tx(c[1][0] - .05), ty1 - ty0);
-    if(A.num || A.sheriff || A.tyler){
+    /* (the big roof unit number is gone -- it read as a giant 23 painted
+       across every roof) */
+    if(false){
       g.save(); g.fillStyle = '#101214'; g.textAlign = 'center'; g.textBaseline = 'middle';
       var rcx = tx((c[1][0] + c[2][0]) / 2 - .12), rcy = (ty0 + ty1) / 2;
       g.translate(rcx, rcy); g.rotate(Math.PI / 2);
@@ -11130,8 +11175,69 @@ function carLiveryTexture(P, S, bodyKey, liv){
       g.fillText('911', 0, 0); g.restore();
     }
     if(A.tyler){
-      /* three blue slashes on each rear corner, as on the Tyler Chargers */
-      var slY = (V3.plateR || (S.base + .38)) - .02, sk, sd2;
+      /* the rear band, as on every Tyler unit: a navy strip across the back
+         at lamp / plate height carrying the city and POLICE in white -- on a
+         sedan across the deck lid between the tail lamps, on an SUV across
+         the liftgate with the plate sitting in the middle of it */
+      var plYt = V3.plateR || (S.base + .38), RMt = rearMask(bodyKey, S, plYt, true);
+      var pxMy = (ey1 - ey0) / S.Hs, pxMzt = (CT.rr[1] - CT.rr[0]) * W / (S.hw * 2.04);
+      var bandH = P.suv ? .15 : .125, bandY = null, bandZ0 = 0, bandZ1 = 0;
+      var runOut = function(z0, y){
+        var z = z0;
+        if(!RMt) return S.hw * .8;
+        while(z < S.hw * .98 && RMt.free(z, z + .02, y - bandH / 2, y + bandH / 2) && RMt.free(-z - .02, -z, y - bandH / 2, y + bandH / 2)) z += .02;
+        return z;
+      };
+      var cY = P.suv ? [plYt + .02, plYt + .06, plYt - .02, plYt + .10, plYt + .14, plYt - .06]
+                     : [tT - .10, tT - .14, tT - .06, tT - .18, tT - .22, plYt + .24, plYt + .30];
+      /* a pickup carries it across the tailgate, not down on the bumper */
+      if(S.bed || /^(f150|ram|tacoma|superduty|oldtruck|wtruck)$/.test(bodyKey)){ var tgH = plYt + .50, qq; cY = []; for(qq = 0; qq < 9; qq++) cY.push(tgH + .04 * (qq % 2 ? -(qq + 1) / 2 : qq / 2)); }
+      var ci2, inner = 0;
+      for(ci2 = 0; ci2 < cY.length && bandY === null; ci2++){
+        var zE = runOut(0, cY[ci2]);
+        if(zE >= S.hw * .38){ bandY = cY[ci2]; bandZ1 = zE - .02; inner = 0; break; }
+        /* the plate sits in the middle of the band: words either side */
+        var zE3 = runOut(.36, cY[ci2]);
+        if(zE3 >= .36 + .30){ bandY = cY[ci2]; bandZ1 = zE3 - .02; inner = .34; break; }
+      }
+      if(bandY === null){
+        for(ci2 = 0; ci2 < cY.length && bandY === null; ci2++){
+          var zE2 = runOut(0, cY[ci2] + .14);
+          if(zE2 >= S.hw * .42){ bandY = cY[ci2] + .14; bandZ1 = zE2 - .02; }
+        }
+      }
+      /* plate inside the band: the words go either side of it */
+      if(bandY !== null && Math.abs(bandY - plYt) < bandH / 2 + .12) inner = .34;
+      if(bandY !== null){
+        var bx0 = fz(-bandZ1, true), bx1 = fz(bandZ1, true), byT = fy(bandY + bandH / 2), byB = fy(bandY - bandH / 2);
+        var bxa = Math.min(bx0, bx1), bxb = Math.max(bx0, bx1), rr2 = (byB - byT) * .35;
+        g.save();
+        g.beginPath();
+        g.moveTo(bxa + rr2, byT); g.lineTo(bxb - rr2, byT); g.quadraticCurveTo(bxb, byT, bxb, byT + rr2);
+        g.lineTo(bxb, byB - rr2); g.quadraticCurveTo(bxb, byB, bxb - rr2, byB); g.lineTo(bxa + rr2, byB);
+        g.quadraticCurveTo(bxa, byB, bxa, byB - rr2); g.lineTo(bxa, byT + rr2); g.quadraticCurveTo(bxa, byT, bxa + rr2, byT);
+        g.closePath();
+        var bg2 = g.createLinearGradient(0, byT, 0, byB);
+        bg2.addColorStop(0, '#2c4fb4'); bg2.addColorStop(.35, '#1b2f78'); bg2.addColorStop(1, '#101c4c');
+        g.fillStyle = bg2; g.fill();
+        g.lineWidth = Math.max(1.5, (byB - byT) * .06); g.strokeStyle = '#5d86e0'; g.stroke();
+        g.restore();
+        var bandText = function(txt, zc, maxM){
+          g.save(); g.fillStyle = '#f6f7f8'; g.textAlign = 'center'; g.textBaseline = 'middle';
+          g.font = '700 ' + Math.round(bandH * .60 * pxMy) + 'px "Helvetica Neue","Arial Narrow",Arial,sans-serif';
+          var tw = g.measureText(txt).width;
+          var sx = Math.min(pxMzt / pxMy, maxM * pxMzt / (tw || 1));
+          g.translate(fz(zc, true), fy(bandY) + 1); g.scale(sx, 1);
+          g.fillText(txt, 0, 0); g.restore();
+        };
+        if(inner > 0){
+          bandText(A.city || 'POLICE', -(inner + bandZ1) / 2, (bandZ1 - inner) * .90);
+          bandText('POLICE', (inner + bandZ1) / 2, (bandZ1 - inner) * .80);
+        } else bandText((A.city || '') + ' \u2022 POLICE', 0, bandZ1 * 1.84);
+      }
+      /* three blue slashes on each rear corner, below the band */
+      var slY = P.suv ? plYt - .20 : plYt - .02, sk, sd2;
+      if(bandY !== null) slY = (bandY > plYt + .25) && (S.bed || /^(f150|ram|tacoma|superduty|oldtruck|wtruck)$/.test(bodyKey)) ? bandY - bandH / 2 - .13 : Math.min(slY, bandY - bandH / 2 - .10);
       g.fillStyle = hexCss(A.blue);
       /* find a height and a run of clear paint beside the plate for the
          three slashes; skip them rather than paint over a lamp */
@@ -11140,6 +11246,7 @@ function carLiveryTexture(P, S, bodyKey, liv){
         var dyS, okS = false, cand = [0, .04, -.04, .08, -.08, .12, -.12, .16, -.16];
         for(dyS = 0; dyS < cand.length && !okS; dyS++){
           var yS2 = slY + cand[dyS], sc2;
+          if(bandY !== null && Math.abs(yS2 - bandY) < bandH / 2 + .075) continue;
           for(sc2 = 1; sc2 >= .55 && !okS; sc2 -= .15){
            var zst;
            for(zst = 0; zst < 3 && !okS; zst++){
@@ -11708,8 +11815,28 @@ function cabinFromModel(M){
    cabins, a third row; headliner, visors and mirror. Bus-length cabins get
    rows of transit seats. Marked units add the laptop, radio heads, rifle
    lock and the prisoner partition. */
+/* the cabin has its own material: a little self-light so the dash, seats
+   and the driver read through the glass and from the seat, instead of
+   going to solid black in the shade of the roof */
+function carCabinMat(){
+  if(CAR_MATS.__cab) return CAR_MATS.__cab;
+  CAR_MATS.__cab = new THREE.MeshLambertMaterial({ vertexColors:true, side:THREE.FrontSide, emissive:0x0c0c0d });
+  return CAR_MATS.__cab;
+}
+/* backlit instruments, screens and control heads */
+function carGlowMat(){
+  if(CAR_MATS.__cglow) return CAR_MATS.__cglow;
+  CAR_MATS.__cglow = new THREE.MeshBasicMaterial({ vertexColors:true });
+  return CAR_MATS.__cglow;
+}
+function cabinMesh(ib, gl){
+  var g = new THREE.Group();
+  g.add(new THREE.Mesh(ib.geo(), carCabinMat()));
+  if(gl && gl.count()) g.add(new THREE.Mesh(gl.geo(), carGlowMat()));
+  return g;
+}
 function carInterior(P, S, G2, marked, cab){
-  var ib = new MB();
+  var ib = new MB(), gl = new MB();
   var xf, xr, belt, top, hw, wsx, wsy;
   if(cab){
     xf = cab.xf; xr = cab.xr; belt = cab.belt; top = cab.top; hw = cab.hw; wsx = cab.wsx; wsy = cab.wsy;
@@ -11783,7 +11910,7 @@ function carInterior(P, S, G2, marked, cab){
     P.seatY = floorY + .50; P.seatX = xf - .8; P.floorY = floorY; P.ks = 1;
     P.eye = { x:xf - .92, y:floorY + 1.30, z:-(hw - .45) };
     P.wheel = { x:xf - .33, y:floorY + .965, z:-(hw - .45) };
-    return new THREE.Mesh(ib.geo(), carRubberMat());
+    return cabinMesh(ib, gl);
   }
   /* ---- dash ---- */
   var dashBack = Math.max(xf - .55, xr + .9);
@@ -11797,11 +11924,13 @@ function carInterior(P, S, G2, marked, cab){
   /* binnacle and gauges, driver's side (-z) */
   var dzD = -hw * .48;
   ib.pbox(dashBack + .14, dashTop + .05, dzD, .16, .08, .36, 0x111214, .25);
-  ib.box(dashBack + .065, dashTop - .02, dzD - .08, .006, .07, .10, 0x2b4a5e);
-  ib.box(dashBack + .065, dashTop - .02, dzD + .08, .006, .07, .10, 0x2b4a5e);
+  gl.box(dashBack + .065, dashTop - .02, dzD - .08, .006, .07, .10, 0x5f8fae);
+  gl.box(dashBack + .065, dashTop - .02, dzD + .08, .006, .07, .10, 0x5f8fae);
+  gl.box(dashBack + .063, dashTop - .02, dzD - .08, .004, .012, .07, 0xe8eef2);     /* needles */
+  gl.box(dashBack + .063, dashTop - .02, dzD + .08, .004, .012, .07, 0xe8eef2);
   /* centre stack: screen, vents, climate knobs */
   ib.pbox(dashBack + .05, dashTop - .07, 0, .03, .16, .24, 0x0b0f14, .15);
-  ib.pbox(dashBack + .045, dashTop - .07, 0, .006, .13, .21, 0x1f3a52, .15);
+  gl.pbox(dashBack + .045, dashTop - .07, 0, .006, .13, .21, 0x3d6f96, .15);
   ib.box(dashBack + .05, dashTop - .20, 0, .03, .04, .24, 0x0e0f10);
   for(i = -1; i <= 1; i += 2){
     ib.box(dashBack + .02, dashTop - .17, i * .06, .02, .025, .025, 0x8a9096);
@@ -11886,12 +12015,12 @@ function carInterior(P, S, G2, marked, cab){
     ib.tube([sX + .40, floorY + .32 * ks, .02], [sX + .40, belt - .10, .02], .025, 6, 0x2a2c2f);
     ib.pbox(sX + .38, belt - .08, .0, .26, .02, .32, 0x0c0d0f, -.35);
     ib.pbox(sX + .30, belt + .03, .0, .02, .20, .28, 0x0b0c0e, .35);
-    ib.pbox(sX + .31, belt + .03, .0, .006, .17, .25, 0x22415a, .35);
+    gl.pbox(sX + .31, belt + .03, .0, .006, .17, .25, 0x3f78a6, .35);
     /* radio head, siren controller, rifle lock */
     ib.box(sX + .20, floorY + .38 * ks, 0, .14, .04, .18, 0x0e0f10);
-    ib.box(sX + .21, floorY + .405 * ks, .04, .10, .006, .05, 0x2e6b46);
+    gl.box(sX + .21, floorY + .405 * ks, .04, .10, .006, .05, 0x4fbf7a);
     ib.box(sX + .05, floorY + .38 * ks, 0, .12, .04, .16, 0x0e0f10);
-    ib.box(sX + .055, floorY + .405 * ks, -.03, .08, .006, .04, 0xa83a2a);
+    gl.box(sX + .055, floorY + .405 * ks, -.03, .08, .006, .04, 0xe0523c);
     ib.tube([sX + .55, floorY + .32 * ks, .10], [sX + .22, belt + .45, .10], .02, 5, 0x141516);
     /* partition: solid lower panel, steel cage above */
     var px = sX - .48, ph = Math.min(.74, head * .82);
@@ -11900,7 +12029,7 @@ function carInterior(P, S, G2, marked, cab){
     for(i = -7; i <= 7; i++) ib.box(px, (cy0 + cy1) / 2, i * hw * .13, .015, cy1 - cy0, .012, 0x3a3f46);
     for(i = 0; i <= 4; i++) ib.box(px, cy0 + (cy1 - cy0) * i / 4, 0, .015, .012, hw * 1.9, 0x3a3f46);
   }
-  return new THREE.Mesh(ib.geo(), carRubberMat());
+  return cabinMesh(ib, gl);
 }
 
 /* ---- motorcycle ------------------------------------------------------ */
@@ -12424,7 +12553,7 @@ function addRiderFigure(grp, P, liv){
   var L = driverLook(liv, Math.random());
   var cop = liv && liv !== 'civ';
   var helmet = cop ? 0xf2f3f4 : (Math.random() < .5 ? 0x141518 : L.shirt);
-  var m = new THREE.Mesh(riderGeo(L.skin, cop ? L.shirt : (Math.random() < .6 ? 0x1c1c1f : L.shirt), L.pants, helmet), carRubberMat());
+  var m = new THREE.Mesh(riderGeo(L.skin, cop ? L.shirt : (Math.random() < .6 ? 0x1c1c1f : L.shirt), L.pants, helmet), carCabinMat());
   m.userData.driverFig = true; m.visible = false;
   grp.add(m);
   P.eye = { x:-.02, y:1.77, z:0 };
@@ -12434,12 +12563,12 @@ function addDriverFigure(grp, hiG, loG, P, liv){
   var L = driverLook(liv, Math.random());
   var gh = driverGeo(P, L.skin, L.shirt, L.hair, L.pants, false);
   if(!gh) return null;
-  var out = [], m = new THREE.Mesh(gh, carRubberMat());
+  var out = [], m = new THREE.Mesh(gh, carCabinMat());
   m.userData.driverFig = true; m.visible = false;
   hiG.add(m); out.push(m);
   if(loG){
     var gl = driverGeo(P, L.skin, L.shirt, L.hair, L.pants, true);
-    if(gl){ var m2 = new THREE.Mesh(gl, carRubberMat()); m2.userData.driverFig = true; m2.visible = false; loG.add(m2); out.push(m2); }
+    if(gl){ var m2 = new THREE.Mesh(gl, carCabinMat()); m2.userData.driverFig = true; m2.visible = false; loG.add(m2); out.push(m2); }
   }
   return out;
 }
@@ -13181,7 +13310,30 @@ function roadHeightAt(x, z, cur){
   }
   return any ? best : 0;
 }
-function streetAt(x, z, y){
+/* the road you are driving ALONG: at a junction the plain nearest edge is
+   as likely to be the cross street, so the zone limit flickered to the
+   side road's every time you crossed one */
+function edgeAlong(x, z, y, h){
+  var near = edgesNear(x, z), i, best = -1, bs = 1e9;
+  for(i = 0; i < near.length; i++){
+    var e = EDGES[near[i]], a = NODES[e.a], b = NODES[e.b];
+    var dx = b.x - a.x, dz = b.z - a.z, L2 = dx * dx + dz * dz;
+    if(L2 < .01) continue;
+    var t = clamp(((x - a.x) * dx + (z - a.z) * dz) / L2, 0, 1);
+    if(y !== undefined && Math.abs((a.y || 0) + ((b.y || 0) - (a.y || 0)) * t - y) > 3) continue;
+    var d = dist(x, z, a.x + dx * t, a.z + dz * t);
+    if(d > e.w * .5 + 4) continue;
+    var al = Math.abs(Math.cos(Math.atan2(dz, dx) - h));
+    var sc = d + (1 - al) * 12;
+    if(sc < bs){ bs = sc; best = near[i]; }
+  }
+  return best;
+}
+function streetAt(x, z, y, h){
+  if(h !== undefined){
+    var ea = edgeAlong(x, z, y, h);
+    if(ea >= 0){ var E0 = EDGES[ea]; return { name:E0.name || 'Unnamed Road', lim:E0.lim || 30, type:E0.type }; }
+  }
   var n = nearestEdge(x, z, y);
   if(n.e < 0 && y !== undefined) n = nearestEdge(x, z);
   if(n.e < 0) return { name:'Garland County', lim:55 };
@@ -13891,17 +14043,29 @@ Ped.prototype.update = function(dt){
     /* last resort: after 20 seconds, go. Standing on a kerb forever is
        worse than a driver having to brake. */
     if(this.kerbT > 20) clear = true;
-    if(clear && this.t > .35){
+    if((clear && this.t > .35) || this.t > 26){
       this.kerbT = 0;
       this.crossOK = true;
-      this.tt = 1;
       this.setState('walk');
-    } else if(this.t > 26){
-      /* never let someone be stuck at a kerb forever */
-      this.crossOK = true;
-      this.tt = 1;
-      this.setState('walk');
+      this.turnOnto(ne, nd, this.pendingSide);
     }
+    return;
+  }
+  if(this.state === 'xwalk'){
+    /* crossing the street (or rounding a corner): straight across at a
+       brisk walk, then onto the footway */
+    var X = this.xTo;
+    if(!X){ this.setState('walk'); return; }
+    this.spd = Math.max(this.wspd, 1.5) * 1.12;
+    var xd = dist(this.x, this.z, X.x, X.z);
+    this.h = Math.atan2(X.z - this.z, X.x - this.x);
+    var stp = Math.min(xd, this.spd * dt);
+    this.x += Math.cos(this.h) * stp; this.z += Math.sin(this.h) * stp;
+    if(xd < .25 || this.t > 30){ this.xTo = null; this.setState('walk'); }
+    this.anim += this.spd * dt * 3.4;
+    this.mesh.position.set(this.x, (this.y || 0) + Math.abs(Math.sin(this.anim)) * .045, this.z);
+    this.mesh.rotation.y = -this.h + Math.PI / 2;
+    this.pose(dt);
     return;
   }
   if(this.state === 'walk'){
@@ -13978,88 +14142,82 @@ Ped.prototype.pickEdge = function(){
   this.avoid = 0;
   this.route = null; this.routeI = 0; this.dest = null; this.destCool = rng(0, 12);
 };
+/* how far in from each end of an edge the footway runs: it stops at the
+   kerb of the street it meets instead of carrying on into the junction --
+   peds used to walk the kerb line out into the middle of the crossing and
+   turn round there */
+function pedTrim(e, n){
+  var k, mw = 0;
+  for(k = 0; k < n.e.length; k++){ var o = EDGES[n.e[k]]; if(o !== e) mw = Math.max(mw, o.w); }
+  return mw ? mw / 2 + 2.6 : 0;
+}
+/* where on edge e (entered from node n, footway side sd) a walker starts */
+Ped.prototype.edgeStart = function(e, n, sd){
+  var a = n, b = (NODES[e.a] === n) ? NODES[e.b] : NODES[e.a];
+  var L = Math.max(e.len, 1), ang = Math.atan2(b.z - a.z, b.x - a.x);
+  var t0 = clamp(pedTrim(e, a) / L, 0, .45);
+  var so = (e.w / 2 + 2.2) * sd + .55 + (this.lane || 0);
+  return { x:a.x + (b.x - a.x) * t0 - Math.sin(ang) * so, z:a.z + (b.z - a.z) * t0 + Math.cos(ang) * so };
+};
+/* step onto edge `next` at node `nn`: pick the footway on the near side
+   (round the corner) or now and then the far side (cross the street).
+   A real crossing waits at the kerb for the light or a gap, then walks
+   across instead of teleporting. */
+Ped.prototype.turnOnto = function(next, nn, forceSide){
+  var sNear, pA = this.edgeStart(next, nn, 1), pB = this.edgeStart(next, nn, -1);
+  sNear = dist2(this.x, this.z, pA.x, pA.z) < dist2(this.x, this.z, pB.x, pB.z) ? 1 : -1;
+  var sd = forceSide || (chance(.3) ? -sNear : sNear);
+  var P = sd === 1 ? pA : pB;
+  var far = dist(this.x, this.z, P.x, P.z);
+  var controlled = nn.light || nn.stop || next.w > 10 || (this.edge && this.edge.w > 10);
+  if(far > 5 && controlled && !this.crossOK){
+    this.pendingEdge = next; this.pendingNode = nn; this.pendingSide = sd;
+    this.setState('kerb'); this.spd = 0;
+    return;
+  }
+  this.crossOK = false;
+  this.edge = next;
+  this.dir = (NODES[next.a] === nn) ? 1 : -1;
+  this.tt = 0; this.pdir = 1; this.sideoff = sd;
+  if(far > .6){ this.xTo = P; this.setState('xwalk'); }
+};
 Ped.prototype.followEdge = function(dt, spdF){
   var e = this.edge;
   if(!e){ this.pickEdge(); return; }
+  /* walking against the edge's direction: flip to the matching frame */
+  if((this.pdir || 1) < 0){ this.dir = -this.dir; this.tt = 1 - this.tt; this.pdir = 1; this.sideoff = -(this.sideoff || 1); }
   var a = NODES[this.dir > 0 ? e.a : e.b], b = NODES[this.dir > 0 ? e.b : e.a];
-  this.tt += (this.pdir || 1) * (this.spd * spdF * dt) / Math.max(e.len, 1);
-  /* walking back down the edge reaches the A end instead */
-  if(this.tt <= 0 && (this.pdir || 1) < 0){
-    var na = a, oa = [], ia;
-    for(ia = 0; ia < na.e.length; ia++) if(na.e[ia] !== e.i) oa.push(na.e[ia]);
-    if(!oa.length){ this.pdir = 1; this.tt = 0; return; }
-    var nxa = EDGES[pick(oa)];
-    var crossA = (nxa.i !== e.i) && (na.light || na.stop || nxa.w > 10);
-    if(crossA && !this.crossOK){
-      this.pendingEdge = nxa; this.pendingNode = na;
-      this.setState('kerb'); this.spd = 0; return;
-    }
-    this.crossOK = false;
-    this.edge = nxa;
-    /* enter the new edge from whichever end we arrived at */
-    if(NODES[nxa.a] === na){ this.tt = 0; this.pdir = 1; }
-    else { this.tt = 1; this.pdir = -1; }
-    this.sideoff = chance(.5) ? 1 : -1;
-    return;
-  }
+  this.tt += (this.spd * spdF * dt) / Math.max(e.len, 1);
+  var L = Math.max(e.len, 1);
+  var t0 = clamp(pedTrim(e, a) / L, 0, .45), t1 = 1 - clamp(pedTrim(e, b) / L, 0, .45);
+  if(t1 <= t0){ t0 = .45; t1 = .55; }
   if(this.tt >= 1){
     var nn = b, opts = [], i;
-    for(i = 0; i < nn.e.length; i++) if(nn.e[i] !== e.i) opts.push(nn.e[i]);
-    if(opts.length === 0) { this.pdir *= -1; return; }
-    /* Follow the route if we have one; wander only when we do not. */
+    for(i = 0; i < nn.e.length; i++) if(nn.e[i] !== e.i && EDGES[nn.e[i]].type !== 'freeway' && EDGES[nn.e[i]].type !== 'ramp') opts.push(nn.e[i]);
+    if(opts.length === 0){ this.dir = -this.dir; this.tt = 0; this.sideoff = -(this.sideoff || 1); return; }
     var next = null;
-    if(!this.route){
-      if(!this.destCool || this.destCool <= 0){
-        var dest = pedPickDestination(this);
-        if(dest){
-          this.route = pedRouteTo(this, dest.x, dest.z);
-          this.routeI = 0;
-          this.dest = dest;
-        }
-        this.destCool = rng(6, 20);
-      }
+    if(!this.route && (!this.destCool || this.destCool <= 0)){
+      var dest = pedPickDestination(this);
+      if(dest){ this.route = pedRouteTo(this, dest.x, dest.z); this.routeI = 0; this.dest = dest; }
+      this.destCool = rng(6, 20);
     }
     if(this.route){
       var want = pedAdvanceRoute(this);
       if(want && opts.indexOf(want.i) >= 0) next = want;
-      else if(want) next = want;
-      if(this.route && this.routeI >= this.route.length - 1){
-        this.route = null; this.dest = null; this.destCool = rng(10, 40);
-      }
+      if(this.route && this.routeI >= this.route.length - 1){ this.route = null; this.dest = null; this.destCool = rng(10, 40); }
     }
     if(!next) next = EDGES[pick(opts)];
-    /* Turning onto a different street means stepping off the kerb. At a
-       signal, wait for the light; at anything else, wait for a gap. This is
-       what stops people strolling straight through moving traffic. */
-    var mustCross = (next.i !== e.i) && (nn.light || nn.stop || next.w > 10);
-    if(mustCross && !this.crossOK){
-      this.pendingEdge = next;
-      this.pendingNode = nn;
-      this.setState('kerb');
-      this.spd = 0;
-      return;
-    }
-    this.crossOK = false;
-    this.edge = next;
-    this.dir = (NODES[this.edge.a].i === nn.i) ? 1 : -1;
-    /* and set which way along the new edge we are travelling */
-    if(NODES[next.a] === nn){ this.tt = 0; this.pdir = 1; }
-    else { this.tt = 1; this.pdir = -1; }
-    this.tt = 0;
-    if(chance(.12)) this.setState('idle');
+    this.tt = 1;
+    this.turnOnto(next, nn);
+    if(this.state === 'walk' && chance(.08)) this.setState('idle');
     return;
   }
   var ang = Math.atan2(b.z - a.z, b.x - a.x);
   var nxp = -Math.sin(ang), nzp = Math.cos(ang);
-
-  /* Keep right, like traffic: which half of the footway you use depends on
-     which way you are walking, so opposing pedestrians pass each other
-     instead of running head-on down one line. */
-  var keep = (this.pdir > 0 ? .55 : -.55);
-  var so = (e.w / 2 + 2.2) * (this.sideoff || 1) + keep + (this.lane || 0);
+  var so = (e.w / 2 + 2.2) * (this.sideoff || 1) + .55 + (this.lane || 0);
 
   /* local separation: ease sideways around anyone close ahead */
-  var i, push = 0;
+  var push = 0;
   for(i = 0; i < G.peds.length; i++){
     var o = G.peds[i];
     if(o === this || o.down) continue;
@@ -14067,18 +14225,23 @@ Ped.prototype.followEdge = function(dt, spdF){
     var d2 = dx * dx + dz * dz;
     if(d2 > 6.25 || d2 < .0001) continue;
     var fwd = Math.cos(this.h) * dx + Math.sin(this.h) * dz;
-    if(fwd < 0) continue;                        /* behind us, ignore */
+    if(fwd < 0) continue;
     var lat = nxp * dx + nzp * dz;
     push += (lat > 0 ? -1 : 1) * (2.5 - Math.sqrt(d2)) * .5;
   }
   this.avoid = (this.avoid || 0) * .82 + clamp(push, -1.1, 1.1) * .18;
   so += this.avoid;
 
-  var tx = a.x + (b.x - a.x) * this.tt + nxp * so;
-  var tz = a.z + (b.z - a.z) * this.tt + nzp * so;
-  this.h = Math.atan2(tz - this.z, tx - this.x);
-  this.x = tx; this.z = tz;
-  this.y = a.y + (b.y - a.y) * this.tt;
+  var tp = t0 + (t1 - t0) * clamp(this.tt, 0, 1);
+  var tx = a.x + (b.x - a.x) * tp + nxp * so;
+  var tz = a.z + (b.z - a.z) * tp + nzp * so;
+  var mvx = tx - this.x, mvz = tz - this.z;
+  if(mvx * mvx + mvz * mvz > 1e-6) this.h = Math.atan2(mvz, mvx);
+  /* never jump: if the footway point is more than a stride away, walk to it */
+  var md = Math.sqrt(mvx * mvx + mvz * mvz), mx = this.spd * spdF * dt * 1.6 + .02;
+  if(md > mx){ this.x += mvx / md * mx; this.z += mvz / md * mx; this.tt -= (this.spd * spdF * dt) / L * .9; }
+  else { this.x = tx; this.z = tz; }
+  this.y = a.y + (b.y - a.y) * tp;
 };
 
 /* ============================================================
@@ -14452,7 +14615,7 @@ function trafficUpdate(v, dt){
       /* how wide a corridor matters shrinks with distance */
       if(lat > 2.2) continue;
       /* someone waiting at a kerb about to step out counts too */
-      var stopping = (lat < 1.8) || (p.state === 'cross');
+      var stopping = (lat < 1.8) || (p.state === 'xwalk');
       var allow = stopping ? Math.max(0, (ahead - 4.5) * .50)
                            : Math.max(4.0, (ahead - 2.5) * .70);
       if(allow < tgt){
@@ -14550,7 +14713,7 @@ function trafficUpdate(v, dt){
         v.brakeReason = 'crossing';
       }
     }
-    if(distToEnd < 26 + v.spd * 1.2){
+    if(distToEnd < 30 + v.spd * v.spd / 6){
       /* Mutual yielding can deadlock: each car reads the other as being on
          its right and neither moves. Give up the courtesy after a couple of
          seconds so somebody always takes the gap. */
@@ -14567,8 +14730,13 @@ function trafficUpdate(v, dt){
       } else if(distToEnd > 26){
         v.yieldT = 0;
       }
-      if(b.light && !signalAllows(b, e, distToEnd, v.spd)){
-        tgt = Math.min(tgt, Math.max(0, (distToEnd - 7) * .5));
+      /* where the front bumper should stop: at the line, not 7 m from the
+         middle of the junction whatever its size (past the bar at a big
+         crossing, well short of it at a small one) */
+      var stopAt = nodeStopDist(b, e) + (v.P ? v.P.len * .5 : 2.4) + .4;
+      var toLine = distToEnd - stopAt;
+      if(b.light && !signalAllows(b, e, toLine, v.spd) && toLine > -2.5){
+        tgt = Math.min(tgt, stopProfile(toLine));
         v.brakeReason = 'signal';
       }
       /* Stop signs: come to an actual halt at the line, wait your turn, then
@@ -14580,8 +14748,8 @@ function trafficUpdate(v, dt){
           v.stopCleared = false;
         }
         if(!v.stopCleared){
-          if(distToEnd > 9){
-            tgt = Math.min(tgt, Math.max(1.5, (distToEnd - 8) * .55));
+          if(toLine > .6){
+            tgt = Math.min(tgt, toLine > 4 ? Math.max(1.5, stopProfile(toLine)) : Math.max(.6, stopProfile(toLine)));
             v.brakeReason = 'stopsign';
           } else if(Math.abs(v.spd) > .5){
             tgt = 0;
@@ -16093,8 +16261,14 @@ function snapToLane(v){
   /* keep whichever direction is closer to how the car already points */
   var dir = Math.abs(angDiff(ang, v.h)) < Math.PI / 2 ? 1 : -1;
   if(e.oneway) dir = e.oneway;
-  v.edge = e; v.dir = dir; v.t = n.t;
-  var lp = lanePoint(e, dir, clamp(n.t, .02, .98), 0);
+  /* lanePoint measures t from the end the car is driving away from: for a
+     car going b->a that is 1 - t. Passing the raw t mirrored the target
+     down the edge, so a car being nudged back into lane was dragged tens
+     or hundreds of metres along the street -- cars visibly vanished and
+     reappeared. */
+  var tl = dir > 0 ? n.t : 1 - n.t;
+  v.edge = e; v.dir = dir; v.t = tl;
+  var lp = lanePoint(e, dir, clamp(tl, 0, 1), 0);
   var wantH = dir > 0 ? lp.ang : lp.ang + Math.PI;
   /* This is a recovery for a wedged car, but it was hard-setting position
      AND heading every time it fired -- at speed that reads as the car
@@ -16106,8 +16280,10 @@ function snapToLane(v){
     v.x = lp.x; v.z = lp.z;
     v.h = wantH;
   } else {
-    v.x += (lp.x - v.x) * .25;
-    v.z += (lp.z - v.z) * .25;
+    /* ease back, never more than a stride's worth in one go */
+    var ndx = lp.x - v.x, ndz = lp.z - v.z, nd = Math.sqrt(ndx * ndx + ndz * ndz), nk = Math.min(.25, .6 / Math.max(nd, .01));
+    v.x += ndx * nk;
+    v.z += ndz * nk;
     var dH = angDiff(wantH, v.h);
     v.h = angWrap(v.h + clamp(dH, -0.09, 0.09));
   }
@@ -18852,7 +19028,7 @@ function updateHUDFast(){
   var v = G.veh;
   $('hClock').textContent = timeString12();
   $('hWx').textContent = WXNAME[G.weather] + ' \u00b7 ' + Math.round(G.temp) + '\u00b0F';
-  var st = streetAt(G.player.x, G.player.z, G.player.y || 0);
+  var st = streetAt(G.player.x, G.player.z, G.player.y || 0, (v && !G.onFoot) ? v.h : undefined);
   $('hStreet').textContent = st.name.length > 22 ? st.name.substr(0, 21) + '\u2026' : st.name;
   $('hLimit').textContent = st.lim;
   if(v && !G.onFoot){
@@ -18862,11 +19038,11 @@ function updateHUDFast(){
     $('hFuel').style.width = (v.fuel * 100) + '%';
     $('hDmg').style.width = ((1 - v.dmg) * 100) + '%';
     $('speedo').style.display = 'block';
-  } else {
-    $('hSpeed').textContent = Math.round(Math.abs(G.player.spd) * MPS2MPH);
-    $('hGear').textContent = 'FOOT';
-    $('speedo').style.display = 'block';
   }
+  /* on foot there is no speedometer: the card hides and the street name
+     stays on the minimap label */
+  var foot = !(v && !G.onFoot);
+  if(foot !== G._hudFoot){ G._hudFoot = foot; document.body.classList.toggle('onfoot', foot); }
   if(G.obj) setObjectiveDist(dist(G.player.x, G.player.z, G.obj.x, G.obj.z));
 }
 var WXNAME = { clear:'Clear', cloud:'Overcast', rain:'Rain', storm:'Thunderstorm', fog:'Fog', night:'Clear' };
@@ -19078,6 +19254,7 @@ function drawMinimap(){
     }
   }
   if(Pursuit.active && Pursuit.target) blip(Pursuit.target.x, Pursuit.target.z, MMC.pursuit, 12, 'circle');
+  if(G.waypoint) blip(G.waypoint.x, G.waypoint.z, '#b04ad8', 12, 'circle');
   if(G.obj){
     g.strokeStyle = MMC.objective;
     g.lineWidth = 3.5 / zoom;
@@ -19199,6 +19376,8 @@ function drawMinimap(){
 
 }
 function toggleMap(){
+  /* the minimap tap, N and the pad's map button open the full-screen map */
+  if(typeof MapScreen !== 'undefined'){ MapScreen.toggle(); return; }
   G.mapFull = !G.mapFull;
   var w = $('minimapWrap');
   if(G.mapFull){
@@ -19217,6 +19396,412 @@ function toggleMap(){
   drawMinimap();
   updateStreetBar();
 }
+
+/* ============================================================
+   FULL-SCREEN MAP
+   The pause-menu map of a police sim: drag (or the left stick) to pan,
+   pinch / wheel / triggers to zoom, every street named as you zoom in,
+   the stations, hospital, gas stations, shops and your calls marked, and
+   a tap anywhere sets a waypoint the satnav routes you to. Tap a marker
+   for what it is and to route there. The world pauses while it is open.
+   ============================================================ */
+var MapScreen = (function(){
+  var M = { open:false, cx:0, cz:0, zoom:.35, el:null, cv:null, g:null, info:null, sel:null,
+            drag:null, pinch:null, moved:0, pad:{}, raf:0, dirty:true, keys:{} };
+  var ZMIN = .06, ZMAX = 4.0;
+  var KIND = {
+    pd:{ c:'#2f6fd0', t:'PD', n:'Police' }, so:{ c:'#3f9f5a', t:'SO', n:'Sheriff' }, dps:{ c:'#c05050', t:'DPS', n:'State police' },
+    jail:{ c:'#8d6fc0', t:'J', n:'Jail' }, court:{ c:'#c8a24a', t:'CT', n:'Courthouse' }, hospital:{ c:'#d04a6a', t:'H', n:'Hospital' },
+    fire:{ c:'#d06a2a', t:'F', n:'Fire station' }, gas:{ c:'#d4a72c', t:'G', n:'Gas station' }, shop:{ c:'#6e8a5a', t:'S', n:'Shop' },
+    school:{ c:'#7a8a9a', t:'Sc', n:'School' }, call:{ c:'#f0c419', t:'!', n:'Call' }, unit:{ c:'#4aa3ff', t:'', n:'Unit' }
+  };
+  function css(){
+    var st = document.createElement('style');
+    st.textContent =
+      '#mapScreen{position:fixed;inset:0;z-index:300;background:#0b1016;display:none;touch-action:none;font-family:ui-monospace,Menlo,monospace;color:#e6edf6}' +
+      '#mapScreen canvas{position:absolute;inset:0;width:100%;height:100%}' +
+      '#mapTop{position:absolute;left:0;right:0;top:0;padding:calc(8px + env(safe-area-inset-top)) 12px 8px;display:flex;gap:8px;align-items:center;background:linear-gradient(#0b1016e6,#0b101600)}' +
+      '#mapTop .ttl{font-weight:800;letter-spacing:.14em;font-size:13px;flex:1}' +
+      '#mapScreen .mb{min-width:44px;height:44px;border-radius:10px;border:1px solid #2c3a52;background:#141d2bdd;color:#e6edf6;font:700 15px ui-monospace,Menlo,monospace;padding:0 12px;cursor:pointer}' +
+      '#mapScreen .mb.pri{background:#1f5fbf;border-color:#3f7fdf}' +
+      '#mapZoom{position:absolute;right:calc(12px + env(safe-area-inset-right));bottom:calc(16px + env(safe-area-inset-bottom));display:flex;flex-direction:column;gap:8px}' +
+      '#mapLegend{position:absolute;left:calc(10px + env(safe-area-inset-left));bottom:calc(14px + env(safe-area-inset-bottom));background:#0d1420cc;border:1px solid #233046;border-radius:10px;padding:8px 10px;font-size:11px;max-height:46vh;overflow:auto}' +
+      '#mapLegend .r{display:flex;align-items:center;gap:7px;padding:3px 2px;cursor:pointer}' +
+      '#mapLegend i{display:inline-block;width:14px;height:14px;border-radius:50%;border:2px solid #0b1016}' +
+      '#mapInfo{position:absolute;left:50%;transform:translateX(-50%);bottom:calc(16px + env(safe-area-inset-bottom));background:#101826f2;border:1px solid #2c3a52;border-radius:12px;padding:10px 12px;display:none;min-width:240px;max-width:86vw;text-align:center}' +
+      '#mapInfo .n{font-weight:800;font-size:14px;margin-bottom:2px}#mapInfo .k{font-size:11px;color:#9fb0c8;margin-bottom:8px}' +
+      '#mapInfo .row{display:flex;gap:8px;justify-content:center}' +
+      '#mapHint{position:absolute;left:50%;transform:translateX(-50%);top:calc(58px + env(safe-area-inset-top));font-size:11px;color:#9fb0c8;background:#0b1016aa;padding:4px 10px;border-radius:8px;white-space:nowrap}' +
+      '@media (max-width:640px){#mapLegend{display:none}}';
+    document.head.appendChild(st);
+  }
+  function build(){
+    css();
+    var el = document.createElement('div'); el.id = 'mapScreen';
+    el.innerHTML = '<canvas id="mapCv"></canvas>' +
+      '<div id="mapTop"><span class="ttl">GARLAND COUNTY \u2014 MAP</span>' +
+      '<button class="mb" id="mapClr">CLEAR WP</button><button class="mb" id="mapMe">ME</button><button class="mb pri" id="mapX">CLOSE</button></div>' +
+      '<div id="mapHint">Drag to move \u00b7 pinch or wheel to zoom \u00b7 tap to set a waypoint</div>' +
+      '<div id="mapZoom"><button class="mb" id="mapIn">+</button><button class="mb" id="mapOut">\u2212</button></div>' +
+      '<div id="mapLegend"></div><div id="mapInfo"></div>';
+    document.body.appendChild(el);
+    M.el = el; M.cv = el.querySelector('#mapCv'); M.g = M.cv.getContext('2d'); M.info = el.querySelector('#mapInfo');
+    el.querySelector('#mapX').onclick = close;
+    el.querySelector('#mapMe').onclick = function(){ M.cx = G.player.x; M.cz = G.player.z; M.dirty = true; };
+    el.querySelector('#mapClr').onclick = function(){ G.waypoint = null; GPS.target = null; gpsClear(); hideInfo(); M.dirty = true; };
+    el.querySelector('#mapIn').onclick = function(){ zoomAt(1.6, M.cv.clientWidth / 2, M.cv.clientHeight / 2); };
+    el.querySelector('#mapOut').onclick = function(){ zoomAt(1 / 1.6, M.cv.clientWidth / 2, M.cv.clientHeight / 2); };
+    var lg = el.querySelector('#mapLegend'), ks = ['pd', 'so', 'dps', 'hospital', 'jail', 'court', 'fire', 'gas', 'shop', 'call'], q;
+    var hh = '<div style="font-weight:800;letter-spacing:.12em;margin-bottom:4px">LEGEND</div>';
+    for(q = 0; q < ks.length; q++) hh += '<div class="r" data-k="' + ks[q] + '"><i style="background:' + KIND[ks[q]].c + '"></i>' + KIND[ks[q]].n + '</div>';
+    hh += '<div class="r"><i style="background:#b04ad8"></i>Waypoint</div><div class="r"><i style="background:#ffffff"></i>You</div>';
+    lg.innerHTML = hh;
+    lg.onclick = function(ev){
+      var r = ev.target.closest ? ev.target.closest('.r') : null;
+      if(!r || !r.getAttribute('data-k')) return;
+      /* jump to the nearest of that kind */
+      var k = r.getAttribute('data-k'), P = pois(), best = null, bd = 1e12, i;
+      for(i = 0; i < P.length; i++) if(P[i].k === k){ var d = dist2(P[i].x, P[i].z, G.player.x, G.player.z); if(d < bd){ bd = d; best = P[i]; } }
+      if(best){ M.cx = best.x; M.cz = best.z; M.zoom = Math.max(M.zoom, .45); select(best); M.dirty = true; }
+    };
+    /* pointer: drag to pan, pinch to zoom, tap to pick */
+    var pts = {};
+    M.cv.addEventListener('pointerdown', function(ev){
+      M.cv.setPointerCapture && M.cv.setPointerCapture(ev.pointerId);
+      pts[ev.pointerId] = { x:ev.clientX, y:ev.clientY };
+      var ids = Object.keys(pts);
+      if(ids.length === 1){ M.drag = { x:ev.clientX, y:ev.clientY }; M.moved = 0; }
+      if(ids.length === 2){ var a = pts[ids[0]], b = pts[ids[1]]; M.pinch = { d:Math.hypot(a.x - b.x, a.y - b.y) }; M.moved = 99; }
+    });
+    M.cv.addEventListener('pointermove', function(ev){
+      if(!pts[ev.pointerId]) return;
+      pts[ev.pointerId] = { x:ev.clientX, y:ev.clientY };
+      var ids = Object.keys(pts);
+      if(ids.length >= 2 && M.pinch){
+        var a = pts[ids[0]], b = pts[ids[1]], d = Math.hypot(a.x - b.x, a.y - b.y);
+        if(M.pinch.d > 0) zoomAt(d / M.pinch.d, (a.x + b.x) / 2, (a.y + b.y) / 2);
+        M.pinch.d = d;
+      } else if(M.drag){
+        var dx = ev.clientX - M.drag.x, dy = ev.clientY - M.drag.y;
+        M.moved += Math.abs(dx) + Math.abs(dy);
+        M.cx -= dx / M.zoom; M.cz -= dy / M.zoom;
+        M.drag = { x:ev.clientX, y:ev.clientY }; M.dirty = true;
+      }
+    });
+    function up(ev){
+      var had = !!pts[ev.pointerId];
+      delete pts[ev.pointerId];
+      var left = Object.keys(pts).length;
+      if(left < 2) M.pinch = null;
+      if(had && left === 0){
+        if(M.moved < 8) tap(ev.clientX, ev.clientY);
+        M.drag = null;
+      } else if(left === 1){ var id = Object.keys(pts)[0]; M.drag = { x:pts[id].x, y:pts[id].y }; }
+    }
+    M.cv.addEventListener('pointerup', up);
+    M.cv.addEventListener('pointercancel', up);
+    M.cv.addEventListener('wheel', function(ev){ ev.preventDefault(); zoomAt(Math.pow(1.0018, -ev.deltaY), ev.clientX, ev.clientY); }, { passive:false });
+    window.addEventListener('keydown', function(ev){
+      if(!M.open) return;
+      var k = (ev.key || '').toLowerCase();
+      if(k === 'escape' || k === 'n' || k === 'm'){ ev.preventDefault(); ev.stopPropagation(); close(); return; }
+      if(k === '+' || k === '='){ zoomAt(1.4, M.cv.clientWidth / 2, M.cv.clientHeight / 2); }
+      if(k === '-' || k === '_'){ zoomAt(1 / 1.4, M.cv.clientWidth / 2, M.cv.clientHeight / 2); }
+      if(k === 'enter' || k === ' '){ setWaypointAt(M.cx, M.cz, null); }
+      M.keys[k] = true; ev.stopPropagation();
+    }, true);
+    window.addEventListener('keyup', function(ev){ M.keys[(ev.key || '').toLowerCase()] = false; }, true);
+    window.addEventListener('resize', function(){ M.dirty = true; });
+  }
+  function zoomAt(f, sx, sy){
+    var W = M.cv.clientWidth, H = M.cv.clientHeight;
+    var wx = M.cx + (sx - W / 2) / M.zoom, wz = M.cz + (sy - H / 2) / M.zoom;
+    M.zoom = clamp(M.zoom * f, ZMIN, ZMAX);
+    M.cx = wx - (sx - W / 2) / M.zoom; M.cz = wz - (sy - H / 2) / M.zoom;
+    M.dirty = true;
+  }
+  function toWorld(sx, sy){ return { x:M.cx + (sx - M.cv.clientWidth / 2) / M.zoom, z:M.cz + (sy - M.cv.clientHeight / 2) / M.zoom }; }
+  function pois(){
+    var P = [], i, k;
+    for(i = 0; i < LANDMARKS.length; i++){
+      var L = LANDMARKS[i];
+      k = L.kind === 'police' ? 'pd' : L.kind;
+      if(!KIND[k]) continue;
+      P.push({ x:L.x, z:L.z, k:k, n:L.n });
+    }
+    for(k in INTERIORS){
+      if(!INTERIORS.hasOwnProperty(k)) continue;
+      var it = INTERIORS[k];
+      if(it.gas) P.push({ x:it.doorX, z:it.doorZ, k:'gas', n:it.name || 'Gas station' });
+      else if(it.shop) P.push({ x:it.doorX, z:it.doorZ, k:'shop', n:it.name || 'Shop' });
+    }
+    if(G.obj) P.push({ x:G.obj.x, z:G.obj.z, k:'call', n:(G.obj.t || G.obj.title || 'Assigned call') });
+    if(typeof CallSys !== 'undefined' && CallSys.pending && CallSys.pending.x !== undefined)
+      P.push({ x:CallSys.pending.x, z:CallSys.pending.z, k:'call', n:'Pending: ' + ((CallSys.pending.def && CallSys.pending.def.t) || 'call') });
+    return P;
+  }
+  function select(p){
+    M.sel = p;
+    var d = dist(G.player.x, G.player.z, p.x, p.z) / 1609;
+    M.info.innerHTML = '<div class="n">' + escHtml(p.n) + '</div><div class="k">' + KIND[p.k].n.toUpperCase() + ' \u00b7 ' + d.toFixed(1) + ' MI \u00b7 ' + escHtml(streetAt(p.x, p.z).name) + '</div>' +
+      '<div class="row"><button class="mb pri" id="mapGo">SET WAYPOINT</button><button class="mb" id="mapNo">CLOSE</button></div>';
+    M.info.style.display = 'block';
+    M.info.querySelector('#mapGo').onclick = function(){ setWaypointAt(p.x, p.z, p.n); };
+    M.info.querySelector('#mapNo').onclick = hideInfo;
+    M.dirty = true;
+  }
+  function hideInfo(){ M.sel = null; if(M.info) M.info.style.display = 'none'; M.dirty = true; }
+  function escHtml(t){ return String(t).replace(/[&<>"]/g, function(c){ return { '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;' }[c]; }); }
+  function setWaypointAt(x, z, name){
+    /* snap to the nearest road so the route ends somewhere you can drive */
+    var ne = nearestEdge(x, z), wx = x, wz = z;
+    if(ne.e >= 0 && ne.d < 60 && !name){ wx = ne.px; wz = ne.pz; }
+    var st = streetAt(wx, wz);
+    G.waypoint = { x:wx, z:wz, name:name || st.name };
+    GPS.target = null; GPS.recalc = 0;
+    GPS.route = gpsRoute(G.player.x, G.player.z, wx, wz);
+    hideInfo();
+    toast('WAYPOINT \u2014 ' + (name || st.name).toUpperCase() + ' \u00b7 ' + (dist(G.player.x, G.player.z, wx, wz) / 1609).toFixed(1) + ' MI', 'good');
+    M.dirty = true;
+  }
+  function tap(sx, sy){
+    var r = M.cv.getBoundingClientRect(), x = sx - r.left, y = sy - r.top;
+    var P = pois(), i, best = null, bd = 22 * 22;
+    for(i = 0; i < P.length; i++){
+      var px = (P[i].x - M.cx) * M.zoom + M.cv.clientWidth / 2, py = (P[i].z - M.cz) * M.zoom + M.cv.clientHeight / 2;
+      var d = (px - x) * (px - x) + (py - y) * (py - y);
+      if(d < bd){ bd = d; best = P[i]; }
+    }
+    if(best){ select(best); return; }
+    if(G.waypoint){
+      var wx2 = (G.waypoint.x - M.cx) * M.zoom + M.cv.clientWidth / 2, wy2 = (G.waypoint.z - M.cz) * M.zoom + M.cv.clientHeight / 2;
+      if((wx2 - x) * (wx2 - x) + (wy2 - y) * (wy2 - y) < 22 * 22){ G.waypoint = null; GPS.target = null; gpsClear(); toast('WAYPOINT CLEARED'); M.dirty = true; return; }
+    }
+    var w = toWorld(x, y);
+    setWaypointAt(w.x, w.z, null);
+  }
+  function draw(){
+    var cv = M.cv, g = M.g, dpr = Math.min(window.devicePixelRatio || 1, 2);
+    var W = cv.clientWidth, H = cv.clientHeight;
+    if(cv.width !== Math.round(W * dpr) || cv.height !== Math.round(H * dpr)){ cv.width = Math.round(W * dpr); cv.height = Math.round(H * dpr); }
+    var z = M.zoom, i, e, a, b;
+    g.setTransform(dpr, 0, 0, dpr, 0, 0);
+    g.fillStyle = '#b9b39d'; g.fillRect(0, 0, W, H);
+    g.save();
+    g.translate(W / 2, H / 2); g.scale(z, z); g.translate(-M.cx, -M.cz);
+    var vx0 = M.cx - W / 2 / z - 60, vx1 = M.cx + W / 2 / z + 60, vz0 = M.cz - H / 2 / z - 60, vz1 = M.cz + H / 2 / z + 60;
+    /* districts */
+    for(i = 0; i < DISTRICTS.length; i++){
+      var d = DISTRICTS[i];
+      if(d.x1 < vx0 || d.x0 > vx1 || d.z1 < vz0 || d.z0 > vz1) continue;
+      g.fillStyle = (d.kind === 'rural' || d.kind === 'lake') ? '#9fbf7a' : (d.kind === 'downtown' ? '#cfc6ad' : (d.kind === 'industrial' ? '#bdb7a8' : '#c9c1a8'));
+      g.fillRect(d.x0, d.z0, d.x1 - d.x0, d.z1 - d.z0);
+    }
+    /* water */
+    g.fillStyle = MMC.water; g.strokeStyle = MMC.water; g.lineJoin = 'round'; g.lineCap = 'round';
+    for(i = 0; i < WATERS.length; i++){
+      var w = WATERS[i], j;
+      if(w.kind === 'river'){
+        g.lineWidth = w.w; g.beginPath();
+        for(j = 0; j < w.pts.length; j++){ if(j === 0) g.moveTo(w.pts[j].x, w.pts[j].z); else g.lineTo(w.pts[j].x, w.pts[j].z); }
+        g.stroke();
+      } else { g.beginPath(); g.ellipse(w.x, w.z, w.rx, w.rz, 0, 0, TAU); g.fill(); }
+    }
+    /* buildings once close in */
+    if(z > .9 && typeof SOLIDS !== 'undefined'){
+      g.fillStyle = 'rgba(120,110,92,.55)';
+      for(i = 0; i < SOLIDS.length; i++){
+        var so = SOLIDS[i];
+        if(so.x < vx0 || so.x > vx1 || so.z < vz0 || so.z > vz1 || so.hw > 60) continue;
+        g.save(); g.translate(so.x, so.z); if(so.rot) g.rotate(so.rot); g.fillRect(-so.hw, -so.hd, so.hw * 2, so.hd * 2); g.restore();
+      }
+    }
+    /* roads at their real width, never thinner than a couple of pixels */
+    var vis = [];
+    for(i = 0; i < EDGES.length; i++){
+      e = EDGES[i]; a = NODES[e.a]; b = NODES[e.b];
+      if(Math.max(a.x, b.x) < vx0 || Math.min(a.x, b.x) > vx1 || Math.max(a.z, b.z) < vz0 || Math.min(a.z, b.z) > vz1) continue;
+      if(e.type === 'lot') continue;
+      if(z < .16 && (e.type === 'local' || e.type === 'drive' || e.type === 'dirtrd')) continue;
+      vis.push(e);
+    }
+    var order = { dirtrd:0, drive:0, local:1, collector:2, rural:2, frontage:3, ramp:3, arterial:4, highway:5, freeway:6 }, pass;
+    vis.sort(function(p, q){ return (order[p.type] || 0) - (order[q.type] || 0); });
+    for(pass = 0; pass < 2; pass++){
+      for(i = 0; i < vis.length; i++){
+        e = vis[i]; a = NODES[e.a]; b = NODES[e.b];
+        var ww = Math.max(e.w, (e.type === 'freeway' ? 5 : (e.type === 'arterial' || e.type === 'highway' ? 3.6 : 2.2)) / z);
+        g.lineCap = 'round';
+        g.strokeStyle = pass === 0 ? 'rgba(80,74,60,.9)' : (e.type === 'freeway' ? '#f2cf6a' : (e.type === 'arterial' || e.type === 'highway' ? '#ffffff' : (e.type === 'dirtrd' ? '#d8c9a2' : '#f1eee6')));
+        g.lineWidth = pass === 0 ? ww + 2.4 / z : ww;
+        g.beginPath(); g.moveTo(a.x, a.z); g.lineTo(b.x, b.z); g.stroke();
+      }
+    }
+    /* route */
+    gpsDraw(g, z);
+    g.restore();
+    /* street names: along the road, sized on screen, no overlaps */
+    labels(g, W, H, vis);
+    /* markers in screen space so they stay a constant size */
+    var P = pois();
+    for(i = 0; i < P.length; i++) marker(g, P[i], W, H, P[i] === M.sel);
+    /* other units */
+    for(i = 0; i < G.traffic.length; i++){
+      var tv = G.traffic[i];
+      if(!tv.patrol) continue;
+      var sx = (tv.x - M.cx) * z + W / 2, sy = (tv.z - M.cz) * z + H / 2;
+      if(sx < -10 || sy < -10 || sx > W + 10 || sy > H + 10) continue;
+      g.fillStyle = (Math.floor(performance.now() / 300) % 2) && tv.pMode === 'code3' ? '#e0463c' : '#4aa3ff';
+      g.strokeStyle = '#0b1016'; g.lineWidth = 2;
+      g.beginPath(); g.arc(sx, sy, 5, 0, TAU); g.fill(); g.stroke();
+    }
+    if(Pursuit.active && Pursuit.target){ dot(g, Pursuit.target.x, Pursuit.target.z, W, H, '#e0463c', 8); }
+    if(G.waypoint){
+      var wsx = (G.waypoint.x - M.cx) * z + W / 2, wsy = (G.waypoint.z - M.cz) * z + H / 2;
+      g.fillStyle = '#b04ad8'; g.strokeStyle = '#0b1016'; g.lineWidth = 2.5;
+      g.beginPath(); g.moveTo(wsx, wsy); g.lineTo(wsx - 9, wsy - 16); g.arc(wsx, wsy - 20, 9.5, Math.PI * .8, Math.PI * .2); g.closePath(); g.fill(); g.stroke();
+      g.fillStyle = '#fff'; g.beginPath(); g.arc(wsx, wsy - 20, 3.5, 0, TAU); g.fill();
+    }
+    /* you */
+    var ps = { x:(G.player.x - M.cx) * z + W / 2, y:(G.player.z - M.cz) * z + H / 2 };
+    g.save(); g.translate(ps.x, ps.y); g.rotate((G.onFoot ? G.playerH : (G.veh ? G.veh.h : G.player.h)) + Math.PI / 2);
+    g.beginPath(); g.moveTo(0, -13); g.lineTo(9, 10); g.lineTo(0, 5); g.lineTo(-9, 10); g.closePath();
+    g.fillStyle = '#ffffff'; g.strokeStyle = '#0b1016'; g.lineWidth = 2.5; g.fill(); g.stroke(); g.restore();
+    /* scale bar */
+    var mi = z > 1.2 ? .05 : (z > .4 ? .1 : (z > .15 ? .25 : .5)), px2 = mi * 1609 * z;
+    var sbx = 14, sby = 92;
+    g.fillStyle = 'rgba(11,16,22,.75)'; g.fillRect(sbx - 6, sby - 16, px2 + 12, 26);
+    g.fillStyle = '#e6edf6'; g.fillRect(sbx, sby + 2, px2, 3);
+    g.font = '10px ui-monospace,Menlo,monospace'; g.textAlign = 'left'; g.textBaseline = 'alphabetic'; g.fillText(mi + ' MI', sbx, sby - 3);
+    /* centre crosshair for keyboard / controller */
+    if(M.padUsed){ g.strokeStyle = 'rgba(11,16,22,.8)'; g.lineWidth = 2; g.beginPath(); g.moveTo(W / 2 - 10, H / 2); g.lineTo(W / 2 + 10, H / 2); g.moveTo(W / 2, H / 2 - 10); g.lineTo(W / 2, H / 2 + 10); g.stroke(); }
+  }
+  function dot(g, x, z, W, H, col, r){
+    var sx = (x - M.cx) * M.zoom + W / 2, sy = (z - M.cz) * M.zoom + H / 2;
+    g.fillStyle = col; g.strokeStyle = '#0b1016'; g.lineWidth = 2; g.beginPath(); g.arc(sx, sy, r, 0, TAU); g.fill(); g.stroke();
+  }
+  function marker(g, p, W, H, sel){
+    var K = KIND[p.k], sx = (p.x - M.cx) * M.zoom + W / 2, sy = (p.z - M.cz) * M.zoom + H / 2;
+    if(sx < -20 || sy < -20 || sx > W + 20 || sy > H + 20) return;
+    /* shops only once you are in close; stations and calls always */
+    if(p.k === 'shop' && M.zoom < .5) return;
+    if(p.k === 'gas' && M.zoom < .18) return;
+    var r = sel ? 13 : (p.k === 'shop' ? 8 : 11);
+    g.fillStyle = K.c; g.strokeStyle = sel ? '#ffffff' : '#0b1016'; g.lineWidth = sel ? 3 : 2.2;
+    g.beginPath(); g.arc(sx, sy, r, 0, TAU); g.fill(); g.stroke();
+    g.fillStyle = '#0b1016'; g.font = 'bold ' + (K.t.length > 1 ? 9 : 11) + 'px ui-monospace,Menlo,monospace';
+    g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText(K.t, sx, sy + .5);
+    if(M.zoom > .7 || sel){
+      g.font = '600 11px -apple-system,Segoe UI,Arial,sans-serif'; g.textAlign = 'left';
+      g.lineWidth = 3; g.strokeStyle = 'rgba(11,16,22,.85)'; g.strokeText(p.n, sx + r + 4, sy);
+      g.fillStyle = '#ffffff'; g.fillText(p.n, sx + r + 4, sy);
+    }
+  }
+  function labels(g, W, H, vis){
+    var placed = [], i, z = M.zoom, minLen = 140 / z;
+    var rankOf = { freeway:6, highway:5, arterial:4, frontage:3, collector:3, rural:3, local:1 };
+    var cands = [];
+    /* group edges into named runs: one label per name per screen region */
+    for(i = 0; i < vis.length; i++){
+      var e = vis[i];
+      if(!e.name || e.type === 'ramp' || e.type === 'drive' || e.type === 'lot') continue;
+      if(e.type === 'local' && z < .55) continue;
+      if((e.type === 'collector' || e.type === 'rural') && z < .25) continue;
+      if(e.len * z < 38) continue;
+      if(z < .25 && rankOf[e.type] < 4) continue;
+      cands.push(e);
+    }
+    cands.sort(function(p, q){ return (rankOf[q.type] || 0) - (rankOf[p.type] || 0) || q.len - p.len; });
+    var perName = {};
+    g.textAlign = 'center'; g.textBaseline = 'middle';
+    for(i = 0; i < cands.length && placed.length < 90; i++){
+      e = cands[i];
+      var a = NODES[e.a], b = NODES[e.b];
+      var mx = ((a.x + b.x) / 2 - M.cx) * z + W / 2, my = ((a.z + b.z) / 2 - M.cz) * z + H / 2;
+      if(mx < 20 || my < 60 || mx > W - 20 || my > H - 20) continue;
+      var key = e.name, pn = perName[key] || [], q2, close = false;
+      for(q2 = 0; q2 < pn.length; q2++) if(Math.abs(pn[q2][0] - mx) + Math.abs(pn[q2][1] - my) < 420) close = true;
+      if(close) continue;
+      var fs = e.type === 'freeway' ? 12 : (rankOf[e.type] >= 4 ? 11 : 10);
+      g.font = (rankOf[e.type] >= 4 ? 'bold ' : '600 ') + fs + 'px -apple-system,Segoe UI,Arial,sans-serif';
+      var tw = g.measureText(e.name.toUpperCase()).width;
+      var bw = Math.max(tw, 20) + 8, bh = fs + 6, ok = true, q;
+      var ang = Math.atan2(b.z - a.z, b.x - a.x);
+      if(ang > Math.PI / 2) ang -= Math.PI; if(ang < -Math.PI / 2) ang += Math.PI;
+      var ex = Math.abs(Math.cos(ang)) * bw + Math.abs(Math.sin(ang)) * bh, ey = Math.abs(Math.sin(ang)) * bw + Math.abs(Math.cos(ang)) * bh;
+      for(q = 0; q < placed.length; q++){ var P2 = placed[q]; if(Math.abs(P2.x - mx) * 2 < ex + P2.w && Math.abs(P2.y - my) * 2 < ey + P2.h){ ok = false; break; } }
+      if(!ok) continue;
+      placed.push({ x:mx, y:my, w:ex, h:ey });
+      pn.push([mx, my]); perName[key] = pn;
+      g.save(); g.translate(mx, my); g.rotate(ang);
+      g.lineWidth = 3.2; g.strokeStyle = 'rgba(255,255,255,.9)'; g.strokeText(e.name.toUpperCase(), 0, 0);
+      g.fillStyle = e.type === 'freeway' ? '#6a4a00' : '#22262c'; g.fillText(e.name.toUpperCase(), 0, 0);
+      g.restore();
+    }
+    /* district names when zoomed out */
+    if(z < .5 && typeof districtLabels === 'function'){
+      var DL = districtLabels();
+      g.font = 'bold 13px ui-monospace,Menlo,monospace'; g.fillStyle = 'rgba(40,34,22,.7)';
+      for(i = 0; i < DL.length; i++){
+        var sx = (DL[i].x - M.cx) * z + W / 2, sy = (DL[i].z - M.cz) * z + H / 2;
+        if(sx < 0 || sy < 0 || sx > W || sy > H) continue;
+        g.fillText(DL[i].n.toUpperCase(), sx, sy);
+      }
+    }
+  }
+  /* controller: left stick pans, triggers zoom, A drops a waypoint at the
+     centre, B closes, Y re-centres on you */
+  function pollPad(dt){
+    var gp = navigator.getGamepads ? navigator.getGamepads() : null, p = null, i;
+    if(gp) for(i = 0; i < gp.length; i++) if(gp[i] && gp[i].connected){ p = gp[i]; break; }
+    var kx = (M.keys['d'] || M.keys['arrowright'] ? 1 : 0) - (M.keys['a'] || M.keys['arrowleft'] ? 1 : 0);
+    var kz = (M.keys['s'] || M.keys['arrowdown'] ? 1 : 0) - (M.keys['w'] || M.keys['arrowup'] ? 1 : 0);
+    if(kx || kz){ M.cx += kx * 520 * dt / M.zoom; M.cz += kz * 520 * dt / M.zoom; M.dirty = true; M.padUsed = true; }
+    if(!p) return;
+    var ax = p.axes[0] || 0, ay = p.axes[1] || 0;
+    if(Math.abs(ax) < .15) ax = 0; if(Math.abs(ay) < .15) ay = 0;
+    if(ax || ay){ M.cx += ax * 620 * dt / M.zoom; M.cz += ay * 620 * dt / M.zoom; M.dirty = true; M.padUsed = true; }
+    var rt = p.buttons[7] ? p.buttons[7].value : 0, lt = p.buttons[6] ? p.buttons[6].value : 0;
+    if(rt > .1 || lt > .1){ zoomAt(Math.pow(2.2, (rt - lt) * dt * 1.6), M.cv.clientWidth / 2, M.cv.clientHeight / 2); M.padUsed = true; }
+    function edge(b){ var on = !!(p.buttons[b] && p.buttons[b].pressed), was = M.pad[b]; M.pad[b] = on; return on && !was; }
+    if(edge(0)){ if(M.sel) setWaypointAt(M.sel.x, M.sel.z, M.sel.n); else setWaypointAt(M.cx, M.cz, null); }
+    if(edge(1) || edge(8)){ close(); return; }
+    if(edge(3)){ M.cx = G.player.x; M.cz = G.player.z; M.dirty = true; }
+    if(edge(2)){ G.waypoint = null; GPS.target = null; gpsClear(); M.dirty = true; }
+  }
+  var last = 0;
+  function loop(ts){
+    if(!M.open) return;
+    M.raf = requestAnimationFrame(loop);
+    var dt = last ? Math.min(.05, (ts - last) / 1000) : .016; last = ts;
+    pollPad(dt);
+    /* redraw when something moved, and a few times a second for the units */
+    M.acc = (M.acc || 0) + dt;
+    if(M.dirty || M.acc > .25){ M.dirty = false; M.acc = 0; draw(); }
+  }
+  function open(){
+    if(!M.el) build();
+    if(M.open) return;
+    M.open = true; M.wasPaused = G.paused; G.paused = true; G.mapOpen = true;
+    M.cx = G.player.x; M.cz = G.player.z;
+    if(!M.zoomSet){ M.zoom = .32; M.zoomSet = true; }
+    M.el.style.display = 'block'; M.padUsed = false; M.keys = {};
+    /* swallow the button that opened it */
+    var gp = navigator.getGamepads ? navigator.getGamepads() : null, i, p = null;
+    if(gp) for(i = 0; i < gp.length; i++) if(gp[i] && gp[i].connected){ p = gp[i]; break; }
+    M.pad = {}; if(p) for(i = 0; i < p.buttons.length; i++) M.pad[i] = !!(p.buttons[i] && p.buttons[i].pressed);
+    hideInfo(); M.dirty = true; last = 0;
+    M.raf = requestAnimationFrame(loop);
+  }
+  function close(){
+    if(!M.open) return;
+    M.open = false; G.mapOpen = false;
+    G.paused = !!M.wasPaused;
+    M.el.style.display = 'none';
+    if(typeof K !== 'undefined') for(var k in K) if(K.hasOwnProperty(k)) K[k] = false;
+  }
+  return { open:open, close:close, toggle:function(){ if(M.open) close(); else open(); }, isOpen:function(){ return M.open; }, _m:M, _draw:function(){ draw(); } };
+})();
 /* the bar under the map carries the street you are actually on */
 function pad3(n){ n = Math.round(n); return n < 10 ? '00' + n : (n < 100 ? '0' + n : '' + n); }
 /* Compass and speed sit under the minimap so the top-left corner is not
@@ -19233,13 +19818,13 @@ function updateCompass(){
   var dEl = $('cDir'), gEl = $('cDeg'), sEl = $('cSpd');
   if(dEl) dEl.textContent = dirs[idx];
   if(gEl) gEl.textContent = pad3(bearing) + '\u00b0';
-  if(sEl) sEl.textContent = spd + ' MPH';
+  if(sEl) sEl.textContent = G.onFoot ? '' : spd + ' MPH';
 }
 function updateStreetBar(){
   var el = $('mmLabel');
   if(!el) return;
   if(G.mapFull){ el.textContent = 'GARLAND COUNTY, TEXAS \u2014 TAP TO CLOSE'; return; }
-  var st = streetAt(G.player.x, G.player.z);
+  var st = streetAt(G.player.x, G.player.z, G.player.y || 0);
   var nm = st.name || 'Garland County';
   if(nm.length > 30) nm = nm.substr(0, 29) + '\u2026';
   el.textContent = nm;
@@ -20069,7 +20654,15 @@ function nearestNode(x, z){
 }
 function gpsUpdate(dt){
   var tgt = null;
-  if(G.obj) tgt = { x:G.obj.x, z:G.obj.z };
+  /* a waypoint you set on the map takes the route, like GTA; otherwise the
+     route runs to the active call */
+  if(G.waypoint){
+    if(dist(G.player.x, G.player.z, G.waypoint.x, G.waypoint.z) < 22){
+      toast('ARRIVED \u2014 ' + (G.waypoint.name || 'WAYPOINT'), 'good');
+      G.waypoint = null; GPS.target = null;
+    } else tgt = { x:G.waypoint.x, z:G.waypoint.z };
+  }
+  if(!tgt && G.obj) tgt = { x:G.obj.x, z:G.obj.z };
   if(!tgt){ gpsClear(); return; }
   GPS.recalc -= dt;
   var moved = !GPS.target || dist2(tgt.x, tgt.z, GPS.target.x, GPS.target.z) > 100;
@@ -22232,19 +22825,92 @@ function pHoldingCell(B, x, z, rot, col){
   B.box(x - 0.50, 0.20, z + 1.55, 0.08, 0.42, 0.50, 0x8a9096, rot);
 }
 
-/* armoury cage with weapon rack behind */
+/* armoury cage with weapon rack behind: a mesh-steel front on a frame
+   with a lockable gate and a pass-through counter, gun racks and ammo
+   shelving inside. Built in its own frame so it can face any way (the old
+   one placed its bars in world space and its rails rotated, so the two
+   parts crossed each other). Local +z runs back into the cage. */
 function pArmouryCage(B, x, z, rot, col){
-  var c1 = col || 0x59646f, i, h, r;
-  for(i = 0; i < 10; i++){
-    B.cyl(x - 2.0 + i * 0.44, 0, z, 0.024, 0.024, 3.20, 6, c1, 0);
+  var F = new Frame(B, x, z, rot || 0), c1 = col || 0x59646f, i, r;
+  var w = 4.4, d = 2.0, h = 3.0;
+  /* frame posts and rails */
+  for(i = -1; i <= 1; i += 2) F.box(i * w / 2, h / 2, 0, .08, h, .08, c1);
+  F.box(-.55, h / 2, 0, .08, h, .08, c1);
+  F.box(.55, h / 2, 0, .08, h, .08, c1);
+  F.box(0, h - .04, 0, w, .08, .08, c1);
+  F.box(0, .04, 0, w, .08, .08, c1);
+  /* welded mesh: close-set verticals and a few horizontals, either side of
+     the gate */
+  for(r = -w / 2 + .1; r < w / 2 - .05; r += .09){
+    if(Math.abs(r) < .5) continue;
+    F.box(r, h / 2, 0, .012, h - .1, .012, shade(c1, .9));
   }
-  for(h = 0; h < 3; h++){
-    B.box(x, 0.4 + h * 1.2, z, 4.20, 0.05, 0.05, c1, rot);
+  for(r = .3; r < h; r += .3){ F.box(-1.4, r, 0, 1.75, .012, .012, shade(c1, .9)); F.box(1.4, r, 0, 1.75, .012, .012, shade(c1, .9)); }
+  /* gate: mesh panel with a lock box */
+  for(r = -.45; r <= .45; r += .09) F.box(r, 1.1, .03, .012, 2.1, .012, shade(c1, .8));
+  F.box(0, 2.2, .03, 1.0, .05, .05, c1); F.box(0, .1, .03, 1.0, .05, .05, c1);
+  F.box(.38, 1.05, -.03, .14, .2, .06, 0x2a2d31);
+  F.box(.38, 1.05, -.065, .05, .05, .02, 0xc9a227);
+  /* pass-through counter in the mesh */
+  F.box(-1.4, 1.05, -.12, 1.3, .05, .34, 0x8a7a5c);
+  /* walls of the cage at the ends */
+  F.box(-w / 2, h / 2, d / 2, .1, h, d, shade(c1, 1.25));
+  F.box(w / 2, h / 2, d / 2, .1, h, d, shade(c1, 1.25));
+  /* long-gun rack along the back with rifles stood in it */
+  F.box(0, .45, d - .3, w - .4, .1, .45, 0x6e757c);
+  F.box(0, 1.55, d - .2, w - .4, .08, .2, 0x6e757c);
+  for(r = -1.7; r <= 1.7; r += .34){
+    F.box(r, 1.0, d - .3, .05, 1.1, .08, 0x1b1d20);
+    F.box(r, 1.25, d - .26, .04, .14, .14, 0x1b1d20);
   }
-  B.box(x, 1.05, z + 1.20, 4.00, 2.10, 0.45, 0x6e757c, rot);
-  for(r = 0; r < 3; r++){
-    B.box(x, 0.55 + r * 0.62, z + 0.98, 3.80, 0.04, 0.05, shade(0x6e757c, .86), rot);
+  /* ammo and kit shelving on one end */
+  for(r = 0; r < 4; r++) F.box(-w / 2 + .35, .3 + r * .55, d / 2, .5, .04, d - .4, 0x8a9096);
+  for(r = 0; r < 6; r++) F.box(-w / 2 + .35, .38 + (r % 4) * .55, .5 + (r % 3) * .45, .3, .14, .22, r % 2 ? 0x4b5320 : 0x2f4f6a);
+}
+
+/* A real holding cell: block side walls, a steel-bar front with a sliding
+   door, lock box and food slot, a solid steel header to the ceiling, a
+   steel bunk bolted to the wall and a stainless toilet/sink in the back
+   corner. Local frame: the bar front runs along x at z = 0, the cell goes
+   back to +z = d. */
+function pCellUnit(B, x, z, w, d, h, rot, col, endWalls){
+  var F = new Frame(B, x, z, rot || 0), c1 = col || 0x59646f, r;
+  var bh = 2.45;
+  /* bars: 1-1/4" round, 5" centres, with flat straps across */
+  var doorW = 1.0, dx0 = w / 2 - doorW - .1;
+  for(r = -w / 2 + .08; r < w / 2 - .05; r += .125){
+    if(r > dx0 && r < dx0 + doorW) continue;
+    F.cyl(r, 0, 0, .018, .018, bh, 6, c1, 0);
   }
+  F.box(0, bh, 0, w, .1, .1, c1);
+  F.box(0, .03, 0, w, .06, .1, c1);
+  F.box(-w / 2 + (dx0 + w / 2) / 2, .95, 0, dx0 + w / 2, .05, .07, c1);
+  F.box(-w / 2 + (dx0 + w / 2) / 2, 1.95, 0, dx0 + w / 2, .05, .07, c1);
+  /* door (shown shut, a hand-width proud of the fixed bars) */
+  for(r = dx0 + .06; r < dx0 + doorW; r += .125) F.cyl(r, .05, -.06, .018, .018, bh - .1, 6, shade(c1, .9), 0);
+  F.box(dx0 + doorW / 2, bh - .05, -.06, doorW, .08, .06, shade(c1, .9));
+  F.box(dx0 + doorW / 2, .1, -.06, doorW, .08, .06, shade(c1, .9));
+  F.box(dx0 + doorW / 2, 1.0, -.06, doorW, .22, .05, shade(c1, .9));       /* food slot */
+  F.box(dx0 + doorW - .1, 1.15, -.1, .16, .3, .1, 0x2a2d31);                 /* lock box */
+  F.box(dx0 + doorW - .1, 1.15, -.155, .06, .06, .02, 0xc9a227);
+  /* solid header from the bars to the ceiling */
+  F.box(0, (bh + .05 + h) / 2, 0, w + .2, h - bh - .05, .16, 0xb9b5ab);
+  /* block side walls (each cell builds its left wall; the last its right) */
+  F.box(-w / 2 - .1, h / 2, d / 2, .2, h, d, 0xc9c6bd);
+  if(endWalls) F.box(w / 2 + .1, h / 2, d / 2, .2, h, d, 0xc9c6bd);
+  /* coved floor in a darker sealed concrete, with a drain */
+  F.plate(0, .032, d / 2, w, d - .05, 0x9e9b94);
+  F.cyl(0, .036, d * .55, .09, .09, .004, 10, 0x3a3d42, 1);
+  /* steel bunk bolted to the left wall, a mattress on it */
+  F.box(-w / 2 + .42, .45, d / 2 + .1, .76, .06, 2.0, 0x8a9096);
+  F.box(-w / 2 + .42, .5, d / 2 + .1, .7, .07, 1.9, 0xd27a2c);
+  F.box(-w / 2 + .08, .28, d / 2 + .1, .06, .36, 1.9, 0x8a9096);
+  /* stainless toilet/sink combination in the back corner */
+  F.box(w / 2 - .4, .55, d - .3, .6, 1.1, .45, 0xc5cbd1);
+  F.box(w / 2 - .4, .42, d - .62, .42, .12, .3, 0xb4bac0);
+  F.box(w / 2 - .4, 1.0, d - .53, .3, .06, .22, 0xa9afb5);
+  /* a caged light over the door side */
+  F.box(0, h - .08, d / 2, .5, .06, .3, 0xf4f2e8);
 }
 
 /* four-drawer filing cabinet */
@@ -22974,16 +23640,18 @@ function buildStation(scene, D0){
   var CB = new Builder();
   CB.box(ix, H + .02, iz, W, .26, D, 0xd2d0ca, 0);
   var cg;
-  for(cg = x0 + 1.2; cg < x1 - .2; cg += 1.2) CB.box(cg, H - .115, iz, .025, .012, D - .2, 0xb9b7b0, 0);
-  for(cg = z0 + .6; cg < z1 - .2; cg += .6) CB.box(ix, H - .115, cg, W - .2, .012, .025, 0xb9b7b0, 0);
+  /* each layer clear of the next by a couple of centimetres: coplanar
+     grid, panels and slab were what made the ceiling shimmer */
+  for(cg = x0 + 1.2; cg < x1 - .2; cg += 1.2) CB.box(cg, H - .13, iz, .025, .02, D - .2, 0xb9b7b0, 0);
+  for(cg = z0 + .6; cg < z1 - .2; cg += .6) CB.box(ix, H - .135, cg, W - .2, .02, .025, 0xb9b7b0, 0);
   var lx, lz;
   for(lx = x0 + 3.0; lx < x1 - 1.5; lx += 3.6){
     for(lz = z0 + 1.8; lz < z1 - 1.2; lz += 3.0){
-      CB.box(lx, H - .125, lz, .58, .02, 1.18, 0xffffff, 0);
-      CB.box(lx, H - .12, lz, .64, .015, 1.24, 0xa9a7a1, 0);
+      CB.box(lx, H - .17, lz, .58, .02, 1.18, 0xffffff, 0);
+      CB.box(lx, H - .15, lz, .64, .02, 1.24, 0xa9a7a1, 0);
     }
   }
-  for(lx = x0 + 4.8; lx < x1 - 1.5; lx += 7.2){ CB.box(lx, H - .124, iz, .58, .018, .58, 0xb0aea8, 0); }
+  for(lx = x0 + 4.8; lx < x1 - 1.5; lx += 7.2){ CB.box(lx, H - .16, iz, .58, .018, .58, 0xb0aea8, 0); }
   CB.box(gx, H + .02, gz, GW, .26, GD, 0xbdbab3, 0);
   for(lx = gx - GW / 2 + 2.5; lx < gx + GW / 2; lx += 4.5) CB.box(lx, H - .14, gz, .25, .06, GD - 3, 0xffffff, 0);
   var ceilM = new THREE.Mesh(CB.geo(), new THREE.MeshBasicMaterial({ vertexColors:true, side:THREE.DoubleSide }));
@@ -23073,30 +23741,37 @@ function buildStation(scene, D0){
   /* ---------- locker room, left side ---------- */
   var lockZ = iz + 1.0;
   /* Blender-modelled locker bank */
-  pLockerBank(B, x0 + 1.6, lockZ, 0, 0x59646f);
-  intSolid(id, x0 + 1.6, lockZ, .35, 2.45);
-  B.box(x0 + 4.6, .45, lockZ, .5, .10, 5.0, 0x8d7458, 0);   /* bench */
-  intSolid(id, x0 + 4.6, lockZ, .3, 2.5);
+  /* lockers stand against the wall, bench in front of them */
+  pLockerBank(B, x0 + .54, lockZ, 0, 0x59646f);
+  intSolid(id, x0 + .54, lockZ, .35, 2.45);
+  B.box(x0 + 2.2, .45, lockZ, .42, .08, 4.0, 0x8d7458, 0);   /* bench */
+  B.box(x0 + 2.2, .2, lockZ - 1.6, .08, .4, .3, 0x6e757c, 0);
+  B.box(x0 + 2.2, .2, lockZ + 1.6, .08, .4, .3, 0x6e757c, 0);
+  intSolid(id, x0 + 2.2, lockZ, .25, 2.0);
   B.box(x0 + 1.0, 1.8, lockZ - 6.4, .10, 1.6, 1.2, 0xdfe6ec, 0);  /* mirror */
 
   /* ---------- armoury cage, right side ---------- */
   var armZ = iz - 2.0;
   /* Blender-modelled armoury cage with rack */
-  pArmouryCage(B, x1 - 3.2, armZ, Math.PI / 2, 0x59646f);
+  B.mo = MT.PLAIN;
+  pArmouryCage(B, x1 - 3.2, armZ, -Math.PI / 2, 0x59646f);
+  B.mo = 0;
   intSolid(id, x1 - 3.2, armZ, .2, 2.1);
   intSolid(id, x1 - 1.6, armZ, .9, 2.0);
 
-  /* ---------- cell block, across the back ---------- */
-  var cellZ = z1 - 4.2;
+  /* ---------- cell block, across the back ----------
+     Each cell is closed: block walls between them, a barred front with a
+     door, a header to the ceiling, a bunk and a toilet. They used to be a
+     row of bar fences standing in one open room. */
+  var cellZ = z1 - 4.2, cellD = 3.4, cellF = z1 - .2 - cellD;
   for(i = 0; i < D0.cells; i++){
-    var cx = x0 + 3.6 + i * 5.0;
-    B.mo = MT.STONE;
-    B.box(cx, H / 2, cellZ + 2.0, 4.6, H, .22, 0xc9c6bd, 0);
+    var cx = x0 + 2.9 + i * 4.8;
+    B.mo = MT.PLAIN;      /* painted block, not the ribbed sheet metal pale colours fall into */
+    pCellUnit(B, cx, cellF, 4.6, cellD, H, 0, 0x59646f, i === D0.cells - 1);
     B.mo = 0;
-    intSolid(id, cx, cellZ + 2.0, 2.3, .2);
-    /* Blender-modelled holding cell */
-    pHoldingCell(B, cx, cellZ - 2.0, 0, 0x59646f);
-    intSolid(id, cx, cellZ - 2.0, 2.15, .18);
+    intSolid(id, cx, cellF, 2.35, .14);
+    intSolid(id, cx - 2.4, cellF + cellD / 2, .14, cellD / 2);
+    if(i === D0.cells - 1) intSolid(id, cx + 2.4, cellF + cellD / 2, .14, cellD / 2);
   }
   var bookX = x0 + 3.6 + D0.cells * 5.0 + 2.4;
   B.box(bookX, .55, cellZ, 1.7, 1.10, 3.6, 0x6d5f45, 0);
@@ -23151,9 +23826,9 @@ function buildStation(scene, D0){
     /* triggers, each sited ON the fitting it belongs to */
     spawnX:ix, spawnZ:z0 + 2.6,
     deskX:ix, deskZ:deskZ - 1.4,
-    lockerX:x0 + 3.2, lockerZ:lockZ,
+    lockerX:x0 + 2.9, lockerZ:lockZ,
     armoryX:x1 - 4.6, armoryZ:armZ,
-    jailX:x0 + 3.6, jailZ:cellZ - 3.4,
+    jailX:x0 + 3.6, jailZ:cellF - 1.6,
     garageX:gx, garageZ:gz,
     doorX:ix, doorZ:z0,
     /* bounds cover the room AND the bay, so walking between them is
@@ -25333,6 +26008,9 @@ function updateSky(dt){
   G.night = day < .30;
   /* lit windows fade in through dusk */
   WORLD_NIGHT.value = clamp((.50 - day) / .28, 0, 1);
+  /* cabin self-light: daylight bouncing in by day, just the instrument
+     spill at night */
+  if(CAR_MATS.__cab){ var ce = .035 - WORLD_NIGHT.value * .022; CAR_MATS.__cab.emissive.setRGB(ce, ce * 1.02, ce * 1.08); }
   if(LAMP_POOL_MAT){ LAMP_POOL_MAT.color.setScalar(.30 * WORLD_NIGHT.value); if(G.lampPools) G.lampPools.visible = WORLD_NIGHT.value > .02; }
   var wx = WX[G.weather] || WX.clear;
   var key = SKY_KEYS[G.weather] || SKY_KEYS.clear;
@@ -26466,7 +27144,7 @@ function controlFoot(dt){
 }
 
 /* ---------- world population ---------- */
-var SPAWN = { trafficMax:64, pedMax:68, t:0, pt:0 };
+var SPAWN = { trafficMax:90, pedMax:76, t:0, pt:0 };
 /* Population follows the district the way San Andreas does: downtown is
    crowded, suburbs are moderate, the county is nearly empty. A flat cap
    made the whole map feel equally sparse. */
@@ -26502,7 +27180,7 @@ function populate(dt){
   }
 
   var densMul = (G.weather === 'storm' ? .5 : (G.weather === 'rain' ? .72 : 1)) *
-                (G.night ? .55 : 1);
+                (G.night ? .72 : 1);
   var den = densityAt(px, pz);
   /* rush hour on a weekday morning and late afternoon */
   var hr = G.hour + (G.minute || 0) / 60;
@@ -26515,11 +27193,11 @@ function populate(dt){
     SPAWN.t = 0;
     /* fill faster when the road is nearly empty so the world does not feel dead
        right after a load or a fast-travel */
-    var batch = G.traffic.length < maxT * .6 ? 5 : 2, done = 0;
+    var batch = G.traffic.length < maxT * .6 ? 6 : 3, done = 0;
     var tries = 0;
     while(tries++ < 26 && done < batch){
       /* sample a point on a ring around the player, then grab road edges there */
-      var ra = Math.random() * TAU, rr = rng(115, 240);
+      var ra = Math.random() * TAU, rr = rng(100, 260);
       var sxx = px + Math.cos(ra) * rr, szz = pz + Math.sin(ra) * rr;
       if(Math.abs(sxx) > WORLD - 40 || Math.abs(szz) > WORLD - 40) continue;
       var near = edgesNear(sxx, szz);
