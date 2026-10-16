@@ -2019,6 +2019,11 @@ function addDiamond(cx, cz, ux, uz, fw, name, dest){
       addRoad(name + ' ' + kind, 'ramp', g0x, g0z, g1x, g1z, 9.05, 9);
       addRoad(name + ' ' + kind, 'ramp', g1x, g1z, g2x, g2z, 9, 0);
       addRoad(name + ' ' + kind, 'ramp', g2x, g2z, g3x, g3z, 0, 0);
+      /* ramps are one way: an exit runs off the deck (as laid, first point
+         to last), an entrance runs up onto it. Traffic used to use them
+         both ways, so cars drove up exit ramps against the flow. */
+      var ow = (kind === 'Exit') ? 1 : -1, qo;
+      for(qo = 1; qo <= 3; qo++) ROADS[ROADS.length - qo].oneway = ow;
       RAMP_ZONES.push({ ax:cx + ux * dz * 70 + nx * sx * fw, az:cz + uz * dz * 70 + nz * sx * fw,
                         bx:cx + ux * dz * 290 * k + nx * sx * fw, bz:cz + uz * dz * 290 * k + nz * sx * fw });
     }
@@ -2249,6 +2254,13 @@ function buildGraph(){
       var ra = (A.type === 'ramp'), rb = (B.type === 'ramp');
       if((fa && !fb && !rb) || (fb && !fa && !ra)) continue;
       var hit = segIntersect(A, B);
+      /* a ramp up on its fill passing over a street is not a junction with
+         it: cutting there split the ramp's gore into pieces and left a
+         stray node in the street below */
+      if(hit && (ra || rb)){
+        var yA = A.y1 + (A.y2 - A.y1) * hit.t, yB = B.y1 + (B.y2 - B.y1) * hit.s;
+        if(Math.abs(yA - yB) > 2.5) hit = null;
+      }
       if(hit){ cuts[i].push(hit.t); cuts[j].push(hit.s); }
     }
   }
@@ -2275,7 +2287,7 @@ function buildGraph(){
       var len = dist(a.x, a.z, b.x, b.z);
       if(len < 3) continue;
       var e = { i:EDGES.length, a:a.i, b:b.i, road:i, len:len, w:r.w, lim:r.lim,
-                type:r.type, name:r.name, lanes:r.lanes, bridge:!!r.bridge };
+                type:r.type, name:r.name, lanes:r.lanes, bridge:!!r.bridge, oneway:r.oneway || 0 };
       EDGES.push(e);
       a.e.push(e.i); b.e.push(e.i);
     }
@@ -5574,7 +5586,7 @@ function gasStoreInterior(B, tag, x, z, rot, w, d, doorX, brand, name, seed){
   var bx1 = Math.max(K.F.wx(-w / 2, -d / 2), K.F.wx(w / 2, d / 2), K.F.wx(-w / 2, d / 2), K.F.wx(w / 2, -d / 2));
   var bz0 = Math.min(K.F.wz(-w / 2, -d / 2), K.F.wz(w / 2, d / 2), K.F.wz(-w / 2, d / 2), K.F.wz(w / 2, -d / 2));
   var bz1 = Math.max(K.F.wz(-w / 2, -d / 2), K.F.wz(w / 2, d / 2), K.F.wz(-w / 2, d / 2), K.F.wz(w / 2, -d / 2));
-  INTERIORS[tag] = { x:x, z:z, name:name, shop:true, gas:true,
+  INTERIORS[tag] = { x:x, z:z, name:name, shop:true, gas:true, rot:rot,
     doorX:K.F.wx(doorX, -d / 2), doorZ:K.F.wz(doorX, -d / 2),
     bounds:{ x0:bx0 + .5, x1:bx1 - .5, z0:bz0 + .5, z1:bz1 - .5 } };
 }
@@ -12378,6 +12390,46 @@ function driverLook(liv, seed){
   var pants = cop ? (dep === 'dps' ? 0x6b5d45 : (dep === 'so' ? 0x4a3e2c : 0x1b2236)) : (r() < .6 ? 0x2c3a56 : 0x3a3a3c);
   return { skin:skin, shirt:shirt, hair:hair, pants:pants };
 }
+/* a rider astride a motorcycle: leaning into the bars, boots on the pegs,
+   helmet on */
+function riderGeo(skin, jacket, pants, helmet){
+  var key = 'moto|' + skin + '|' + jacket + '|' + pants + '|' + helmet;
+  if(DRIVER_GEO[key]) return DRIVER_GEO[key];
+  var b = new MB(), s;
+  var hipX = -.32, hipY = 1.01, shX = -.17, shY = 1.53, hx = -.10, hy = 1.75;
+  b.ellip(hipX + .02, hipY + .02, 0, .16, .10, .17, pants, 10, 5);
+  b.ellip((hipX + shX) / 2, (hipY + shY) / 2 + .02, 0, .15, .19, .19, jacket, 10, 6);
+  b.ellip(shX, shY - .06, 0, .13, .12, .21, jacket, 10, 6);
+  b.tube([hx - .03, hy - .16, 0], [hx - .02, hy - .07, 0], .05, 7, skin);
+  b.ellip(hx, hy, 0, .125, .135, .115, helmet, 12, 8);                 /* helmet */
+  b.box(hx + .085, hy - .01, 0, .05, .07, .17, 0x15181d);               /* visor */
+  for(s = -1; s <= 1; s += 2){
+    var sx = shX + .02, sy = shY - .02, sz = s * .19;
+    var gx = .50, gy = 1.17, gz = s * .31;                               /* grips */
+    var ex = (sx + gx) / 2 - .02, ey = (sy + gy) / 2 - .08, ez = s * .27;
+    b.ellip(sx, sy, sz, .075, .075, .075, jacket, 8, 5);
+    b.tube([sx, sy, sz], [ex, ey, ez], .05, 7, jacket);
+    b.tube([ex, ey, ez], [gx, gy, gz], .042, 7, jacket);
+    b.ellip(gx, gy, gz, .05, .045, .04, 0x1a1b1e, 7, 4);                  /* gloves */
+    var kx = .10, ky = .92, kz = s * .21;
+    b.tube([hipX + .05, hipY - .02, s * .12], [kx, ky, kz], .075, 7, pants);
+    b.tube([kx, ky, kz], [-.06, .50, s * .19], .058, 6, pants);
+    b.box(-.02, .46, s * .19, .26, .10, .11, 0x111214);                  /* boot */
+  }
+  var g = b.geo();
+  DRIVER_GEO[key] = g;
+  return g;
+}
+function addRiderFigure(grp, P, liv){
+  var L = driverLook(liv, Math.random());
+  var cop = liv && liv !== 'civ';
+  var helmet = cop ? 0xf2f3f4 : (Math.random() < .5 ? 0x141518 : L.shirt);
+  var m = new THREE.Mesh(riderGeo(L.skin, cop ? L.shirt : (Math.random() < .6 ? 0x1c1c1f : L.shirt), L.pants, helmet), carRubberMat());
+  m.userData.driverFig = true; m.visible = false;
+  grp.add(m);
+  P.eye = { x:-.02, y:1.77, z:0 };
+  return [m];
+}
 function addDriverFigure(grp, hiG, loG, P, liv){
   var L = driverLook(liv, Math.random());
   var gh = driverGeo(P, L.skin, L.shirt, L.hair, L.pants, false);
@@ -12422,7 +12474,8 @@ function buildVehicleArt(def, bodyKey, liv, tint){
       grp.add(wb2); wheels.push(wb2);
     }
     if(liv !== 'civ') grp.add(makeLightbar(P, liv, lights));
-    return { group:grp, wheels:wheels, lights:lights, P:P, def:def };
+    var rider = addRiderFigure(grp, P, (LIVERY_ART[liv] || LIVERY_ART.civ).civ ? 'civ' : liv);
+    return { group:grp, wheels:wheels, lights:lights, P:P, def:def, drvFig:rider };
   }
   var markedArt = !A.civ && liv !== 'unmarked' && !A.ghost || liv === 'slick';
   var art = carBodyModel(P, bodyKey, A.civ ? 'civ' : liv, markedArt) || carBodyArt(P, bodyKey, A.civ ? 'civ' : liv);
@@ -14033,6 +14086,7 @@ Ped.prototype.followEdge = function(dt, spdF){
    ============================================================ */
 function spawnTrafficAt(edgeIdx, t, dir){
   var e = EDGES[edgeIdx], a = NODES[e.a], b = NODES[e.b];
+  if(e.oneway) dir = e.oneway;
   var ang = Math.atan2(b.z - a.z, b.x - a.x);
   var lp0 = lanePoint(e, dir, t, 0);
   var lane = laneOffset(e, dir);
@@ -14079,6 +14133,7 @@ function patrolCount(){
 }
 function spawnPatrolAt(edgeIdx, t, dir){
   var e = EDGES[edgeIdx], a = NODES[e.a], b = NODES[e.b];
+  if(e.oneway) dir = e.oneway;
   var ang = Math.atan2(b.z - a.z, b.x - a.x);
   var lp0 = lanePoint(e, dir, t, 0);
   var mx = (a.x + b.x) / 2, mz = (a.z + b.z) / 2;
@@ -14161,6 +14216,24 @@ function code3Near(v){
   }
   return false;
 }
+/* On the interstate: coming off an entrance ramp a car is in the outside
+   lane and settles into a lane of its own choosing; with an exit coming up
+   at the end of this stretch, some decide to take it and move over to the
+   outside lane in good time. */
+function trafficPlanLane(v, cameFromRamp){
+  var e = v.edge;
+  if(!e || e.type !== 'freeway'){ v.fwLane = undefined; v.fwLaneF = undefined; return; }
+  if(cameFromRamp){ v.fwLane = 2; v.fwLaneF = 2; v.mergeHold = 1; }
+  else if(v.mergeHold){ v.mergeHold = 0; v.fwLane = ri(0, 2); }
+  var nb = NODES[v.dir > 0 ? e.b : e.a], k;
+  for(k = 0; k < nb.e.length; k++){
+    var r = EDGES[nb.e[k]];
+    if(r.type !== 'ramp' || !r.oneway || !edgeAllows(r, dirFrom(r, nb.i))) continue;
+    if(v.patrol && v.pMode === 'code3') break;
+    if(chance(.32)){ v.planExit = r; v.fwLane = 2; }
+    break;
+  }
+}
 function trafficUpdate(v, dt){
   var e = v.edge;
   if(!e){ v.throttle = 0; v.brake = 1; return; }
@@ -14218,18 +14291,31 @@ function trafficUpdate(v, dt){
     return;
   }
 
-  /* advance param along edge from real position */
-  var dx = b.x - a.x, dz = b.z - a.z, L2 = dx * dx + dz * dz || 1;
-  v.t = clamp(((v.x - a.x) * dx + (v.z - a.z) * dz) / L2, 0, 1);
+  /* advance param along edge from real position (on a ramp's gore, along
+     the line the car is actually following, not the one to the median) */
+  var pa = a, pb = b, gle = e.oneway ? goreLaneEnd(e) : null;
+  if(gle){ if(a.i === gle.node) pa = gle; else if(b.i === gle.node) pb = gle; }
+  var dx = pb.x - pa.x, dz = pb.z - pa.z, L2 = dx * dx + dz * dz || 1;
+  v.t = clamp(((v.x - pa.x) * dx + (v.z - pa.z) * dz) / L2, 0, 1);
 
   if(v.t > .985){
     var nn = b, opts = [], i;
+    var planned = null;
     for(i = 0; i < nn.e.length; i++){
       var ee = EDGES[nn.e[i]];
       if(ee.i === e.i) continue;
       if(Math.abs(a.y - nn.y) > 4 && ee.type !== 'ramp' && e.type !== 'ramp') continue;
+      /* never the wrong way down a one-way ramp */
+      if(!edgeAllows(ee, dirFrom(ee, nn.i))) continue;
+      /* off the interstate only by the exit it lined up for */
+      if(e.type === 'freeway' && ee.type === 'ramp' && ee.oneway){
+        if(v.planExit === ee) planned = ee;
+        continue;
+      }
       opts.push(ee);
     }
+    if(planned){ opts = [planned]; }
+    v.planExit = null;
     if(opts.length){
       /* prefer going straight */
       var best = opts[0], bs = -9;
@@ -14252,10 +14338,12 @@ function trafficUpdate(v, dt){
         best = lotOpt;
         v.errandT = rng(18, 70);
       }
+      var cameFromRamp = (e.type === 'ramp');
       v.edge = best;
       v.nextEdge = null;
       v.dir = (NODES[best.a].i === nn.i) ? 1 : -1;
       v.lane = laneOffset(best, v.dir);
+      trafficPlanLane(v, cameFromRamp);
       e = v.edge;
       a = NODES[v.dir > 0 ? e.a : e.b]; b = NODES[v.dir > 0 ? e.b : e.a];
       ang = Math.atan2(b.z - a.z, b.x - a.x);
@@ -14267,6 +14355,13 @@ function trafficUpdate(v, dt){
   var look = clamp(6 + v.spd * .75, 6, 34);
   var tAhead = clamp(v.t + look / Math.max(e.len, 1), 0, 1);
   var extra = v.pulling ? (e.w * .30 + 2.0) * (v.dir > 0 ? -1 : 1) : 0;
+  /* three lanes each way on the interstate: keep to the one picked */
+  if(e.type === 'freeway' && !v.pulling){
+    if(v.fwLane === undefined) v.fwLane = ri(0, 2);
+    if(v.fwLaneF === undefined) v.fwLaneF = v.fwLane;
+    v.fwLaneF += clamp(v.fwLane - v.fwLaneF, -dt * .35, dt * .35);   /* a lane change takes ~3 s */
+    extra += v.fwLaneF * FW_LANE_W;
+  }
   var lp = lanePoint(e, v.dir, tAhead, extra);
   var tx = lp.x, tz = lp.z;
 
@@ -14311,7 +14406,7 @@ function trafficUpdate(v, dt){
       v.wrongT = 0;
       /* if it is actually facing the other way down this road, it belongs
          in the opposite lane -- flip the direction rather than spinning it */
-      if(Math.abs(angDiff(v.h, ea2 + (v.dir > 0 ? Math.PI : 0))) < 1.0){
+      if(!e.oneway && Math.abs(angDiff(v.h, ea2 + (v.dir > 0 ? Math.PI : 0))) < 1.0){
         v.dir = -v.dir;
         v.t = clamp(v.t, 0, 1);
       }
@@ -15726,7 +15821,14 @@ function ragdollClear(p){
    Every place that computes a lane offset now calls this, so the
    convention can never drift between spawn, turn and steer again.
 ------------------------------------------------------------------ */
+/* may traffic run along this edge in direction dir? */
+function edgeAllows(e, dir){ return !e.oneway || e.oneway === dir; }
+/* direction you travel an edge when leaving node index ni along it */
+function dirFrom(e, ni){ return (NODES[e.a].i === ni) ? 1 : -1; }
+var FW_LANE_W = 3.6;
 function laneOffset(edge, dir){
+  /* a one-way ramp has one lane, down its middle */
+  if(edge.oneway) return 0;
   var lanes = edge.lanes || 1;
   var half = edge.w * .5;
   /* centre of the innermost forward lane, kept off the centreline and
@@ -15745,9 +15847,31 @@ function laneOffset(edge, dir){
   var laneW = Math.min(3.6, usable / lanes);
   return .35 + laneW * .5;                      /* innermost lane */
 }
+/* The gore piece of a ramp is joined to the graph at the interstate
+   CENTRELINE. Lane-following that literally had every car on or off a ramp
+   cut diagonally across all three lanes to the median. Steer it to and
+   from the outside lane instead. */
+function goreLaneEnd(e){
+  if(e._gle !== undefined) return e._gle;
+  e._gle = null;
+  if(!isGoreEdge(e) || !e._gf) return null;
+  var F = e._gf, fn = (Math.abs(NODES[e.a].x - F.x) + Math.abs(NODES[e.a].z - F.z) < .5) ? NODES[e.a] : NODES[e.b];
+  var o = fn === NODES[e.a] ? NODES[e.b] : NODES[e.a];
+  var nx = -F.fz, nz = F.fx, sd = ((o.x - F.x) * nx + (o.z - F.z) * nz) > 0 ? 1 : -1;
+  var off = .35 + FW_LANE_W * 2.5;
+  /* a little way along the deck, so the car eases across rather than
+     turning at a point */
+  var along = ((o.x - F.x) * F.fx + (o.z - F.z) * F.fz) > 0 ? 1 : -1;
+  e._gle = { node:fn.i, x:F.x + nx * sd * off + F.fx * along * 6, z:F.z + nz * sd * off + F.fz * along * 6, y:fn.y };
+  return e._gle;
+}
 function lanePoint(edge, dir, t, extra){
   var a = NODES[dir > 0 ? edge.a : edge.b];
   var b = NODES[dir > 0 ? edge.b : edge.a];
+  if(edge.oneway){
+    var gl = goreLaneEnd(edge);
+    if(gl){ if(a.i === gl.node) a = gl; else if(b.i === gl.node) b = gl; }
+  }
   var ang = Math.atan2(b.z - a.z, b.x - a.x);
   var off = laneOffset(edge, dir) + (extra || 0);
   return {
@@ -15968,6 +16092,7 @@ function snapToLane(v){
   var ang = Math.atan2(b.z - a.z, b.x - a.x);
   /* keep whichever direction is closer to how the car already points */
   var dir = Math.abs(angDiff(ang, v.h)) < Math.PI / 2 ? 1 : -1;
+  if(e.oneway) dir = e.oneway;
   v.edge = e; v.dir = dir; v.t = n.t;
   var lp = lanePoint(e, dir, clamp(n.t, .02, .98), 0);
   var wantH = dir > 0 ? lp.ang : lp.ang + Math.PI;
@@ -19920,6 +20045,7 @@ function gpsRoute(sx, sz, tx, tz, quiet){
       var e = EDGES[n.e[k]];
       var v = (e.a === u) ? e.b : e.a;
       if(done[v]) continue;
+      if(e.oneway && e.oneway !== ((e.a === u) ? 1 : -1)) continue;
       /* prefer bigger roads slightly, like a satnav would */
       var pref = (e.type === 'freeway' || e.type === 'highway') ? .82 :
                  (e.type === 'arterial' ? .92 : 1.0);
@@ -23162,13 +23288,15 @@ function buildDoors(scene){
       var m = new THREE.Mesh(B.geo(), new THREE.MeshLambertMaterial({
         vertexColors:true, transparent:true, opacity:.82
       }));
+      var drot = it.rot || 0;
       m.userData.home = (k ? -1 : 1) * 1.0;
-      m.position.set(dx + m.userData.home, 0, dz);
+      m.rotation.y = -drot;
+      m.position.set(dx + Math.cos(drot) * m.userData.home, 0, dz + Math.sin(drot) * m.userData.home);
       g.add(m);
       leaves.push(m);
     }
     scene.add(g);
-    DOORS.push({ id:ids[i], x:dx, z:dz, leaves:leaves, open:0 });
+    DOORS.push({ id:ids[i], x:dx, z:dz, leaves:leaves, open:0, co:Math.cos(it.rot || 0), si:Math.sin(it.rot || 0) });
   }
   return DOORS;
 }
@@ -23182,8 +23310,9 @@ function updateDoors(dt){
     d.open += (want - d.open) * Math.min(1, dt * 6);
     if(was < .5 && d.open >= .5 && typeof Audio_door === 'function') Audio_door();
     for(k = 0; k < d.leaves.length; k++){
-      var lf = d.leaves[k];
-      lf.position.x = d.x + lf.userData.home * (1 + d.open * 1.05);
+      var lf = d.leaves[k], off = lf.userData.home * (1 + d.open * 1.05);
+      lf.position.x = d.x + (d.co === undefined ? 1 : d.co) * off;
+      lf.position.z = d.z + (d.si === undefined ? 0 : d.si) * off;
     }
   }
 }
@@ -23193,12 +23322,16 @@ function resolveDoors(np, r){
   for(i = 0; i < DOORS.length; i++){
     var d = DOORS[i];
     if(d.open > .45) continue;
-    var dx = np.x - d.x, dz = np.z - d.z;
+    /* in the door's own frame: across the opening, and through it */
+    var co = d.co === undefined ? 1 : d.co, si = d.si === undefined ? 0 : d.si;
+    var wx0 = np.x - d.x, wz0 = np.z - d.z;
+    var dx = wx0 * co + wz0 * si, dz = -wx0 * si + wz0 * co;
     var ox = (2.2 + r) - Math.abs(dx);
     var oz = (.25 + r) - Math.abs(dz);
     if(ox <= 0 || oz <= 0) continue;
-    if(oz < ox) np.z += dz < 0 ? -oz : oz;
-    else np.x += dx < 0 ? -ox : ox;
+    if(oz < ox) dz += dz < 0 ? -oz : oz;
+    else dx += dx < 0 ? -ox : ox;
+    np.x = d.x + dx * co - dz * si; np.z = d.z + dx * si + dz * co;
   }
 }
 
@@ -23250,34 +23383,46 @@ function buildShopInterior(scene, kind, ax, az, tag){
   var x = spot.x, z = spot.z;
   var B = new Builder();
   var names = SHOP_NAMES[kind] || [K0.n];
-  var name = names[Math.floor(rr() * names.length) % names.length];
+  var ni0 = Math.floor(rr() * names.length) % names.length, nq, name = names[ni0];
+  /* two diners across town should not both be the Route 69 Cafe */
+  if(!G.shopNames) G.shopNames = {};
+  for(nq = 0; nq < names.length && G.shopNames[name]; nq++) name = names[(ni0 + nq + 1) % names.length];
+  G.shopNames[name] = 1;
   var accent = jitCol(K0.accent, .08), wall = jitCol(K0.wall, .03);
   var doorX = (rr() - .5) * (W - 6);
   var i;
 
+  /* --- face the street: the door goes on whichever side the nearest road
+     is (they all used to open to the north, some onto a back yard) --- */
+  var rot = 0, ne = nearestEdge(x, z);
+  if(ne.e >= 0){
+    var dvx = ne.px - x, dvz = ne.pz - z;
+    rot = Math.round(Math.atan2(dvx, -dvz) / (Math.PI / 2)) * (Math.PI / 2);
+  }
+  var F = new Frame(B, x, z, rot);
   /* --- exterior: walls with the doorway left open, parapet, roof, glazing --- */
   var sk = jitCol(wpick ? wpick([0xd8cfbd, 0xc9b79a, 0xb5694a, 0xd9cfbb, 0xe6e1d6, 0x9a5a44]) : 0xd8cfbd, .05);
-  B.box(x, H / 2 + .1, z + D / 2 + .3, W + 1.0, H + .45, .6, sk, 0);
-  B.box(x - W / 2 - .3, H / 2 + .1, z, .6, H + .45, D + 1.0, sk, 0);
-  B.box(x + W / 2 + .3, H / 2 + .1, z, .6, H + .45, D + 1.0, sk, 0);
+  F.box(0, H / 2 + .1, D / 2 + .3, W + 1.0, H + .45, .6, sk);
+  F.box(-W / 2 - .3, H / 2 + .1, 0, .6, H + .45, D + 1.0, sk);
+  F.box(W / 2 + .3, H / 2 + .1, 0, .6, H + .45, D + 1.0, sk);
   var fl = (doorX - 1.2) + W / 2 + .5, fr = W / 2 - (doorX + 1.2) + .5;
-  B.box(x - W / 2 - .5 + fl / 2, .35, z - D / 2 - .3, fl, .7, .6, sk, 0);
-  B.box(x + W / 2 + .5 - fr / 2, .35, z - D / 2 - .3, fr, .7, .6, sk, 0);
-  B.box(x, H - .35, z - D / 2 - .3, W + 1.0, 1.1, .6, sk, 0);
-  B.box(x - W / 2 - .5 + .3, H / 2, z - D / 2 - .3, .6, H, .6, sk, 0);
-  B.box(x + W / 2 + .5 - .3, H / 2, z - D / 2 - .3, .6, H, .6, sk, 0);
-  B.box(x, H + .5, z, W + 1.5, .55, D + 1.5, shade(sk, .72), 0);
-  B.box(x, H + .2, z, W + .7, .26, D + .7, 0x6e737a, 0);
-  B.box(x, H - .55, z - D / 2 - .62, W + 1.0, .8, .12, accent, 0);
-  B.box(x - W / 2 - .2 + (fl - .4) / 2, 2.0, z - D / 2 - .36, fl - .8, 2.4, .06, C.glass, 0);
-  B.box(x + W / 2 + .2 - (fr - .4) / 2, 2.0, z - D / 2 - .36, fr - .8, 2.4, .06, C.glass, 0);
-  B.box(x + doorX - 1.25, 1.5, z - D / 2 - .3, .1, 3.0, .7, 0x3a3f46, 0);
-  B.box(x + doorX + 1.25, 1.5, z - D / 2 - .3, .1, 3.0, .7, 0x3a3f46, 0);
+  F.box(-W / 2 - .5 + fl / 2, .35, -D / 2 - .3, fl, .7, .6, sk);
+  F.box(W / 2 + .5 - fr / 2, .35, -D / 2 - .3, fr, .7, .6, sk);
+  F.box(0, H - .35, -D / 2 - .3, W + 1.0, 1.1, .6, sk);
+  F.box(-W / 2 - .5 + .3, H / 2, -D / 2 - .3, .6, H, .6, sk);
+  F.box(W / 2 + .5 - .3, H / 2, -D / 2 - .3, .6, H, .6, sk);
+  F.box(0, H + .5, 0, W + 1.5, .55, D + 1.5, shade(sk, .72));
+  F.box(0, H + .2, 0, W + .7, .26, D + .7, 0x6e737a);
+  F.box(0, H - .55, -D / 2 - .62, W + 1.0, .8, .12, accent);
+  F.box(-W / 2 - .2 + (fl - .4) / 2, 2.0, -D / 2 - .36, fl - .8, 2.4, .06, C.glass);
+  F.box(W / 2 + .2 - (fr - .4) / 2, 2.0, -D / 2 - .36, fr - .8, 2.4, .06, C.glass);
+  F.box(doorX - 1.25, 1.5, -D / 2 - .3, .1, 3.0, .7, 0x3a3f46);
+  F.box(doorX + 1.25, 1.5, -D / 2 - .3, .1, 3.0, .7, 0x3a3f46);
   /* an awning over the door for some trades */
-  if(rr() < .6) B.box(x + doorX, 3.0, z - D / 2 - 1.0, 3.4, .12, 1.4, shade(accent, .9), 0);
+  if(rr() < .6) F.box(doorX, 3.0, -D / 2 - 1.0, 3.4, .12, 1.4, shade(accent, .9));
 
   /* --- the room --- */
-  var Kt = new Kit(B, tag, x, z, 0, seed);
+  var Kt = new Kit(B, tag, x, z, rot, seed);
   var floorOpt = { wall:wall, floor:jitCol(K0.floor, .04), door:2.4, doorX:doorX, accent:shade(accent, .95) };
   if(kind === 'diner' || (kind === 'burger' && rr() < .5)) floorOpt.checker = 0x26282c;
   if(kind === 'bar' || kind === 'diner' || kind === 'pizza') floorOpt.pendants = 2.6;
@@ -23286,14 +23431,16 @@ function buildShopInterior(scene, kind, ax, az, tag){
   else { Kt.shell(W - .4, D - .4, H, floorOpt); shopFit(Kt, kind, W - .4, D - .4, H, doorX, accent, rr); }
   B.mo = 0;
   if(typeof addSign === 'function'){
-    addSign(x, H - .55, z - D / 2 - .72, Math.PI, W * .55, .7, name, accent, 0xffffff, 'flat');
+    addSign(F.wx(0, -D / 2 - .72), H - .55, F.wz(0, -D / 2 - .72), Math.PI + rot, W * .55, .7, name, accent, 0xffffff, 'flat');
   }
   if(!G.shopMat) G.shopMat = new THREE.MeshLambertMaterial({ vertexColors:true, side:THREE.DoubleSide, emissive:0x262626 });
   scene.add(new THREE.Mesh(B.geo(), G.shopMat));
+  var hwX = Math.abs(Math.cos(rot)) * W / 2 + Math.abs(Math.sin(rot)) * D / 2;
+  var hwZ = Math.abs(Math.sin(rot)) * W / 2 + Math.abs(Math.cos(rot)) * D / 2;
   INTERIORS[tag] = {
-    x:x, z:z, name:name, shop:true, kind:kind,
-    doorX:x + doorX, doorZ:z - D / 2,
-    bounds:{ x0:x - W / 2 + .6, x1:x + W / 2 - .6, z0:z - D / 2 + .6, z1:z + D / 2 - .6 }
+    x:x, z:z, name:name, shop:true, kind:kind, rot:rot,
+    doorX:F.wx(doorX, -D / 2), doorZ:F.wz(doorX, -D / 2),
+    bounds:{ x0:x - hwX + .6, x1:x + hwX - .6, z0:z - hwZ + .6, z1:z + hwZ - .6 }
   };
   return INTERIORS[tag];
 }
@@ -26743,7 +26890,7 @@ function boot(){
     ['Starting the render engine', function(){ initEngine(); }],
     ['Clearing the roadways', function(){ sweepRoadSolids(); }],
     ['Laying the rail', function(){ buildRailPath(); buildRailGeometry(); buildRailCrossings(); }],
-    ['Baking the world', function(){ bakeChunks(scene); buildWater(scene); buildSigns(scene); buildBirds(scene); buildInteriors(scene); buildShopInteriors(scene); clearInteriorSolids(); clearRailSolids(); buildDoors(scene); buildTrain(scene); }],
+    ['Baking the world', function(){ bakeChunks(scene); buildWater(scene); buildBirds(scene); buildInteriors(scene); buildShopInteriors(scene); buildSigns(scene); clearInteriorSolids(); clearRailSolids(); buildDoors(scene); buildTrain(scene); }],
     ['Issuing your equipment', function(){
         rebuildOfficer();
         setWeather('clear');
