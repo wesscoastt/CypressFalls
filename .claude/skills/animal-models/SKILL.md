@@ -1,6 +1,6 @@
 ---
 name: animal-models
-description: Build, change or debug procedural animals for a three.js game (Kynds: Medieval, Salt and Velvet, or any other) — dogs of eleven types, cats and horses — their anatomy, fur coats and markings, faces, gaits, sitting/lying/sleeping poses and rider seating, with a self-contained kit to drop into another game and the quality bar that keeps them at 9/10. Use for new breeds or coat patterns, legs or tails clipping, animals walking or lying oddly, horse tack and riders, or "make animals like the Kynds' dogs".
+description: Build, change or debug procedural animals for a three.js game (Kynds: Medieval, Salt and Velvet, Cypress Falls, or any other) — dogs of eleven types (police K9s and working dogs included), cats, horses, and farm animals (cows, sheep, hens) — their anatomy, fur coats and markings, faces, gaits, sitting/lying/sleeping poses and rider seating, with a self-contained kit to drop into another game and the quality bar that keeps them at 9/10. Use for new breeds or coat patterns, legs or tails clipping, animals walking or lying oddly, horse tack and riders, or "make animals like the Kynds' dogs".
 ---
 
 # Animal models
@@ -18,6 +18,9 @@ like Kynds are from their appearance: one skinned body, a coat shader, a procedu
 | Dog/cat avatar: mesh build, IK legs, gait, tail, ears, blinking, sit/lie/sleep poses | `src/render/DogAvatar.ts` (cats share it with `species: 'cat'`) |
 | Collars, bowls, beds and other pet props | `src/render/petProps.ts` |
 | Horse: sculpted head (`sculptHead`), skin weights, withers/saddle height for riders, gaits, tack | `src/render/HorseAvatar.ts` |
+| Farm animals: cow and sheep body plans (`quadPlan`, bones `LB`, tags `LT`) and the avatar (four-beat walk, solved reach to the grass, legs folded to lie, cud, a regrowing fleece morph, a wool shader) | `src/render/livestockBody.ts`, `src/render/LivestockAvatar.ts` |
+| Hens and cockerels (head-bob walk, solved peck, roost, dust bath; comb, wattles, spurs) | `src/render/HenAvatar.ts` |
+| Farm breeds, names and genomes; produce in words | `src/sim/animals/livestockLooks.ts` |
 | Syncing avatars with the sim | `src/render/AnimalViews.ts` |
 
 ## How it works
@@ -39,15 +42,20 @@ like Kynds are from their appearance: one skinned body, a coat shader, a procedu
    import { dogGenome } from './animals/sim/animals/dogLooks.ts';   // 'hound' | 'mastiff' | 'shepherd' | 'terrier' | 'lapdog' | 'sighthound' | 'wolfhound' | 'spaniel' | 'sheepdog' | 'bloodhound' | 'guardian'
    import { catGenome } from './animals/sim/animals/catLooks.ts';
    import { horseGenome } from './animals/sim/animals/horseLooks.ts'; // 'rouncey' | 'palfrey' | 'cob' | 'courser' | 'destrier'
+   import { LivestockAvatar } from './animals/render/LivestockAvatar.ts'; // cows and sheep
+   import { HenAvatar } from './animals/render/HenAvatar.ts';
+   import { livestockGenome } from './animals/sim/animals/livestockLooks.ts'; // cow: red black dun pied white_park; sheep: white blackface moorit spotted black_sheep; chicken: speckled red_hen white_hen black_hen cuckoo
    import { Rng } from './animals/core/Rng.ts';
    const dog = new DogAvatar(dogGenome(new Rng(7), 'shepherd'), 'adult', 'dog');  // 'young' | 'adult' | 'elder'
    const horse = new HorseAvatar(horseGenome(new Rng(8), 'palfrey'), 'adult');
-   scene.add(dog.root, horse.root);
+   const cow = new LivestockAvatar(livestockGenome(new Rng(9), 'cow', 'pied'), 'adult', 'cow', 'female');
+   const hen = new HenAvatar(livestockGenome(new Rng(10), 'chicken', 'speckled', 'male'), 'adult', 'male'); // a cockerel
+   scene.add(dog.root, horse.root, cow.root, hen.root);
+   // a sheep's fleece regrows after shearing: sheep.setProduce(0 … 100) each frame
    // each frame (move root yourself; distanceWalked from real distance, so feet don't slide):
    dog.animate('walk', true, false, time, dt, distanceWalked);   // idle walk run sit lie sleep eat drink sniff play beg bark wag shy groom stalk graze roll dig pounce
    ```
-3. Refresh the kit from a newer Kynds checkout: `node .claude/skills/animal-models/scripts/export-kit.mjs`
-   (Kynds' `tests/animal-kit.test.ts` fails if the committed kit falls behind the game).
+3. The kit is refreshed from Kynds: Medieval, where the animals are made and tested.
 
 ## The bar, and the mistakes that cost it (fixed in Kynds; don't reintroduce them)
 - **Dog heads need a stop:** the forehead steps down to the bridge between the eyes. Masses melt
@@ -69,6 +77,13 @@ like Kynds are from their appearance: one skinned body, a coat shader, a procedu
 - **Measure every fix, and revert it if the numbers don't back it up** (several tried poses here
   looked plausible and measured worse).
 
+- **Farm animals:** keep the nose pad to the very front of a cow's muzzle (a pink bulb reads as a
+  cartoon) and the forehead broad; ears are upright leaves angled back so they show in profile; the
+  udder rides up (its own bone) when she lies; a fleece must thin out up the neck (no collar edge),
+  be relaxed over the surface so hollows don't fold into creases, and carry a curl relief in the
+  shader (smooth wool looks like plastic); a hen's beak must reach the ground when she pecks
+  (solve the reach, don't guess angles).
+
 ## Recipes
 - **New dog breed:** add its proportions and default coat in `src/sim/animals/dogLooks.ts` / `Species.ts`,
   check head/muzzle/ear shape branches in `DogAvatar.ts`, screenshot standing, sitting and asleep.
@@ -87,7 +102,8 @@ Cypress Falls is a single `index.html` that loads three.js **r128** as a global 
 cdnjs. The kit is TypeScript ES modules written against modern three (`import * as THREE from
 'three'`, tested on r170). Two ways in:
 - **Bundle it (least change):** in a scratch folder, `npm i three@0.170 esbuild`, write an entry
-  that imports `DogAvatar`, `dogGenome`, `HorseAvatar`, `horseGenome` and `Rng` from `kit/` and
+  that imports `DogAvatar`, `dogGenome`, `HorseAvatar`, `horseGenome`, `LivestockAvatar`, `HenAvatar`,
+  `livestockGenome` and `Rng` from `kit/` and
   assigns them to `window.AnimalKit`, then
   `npx esbuild entry.ts --bundle --format=iife --minify --outfile=animal-kit.js` and paste the
   result into a `<script>` after three loads. The bundle carries its own three, so its meshes must
@@ -105,6 +121,7 @@ from the K9's own state: `'walk'`/`'run'` while moving (pass the real distance t
 don't slide), `'sit'` for a stay, `'sniff'` for a search, `'bark'` for an alert, `'lie'` in the
 car or kennel. The dog faces local +Z. Scale `avatar.root` if the map isn't in metres.
 
-**Animals on the map:** strays, cats on porches, horses for mounted patrol. Build each model
+**Animals on the map:** strays, cats on porches, horses for mounted patrol, and cows, sheep and
+hens on farms at the edge of town (`LivestockAvatar`, `HenAvatar`). Build each model
 once per look and reuse it (sculpting takes tens of milliseconds); hide distant ones or swap them
 for a low-poly stand-in past about 40 m.

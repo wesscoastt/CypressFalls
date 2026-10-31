@@ -36,6 +36,9 @@ export interface AnimalGenome {
   face?: 'none' | 'star' | 'snip' | 'stripe' | 'blaze';
   /** White on each leg (front left, front right, hind left, hind right): 0 none, 1 sock, 2 stocking. */
   socks?: string;
+  // --- Farm stock (livestockLooks.ts) ----------------------------------------------------
+  /** Horn length: 0 polled (none) … 1 long, sweeping horns. */
+  horns?: number;
 }
 
 /** What an animal is doing right now. The renderer poses it from this. */
