@@ -1,4 +1,7 @@
 import * as THREE from 'three';
+import { twoBonePlanar } from '../engine/anim/ik.ts';
+import { GaitClock, type RiggedAnimal } from '../engine/anim/rig.ts';
+import { addFeature, bumpNormal, defineFeature, type TNode, type TSL } from '../engine/render/MaterialFeatures.ts';
 import type { AnimalActivity, AnimalGenome } from '../sim/animals/Animal.ts';
 import type { AnimalStage } from '../sim/animals/Species.ts';
 import { doses } from '../sim/animals/horseLooks.ts';
@@ -439,7 +442,176 @@ const COAT_SHEEN = /* glsl */ `
 }
 `;
 
-function coatMaterial(g: AnimalGenome, stage: AnimalStage): THREE.MeshStandardMaterial {
+type HorseCoatUniforms = Record<'uCoat' | 'uPoints' | 'uPale' | 'uWhite' | 'uSkin' | 'uPink' | 'uHoof' | 'uPaleHoof', { value: THREE.Color }>
+  & { uSocks: { value: THREE.Vector4 } }
+  & Record<'uFace' | 'uPattern' | 'uPointsAmt' | 'uAge' | 'uBreath', { value: number }>;
+
+const horseFns = new WeakMap<object, { hash: (p: TNode) => TNode; noise: (p: TNode) => TNode; worley: (p: TNode) => TNode }>();
+/** `hHash`, `hNoise` and `hWorley` as TSL functions. */
+function horseNoiseNodes(T: TSL) {
+  let f = horseFns.get(T);
+  if (!f) {
+    const hash = T.Fn(([p0]: TNode[]) => {
+      const p = T.vec3(T.dot(p0, T.vec3(127.1, 311.7, 74.7)), T.dot(p0, T.vec3(269.5, 183.3, 246.1)), T.dot(p0, T.vec3(113.5, 271.9, 124.6)));
+      return T.fract(T.sin(p).mul(43758.5453123));
+    });
+    const noise = T.Fn(([x]: TNode[]) => {
+      const i = T.floor(x), f0 = T.fract(x);
+      const f = f0.mul(f0).mul(T.vec3(3).sub(f0.mul(2)));
+      const h = (dx: number, dy: number, dz: number) => hash(i.add(T.vec3(dx, dy, dz))).x;
+      return T.mix(
+        T.mix(T.mix(h(0, 0, 0), h(1, 0, 0), f.x), T.mix(h(0, 1, 0), h(1, 1, 0), f.x), f.y),
+        T.mix(T.mix(h(0, 0, 1), h(1, 0, 1), f.x), T.mix(h(0, 1, 1), h(1, 1, 1), f.x), f.y),
+        f.z,
+      );
+    });
+    const worley = T.Fn(([p]: TNode[]) => {
+      const i = T.floor(p), fr = T.fract(p);
+      let d: TNode = T.float(8);
+      for (let x = -1; x <= 1; x++) for (let y = -1; y <= 1; y++) for (let z = -1; z <= 1; z++) {
+        const g = T.vec3(x, y, z);
+        const r = g.add(hash(i.add(g))).sub(fr);
+        d = T.min(d, T.dot(r, r));
+      }
+      return T.sqrt(d);
+    });
+    horseFns.set(T, (f = { hash: (p) => hash(p), noise: (p) => noise(p), worley: (p) => worley(p) }));
+  }
+  return f;
+}
+
+const horseCache = new WeakMap<object, Record<string, TNode>>();
+/** The coat as nodes: `horseCoat()`, its relief, roughness and sheen (the GLSL above, line for line). */
+function horseNodes(u: HorseCoatUniforms, T: TSL): Record<string, TNode> {
+  let n = horseCache.get(u);
+  if (n) return n;
+  const { noise, worley } = horseNoiseNodes(T);
+  const un = <V>(v: { value: V }) => T.uniform(v.value as never).onRenderUpdate(() => v.value as never);
+  const coat = un(u.uCoat), pointsC = un(u.uPoints), pale = un(u.uPale), whiteC = un(u.uWhite), skin = un(u.uSkin), pink = un(u.uPink), hoofC = un(u.uHoof), paleHoof = un(u.uPaleHoof);
+  const socks = un(u.uSocks), face = un(u.uFace), pattern = un(u.uPattern), pointsAmt = un(u.uPointsAmt), age = un(u.uAge);
+  const one = T.float(1);
+  const p = T.attribute('aRest', 'vec3');
+  const ax = T.abs(p.x);
+  let c: TNode = coat;
+  c = c.mul(one.sub(T.smoothstep(1.22, 1.5, p.y).mul(one.sub(T.smoothstep(0.6, 0.95, p.z))).mul(0.13)));
+  c = c.mul(one.add(T.smoothstep(0.98, 0.76, p.y).mul(T.smoothstep(-0.4, 0, p.z)).mul(one.sub(T.smoothstep(0.35, 0.55, p.z))).mul(0.1)));
+  c = c.mul(noise(p.mul(2.3).add(7)).mul(0.16).add(0.92));
+  const sg = T.sign(p.x);
+  const blob = (x: number, y: number, z: number, r: number, k: [number, number, number]) => one.sub(T.smoothstep(0, r, T.length(p.sub(T.vec3(sg.mul(x), y, z)).mul(T.vec3(...k)))));
+  const shoulder = blob(0.22, 1.22, 0.5, 0.3, [1.6, 1, 1.3]);
+  const quarter = blob(0.24, 1.28, -0.55, 0.34, [1.6, 1, 1.1]);
+  const hollow = blob(0.26, 1.12, -0.18, 0.2, [1.8, 1, 1]);
+  c = c.mul(one.add(T.max(shoulder, quarter).mul(0.14)).sub(hollow.mul(0.11)));
+  const hp = T.vec2(p.y.sub(1.93), p.z.sub(1.15));
+  const s1 = p.y.sub(1.48).add(p.z.sub(0.42)).mul(0.7071);
+  const s2 = p.y.sub(1.92).mul(-0.316).add(p.z.sub(1.17).mul(0.949));
+  const head = T.smoothstep(-0.02, 0.04, s2).mul(T.smoothstep(0.55, 0.7, s1)).mul(T.step(0.9, p.z));
+  const t = T.dot(hp, T.vec2(-0.734, 0.679)).div(0.7);
+  const front = T.dot(hp, T.vec2(0.679, 0.734));
+  const fore = p.z.greaterThan(0);
+  const legs = T.step(0.05, ax).mul(T.select(fore, T.smoothstep(0.62, 0.46, p.y), T.smoothstep(0.68, 0.52, p.y))).mul(T.step(p.y, 0.8));
+  c = T.mix(c, pointsC, legs.mul(pointsAmt));
+  const body = T.smoothstep(0.62, 0.9, p.y).mul(one.sub(head));
+  {
+    // Dapples.
+    const w = worley(p.mul(10));
+    let d: TNode = T.mix(c, pale, T.smoothstep(0.5, 0.26, w).mul(body).mul(0.85));
+    d = d.mul(one.sub(T.smoothstep(0.62, 0.5, w).mul(T.smoothstep(0.3, 0.48, w)).mul(body).mul(0.12)));
+    d = T.mix(d, pale, head.mul(0.35));
+    c = T.select(pattern.greaterThan(0.5).and(pattern.lessThan(1.5)), d, c);
+  }
+  {
+    // Appaloosa blanket, or leopard all over.
+    const edge = noise(p.mul(6)).sub(0.5).mul(0.12);
+    const blanket = T.select(pattern.greaterThan(2.5), body, T.smoothstep(-0.02, -0.28, p.z.add(T.float(1.25).sub(p.y).mul(0.5)).add(edge)).mul(T.smoothstep(0.92, 1.12, p.y)));
+    const spot = T.smoothstep(0.26, 0.18, worley(p.mul(11).add(3.1)));
+    c = T.select(pattern.greaterThan(1.5), T.mix(c, T.mix(whiteC, coat, spot), blanket), c);
+  }
+  const onFace = head.mul(T.smoothstep(0.015, 0.04, front));
+  const wob = noise(p.mul(40)).sub(0.5).mul(0.008);
+  const axw = ax.add(wob);
+  const star = T.smoothstep(0.03, 0.02, axw.add(T.abs(t.sub(0.24)).mul(0.3))).mul(T.step(0.12, t)).mul(T.step(t, 0.36));
+  const snip = T.smoothstep(0.026, 0.016, axw).mul(T.smoothstep(0.84, 0.88, t));
+  const stripe = T.max(star, T.smoothstep(0.018, 0.011, axw).mul(T.step(0.3, t)).mul(T.step(t, 0.86)));
+  const blaze = T.smoothstep(t.mul(0.012).add(0.046), t.mul(0.012).add(0.034), axw).mul(T.step(0.1, t));
+  let white: TNode = T.select(face.greaterThan(3.5), blaze, T.select(face.greaterThan(2.5), stripe, T.select(face.greaterThan(1.5), snip, T.select(face.greaterThan(0.5), star, T.float(0)))));
+  white = white.mul(onFace);
+  const right = p.x.greaterThan(0);
+  const sh = T.select(fore, T.select(right, socks.x, socks.y), T.select(right, socks.z, socks.w));
+  const sock = T.select(sh.greaterThan(0), T.step(0.05, ax).mul(T.smoothstep(sh.add(0.012), sh.sub(0.012), p.y.add(noise(p.mul(30)).sub(0.5).mul(0.04)))), T.float(0));
+  white = T.max(white, sock);
+  c = T.mix(c, whiteC, white);
+  c = T.mix(c, whiteC.mul(0.85), age.mul(head).mul(T.smoothstep(0.3, 0, T.abs(t.sub(0.2)))).mul(0.5));
+  const muzzle = head.mul(T.smoothstep(0.8, 0.93, t));
+  c = T.mix(c, T.mix(skin, pink, white), muzzle.mul(0.8));
+  const hd = T.vec2(p.y.sub(1.985), p.z.sub(1.12));
+  const ht = T.dot(hd, T.vec2(-0.7104, 0.7038)).div(0.725);
+  const hu = T.dot(hd, T.vec2(-0.7038, -0.7104));
+  const nq = T.vec2(ax.sub(0.04).sub(T.max(0, T.float(0.985).sub(ht)).mul(0.35)).div(0.014), ht.sub(0.99).div(0.04));
+  const nost = T.smoothstep(1, 0.6, T.length(nq)).mul(T.smoothstep(0.045, 0, hu));
+  c = T.mix(c, skin.mul(0.45), nost.mul(head));
+  const hoof = T.smoothstep(0.092, 0.078, p.y).mul(T.step(0.05, ax));
+  c = T.mix(c, T.mix(hoofC, paleHoof, sock), hoof);
+  const legW = T.smoothstep(0.92, 0.74, p.y).mul(one.sub(head));
+  const fl = T.mix(T.vec3(0, -0.25, -1), T.vec3(0, -1, 0.05), legW).normalize();
+  const ax2 = T.cross(fl, T.vec3(1, 0, 0)).normalize();
+  const q = T.vec3(T.dot(p, fl), T.dot(p, ax2), T.dot(p, T.cross(fl, ax2)));
+  const px = T.length(T.fwidth(p));
+  const sweep = noise(q.mul(T.vec3(5, 26, 26)).add(3));
+  const grain = noise(q.mul(T.vec3(22, 150, 150)).add(9)).mul(one.sub(T.smoothstep(0.004, 0.012, px)));
+  const bare = T.max(hoof, muzzle);
+  c = c.mul(one.add(sweep.sub(0.5).mul(0.13).add(grain.sub(0.5).mul(0.12)).mul(one.sub(bare))));
+  const eyeRing = head.mul(one.sub(T.smoothstep(0, 0.07, T.length(T.vec2(ax.sub(0.075), t.sub(0.2).mul(0.6))))));
+  c = c.mul(one.sub(eyeRing.mul(0.12).mul(one.sub(white))));
+  const furH = sweep.mul(0.7).add(grain.mul(0.2)).mul(one.sub(bare));
+  const rough = T.mix(T.mix(0.36, 0.5, legW).add(sweep.sub(0.5).mul(0.1)), 0.75, bare);
+  const normal = bumpNormal(T, furH.mul(0.0022));
+  // The satin sheen: brighter where the body turns away from the eye.
+  const ndv = T.clamp(T.dot(normal, T.positionView.negate().normalize()), 0, 1);
+  const col = c.mul(T.mix(one, T.mix(1.28, 0.96, T.pow(ndv, 0.6)), one.sub(bare)));
+  n = { col, normal, rough };
+  horseCache.set(u, n);
+  return n;
+}
+
+/**
+ * A horse's coat (engine M5 material feature `horse-coat`): colour, points, dapples, appaloosa
+ * blankets, face and leg white, muzzle and hooves, the grain of the hair and its sheen, and breathing.
+ */
+export const HORSE_COAT = defineFeature<HorseCoatUniforms>({
+  id: 'horse-coat',
+  key: () => 'kynds-horse-coat-5',
+  glsl(shader, uniforms) {
+    Object.assign(shader.uniforms, uniforms);
+    shader.vertexShader = COAT_VERTEX_HEAD + shader.vertexShader.replace('#include <begin_vertex>', '#include <begin_vertex>\n  vRest = aRest;' + COAT_BREATH);
+    shader.fragmentShader = COAT_FRAGMENT_HEAD + shader.fragmentShader
+      .replace('#include <color_fragment>', '#include <color_fragment>\n  diffuseColor.rgb = horseCoat();')
+      .replace('#include <roughnessmap_fragment>', '#include <roughnessmap_fragment>\n  roughnessFactor = hRough;')
+      .replace('#include <normal_fragment_maps>', '#include <normal_fragment_maps>\n' + COAT_BUMP + COAT_SHEEN);
+  },
+  tslDiffuse(u, T) {
+    const n = horseNodes(u, T);
+    return (c) => T.vec4(n.col, c.a);
+  },
+  tsl(m, u, T) {
+    const n = horseNodes(u, T);
+    m.normalNode = n.normal;
+    m.roughnessNode = n.rough;
+  },
+  tslPosition(u, T) {
+    // Breathing: the ribs and flank swell along the surface.
+    const breath = T.uniform(u.uBreath.value).onRenderUpdate(() => u.uBreath.value);
+    const r = T.attribute('aRest', 'vec3');
+    const one = T.float(1);
+    const ribs = T.smoothstep(0.72, 0.92, r.y).mul(one.sub(T.smoothstep(1.22, 1.38, r.y)))
+      .mul(one.sub(T.smoothstep(0.22, 0.5, T.abs(r.z.add(0.02)))))
+      .mul(T.smoothstep(0.04, 0.14, T.abs(r.x).add(one.sub(T.smoothstep(0.75, 0.86, r.y)).mul(0.2))));
+    return (pos) => pos.add(T.normalLocal.mul(breath).mul(ribs));
+  },
+});
+
+/** A horse's coat (one material per horse; the program is shared). */
+export function horseCoatMaterial(g: AnimalGenome, stage: AnimalStage): THREE.MeshStandardMaterial {
   const genes = g.genes ?? '';
   const leopard = doses(genes, 'L') === 2;
   const pattern = g.pattern === 'dappled' ? 1 : g.pattern === 'spotted' ? (leopard ? 3 : 2) : 0;
@@ -467,15 +639,7 @@ function coatMaterial(g: AnimalGenome, stage: AnimalStage): THREE.MeshStandardMa
     uBreath: { value: 0 },
   };
   const m = new THREE.MeshStandardMaterial({ color: '#ffffff', roughness: 0.52, metalness: 0 });
-  m.onBeforeCompile = (shader) => {
-    Object.assign(shader.uniforms, uniforms);
-    shader.vertexShader = COAT_VERTEX_HEAD + shader.vertexShader.replace('#include <begin_vertex>', '#include <begin_vertex>\n  vRest = aRest;' + COAT_BREATH);
-    shader.fragmentShader = COAT_FRAGMENT_HEAD + shader.fragmentShader
-      .replace('#include <color_fragment>', '#include <color_fragment>\n  diffuseColor.rgb = horseCoat();')
-      .replace('#include <roughnessmap_fragment>', '#include <roughnessmap_fragment>\n  roughnessFactor = hRough;')
-      .replace('#include <normal_fragment_maps>', '#include <normal_fragment_maps>\n' + COAT_BUMP + COAT_SHEEN);
-  };
-  m.customProgramCacheKey = () => 'kynds-horse-coat-5';
+  addFeature<HorseCoatUniforms>(m, 'horse-coat', uniforms);
   m.userData.coatUniforms = uniforms;
   return m;
 }
@@ -522,7 +686,10 @@ interface Look {
   bodyY: number;
 }
 
-export class HorseAvatar {
+/** A horse's stride at the walk and the trot (body units). */
+const HORSE_STRIDES = { walk: 1.16, trot: 2.0 };
+
+export class HorseAvatar implements RiggedAnimal<AnimalActivity, THREE.Group> {
   readonly root = new THREE.Group();
   readonly headAnchor = new THREE.Object3D();
   /** The tip of the muzzle (for checks and for where a hand holds out an apple). */
@@ -545,9 +712,8 @@ export class HorseAvatar {
   private legRest: { a: [number, number]; b: [number, number]; c: [number, number]; l1: number; l2: number; a1: number; a2: number; front: boolean }[] = [];
   private cur: Look;
   private legCur: [number, number, number][] = [[0, 0, 0], [0, 0, 0], [0, 0, 0], [0, 0, 0]];
-  private walkPhase = 0;
-  private trotPhase = 0;
-  private lastDistance = -1;
+  /** Walk and trot phases, from the distance walked (strides of 1.16 and 2 body units). */
+  private gait = new GaitClock(HORSE_STRIDES);
   private gaitBlend = 0;
   private bodyBase: number;
   private blinkAt = 2;
@@ -678,7 +844,7 @@ export class HorseAvatar {
     geo.setAttribute('skinWeight', new THREE.Float32BufferAttribute(sw, 4));
     geo.setIndex(horseBodyIndices);
     geo.computeVertexNormals();
-    const coat = coatMaterial(g, stage);
+    const coat = horseCoatMaterial(g, stage);
     this.coatUniforms = coat.userData.coatUniforms;
     const skin = new THREE.SkinnedMesh(geo, coat);
     skin.name = 'connected-horse-body';
@@ -1167,31 +1333,23 @@ export class HorseAvatar {
       dz *= min / d;
       d = min;
     }
-    const base = ang(dy, dz);
-    const alpha = Math.acos(Math.max(-1, Math.min(1, (r.l1 * r.l1 + d * d - r.l2 * r.l2) / (2 * r.l1 * d))));
-    // Knees bend forward, hocks point back.
-    const a1 = r.front ? base - alpha : base + alpha;
-    const upper = wrap(a1 - r.a1);
-    const by = ay + r.l1 * Math.cos(a1), bz = az + r.l1 * Math.sin(a1);
-    const a2 = ang(ay + dy - by, az + dz - bz);
-    const lower = wrap(a2 - r.a2 - upper);
+    // Knees bend forward, hocks point back. (Within reach already: the engine's solver leaves it.)
+    const ik = twoBonePlanar([ay, az], [ay + dy, az + dz], r.l1, r.l2, r.front ? -1 : 1, 0);
+    const upper = wrap(ik.upper - r.a1);
+    const lower = wrap(ik.lower - r.a2 - upper);
     return [upper, lower, wrap(hoofExtra - upper - lower)];
   }
 
   animate(activity: AnimalActivity, moving: boolean, running: boolean, time: number, dt: number, distanceWalked = 0, traits: readonly string[] = []): void {
     // --- gait phases, driven by distance so hooves plant ------------------------------------
-    const walkStride = 1.16, trotStride = 2.0;
-    const dd = this.lastDistance < 0 ? 0 : Math.max(0, Math.min(2, distanceWalked - this.lastDistance)) / this.scale;
-    this.lastDistance = distanceWalked;
-    this.walkPhase = (this.walkPhase + dd / walkStride) % 1;
-    this.trotPhase = (this.trotPhase + dd / trotStride) % 1;
+    this.gait.advance(distanceWalked, this.scale);
     this.gaitBlend += ((moving && running ? 1 : 0) - this.gaitBlend) * Math.min(1, dt * 6);
     // Walk and trot are cross-faded (smoothstepped) rather than switched, so the hooves never
     // jump from one gait's footfalls to the other's.
     const tw = this.gaitBlend * this.gaitBlend * (3 - 2 * this.gaitBlend);
     const trot = tw > 0.5;
-    const phase = trot ? this.trotPhase : this.walkPhase;
-    const nod = Math.sin(this.walkPhase * Math.PI * 4) * (1 - tw) + Math.sin(this.trotPhase * Math.PI * 4) * tw;
+    const phase = trot ? this.gait.phase.trot : this.gait.phase.walk;
+    const nod = Math.sin(this.gait.phase.walk * Math.PI * 4) * (1 - tw) + Math.sin(this.gait.phase.trot * Math.PI * 4) * tw;
     // Standing about, a horse is never quite still: now and then it paws, shakes, tosses its head,
     // turns to nibble an itch or stamps at a fly.
     const idling = activity === 'idle' && !moving && this.lieT === 0;
@@ -1223,8 +1381,8 @@ export class HorseAvatar {
       if (moving) {
         const S = asTrot ? 0.42 : 0.64;
         const offsets = asTrot ? [0, 0.5, 0.5, 0] : [0.25, 0.75, 0, 0.5];
-        const strideR = asTrot ? trotStride * S / 2 : walkStride * S / 2;
-        const f = ((asTrot ? this.trotPhase : this.walkPhase) + offsets[i]) % 1;
+        const strideR = asTrot ? HORSE_STRIDES.trot * S / 2 : HORSE_STRIDES.walk * S / 2;
+        const f = ((asTrot ? this.gait.phase.trot : this.gait.phase.walk) + offsets[i]) % 1;
         if (f < S) {
           z += strideR * (1 - 2 * (f / S));
         } else {
@@ -1347,7 +1505,7 @@ export class HorseAvatar {
       drop = Math.max(drop, h - reach);
     }
     let bodyY = -drop * 0.55 + target.bodyY;
-    if (moving) bodyY += (Math.abs(Math.sin(this.trotPhase * Math.PI * 2)) * 0.035 - 0.02) * tw;
+    if (moving) bodyY += (Math.abs(Math.sin(this.gait.phase.trot * Math.PI * 2)) * 0.035 - 0.02) * tw;
     if (this.restLeg >= 0 && still) bodyY -= 0.012;
 
     const k = Math.min(1, dt * (moving ? 16 : 5));
@@ -1357,7 +1515,7 @@ export class HorseAvatar {
     const lying = activity === 'roll' || (activity === 'lie' && !moving);
     c.bodyY = lerp(c.bodyY, bodyY, Math.min(1, dt * (moving ? 20 : 4)));
     let roll = this.restLeg === 2 ? 0.025 : this.restLeg === 3 ? -0.025 : 0;
-    if (moving) roll += Math.sin(this.walkPhase * Math.PI * 2) * 0.015 * (1 - tw);
+    if (moving) roll += Math.sin(this.gait.phase.walk * Math.PI * 2) * 0.015 * (1 - tw);
 
     // --- lying down and getting up, the way a horse does it -----------------------------------------
     // Down: the knees buckle and it kneels in front, then the hindquarters sink. Up: forelegs out

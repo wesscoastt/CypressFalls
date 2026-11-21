@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { addFeature, bumpNormal, defineFeature, type TNode, type TSL } from '../engine/render/MaterialFeatures.ts';
 import type { AnimalGenome } from '../sim/animals/Animal.ts';
 import { mixColor } from '../sim/family/genetics.ts';
 import { TAG, TAG_COUNT, type PetRig } from './petAnatomy.ts';
@@ -363,19 +364,89 @@ const FRAG_RIM = /* glsl */`
 }
 `;
 
-/** One fur material per pet; the program is shared by every pet. */
-export function furMaterial(plan: CoatPlan): THREE.MeshStandardMaterial {
-  const m = new THREE.MeshStandardMaterial({ color: '#ffffff', roughness: 0.86, metalness: 0 });
-  const uniforms = {
-    uBase: { value: new THREE.Color(plan.base) },
-    uSecond: { value: new THREE.Color(plan.second) },
-    uThird: { value: new THREE.Color(plan.third) },
-    uWhite: { value: new THREE.Color(plan.white) },
-    uStripeCol: { value: new THREE.Color(plan.stripe) },
-    uCoatOpts: { value: new THREE.Vector4(plan.secondSoft, plan.stripeFreq, plan.ticking, plan.fluff) },
-  };
-  m.userData.coatUniforms = uniforms;
-  m.onBeforeCompile = (shader) => {
+type CoatUniforms = Record<'uBase' | 'uSecond' | 'uThird' | 'uWhite' | 'uStripeCol', { value: THREE.Color }> & { uCoatOpts: { value: THREE.Vector4 } };
+interface ShellParams {
+  coat: CoatUniforms;
+  shell: { uLayer: { value: number }; uShellLen: { value: number }; uDensity: { value: number } };
+}
+
+/** `petHash` and `petNoise` as TSL functions. */
+const petFns = new WeakMap<object, { hash: (p: TNode) => TNode; noise: (p: TNode) => TNode }>();
+function petNoiseNodes(T: TSL) {
+  let f = petFns.get(T);
+  if (!f) {
+    const hash = T.Fn(([p0]: TNode[]) => {
+      const p = T.fract(p0.mul(0.3183099).add(T.vec3(0.71, 0.113, 0.419))).mul(17);
+      return T.fract(p.x.mul(p.y).mul(p.z).mul(p.x.add(p.y).add(p.z)));
+    });
+    const noise = T.Fn(([x]: TNode[]) => {
+      const i = T.floor(x), f0 = T.fract(x);
+      const f = f0.mul(f0).mul(T.vec3(3).sub(f0.mul(2)));
+      const h = (dx: number, dy: number, dz: number) => hash(i.add(T.vec3(dx, dy, dz)));
+      return T.mix(
+        T.mix(T.mix(h(0, 0, 0), h(1, 0, 0), f.x), T.mix(h(0, 1, 0), h(1, 1, 0), f.x), f.y),
+        T.mix(T.mix(h(0, 0, 1), h(1, 0, 1), f.x), T.mix(h(0, 1, 1), h(1, 1, 1), f.x), f.y),
+        f.z,
+      );
+    });
+    petFns.set(T, (f = { hash: (p) => hash(p), noise: (p) => noise(p) }));
+  }
+  return f;
+}
+
+const furCache = new WeakMap<object, Record<string, TNode>>();
+/** The coat's node graph (shared by its hooks). */
+function furNodes(u: CoatUniforms, T: TSL): Record<string, TNode> {
+  let n = furCache.get(u);
+  if (n) return n;
+  const { noise } = petNoiseNodes(T);
+  const un = <V>(v: { value: V }) => T.uniform(v.value as never).onRenderUpdate(() => v.value as never);
+  const base = un(u.uBase), second = un(u.uSecond), third = un(u.uThird), white = un(u.uWhite), stripeCol = un(u.uStripeCol), opts = un(u.uCoatOpts);
+  const rest = T.attribute('aRest', 'vec3'), coat = T.attribute('aCoat', 'vec4'), stripe = T.attribute('aStripe', 'vec2'), flow = T.attribute('aFlow', 'vec3');
+  const fw = T.length(T.fwidth(rest));
+  const fade = (freq: number) => T.float(1).sub(T.smoothstep(0.35, 1.1, fw.mul(freq)));
+  const nLo = noise(rest.mul(7)), nMid = noise(rest.mul(26).add(3.1));
+  const fineFade = fade(150);
+  const nFine = noise(rest.mul(T.vec3(150, 150, 70)).add(11));
+  const edge = nLo.sub(0.5).mul(0.22).add(nMid.sub(0.5).mul(0.16)).add(nFine.sub(0.5).mul(0.16).mul(fineFade));
+  const soft = opts.x;
+  let col: TNode = T.mix(base, second, T.smoothstep(soft.negate(), soft, coat.y.add(edge.mul(T.mix(1, 0.4, T.step(0.3, soft))))));
+  const fleck = T.smoothstep(0.62, 0.7, noise(rest.mul(95).add(5))).mul(opts.z).mul(fade(95));
+  col = T.mix(col, third, T.smoothstep(-0.05, 0.05, coat.z.add(edge)).mul(T.float(1).sub(T.step(0.01, opts.z))));
+  col = T.mix(col, second, fleck);
+  const sn = T.sin(stripe.x.add(nLo.sub(0.5).mul(1.6)).add(nMid.sub(0.5).mul(0.7)));
+  const band = T.smoothstep(0.34, 0.74, sn.mul(0.5).add(0.5).add(nFine.sub(0.5).mul(0.25).mul(fineFade)));
+  col = T.select(opts.y.greaterThan(0), T.mix(col, stripeCol, band.mul(T.clamp(stripe.y, 0, 1)).mul(0.92)), col);
+  col = T.mix(col, white, T.smoothstep(-0.05, 0.05, coat.x.add(edge)));
+  col = col.mul(coat.w.mul(0.09).add(1));
+  col = col.mul(nMid.mul(0.05).add(0.96).add(nFine.sub(0.5).mul(0.04).mul(fineFade)));
+  const fl = flow.normalize();
+  const ax = T.cross(fl, T.select(T.abs(fl.x).lessThan(0.9), T.vec3(1, 0, 0), T.vec3(0, 1, 0))).normalize();
+  const q = T.vec3(T.dot(rest, fl), T.dot(rest, ax), T.dot(rest, T.cross(fl, ax)));
+  const hairLen = T.clamp(T.length(flow), 0, 1);
+  const len = T.mix(1, 0.55, opts.w);
+  const lockFade = fade(60), strandFade = fade(260);
+  const lockLo = noise(q.mul(T.vec3(len.mul(9), 40, 40)).add(17));
+  const lock = lockLo.mul(0.7).add(noise(q.mul(T.vec3(len.mul(18), 80, 80)).add(41)).mul(0.3));
+  const strand = noise(q.mul(T.vec3(len.mul(55), 260, 260)).add(29));
+  col = col.mul(lock.sub(0.5).mul(0.22).mul(lockFade).add(strand.sub(0.5).mul(0.06).mul(strandFade)).mul(hairLen).add(1));
+  const height = nMid.mul(0.08).add(lockLo.mul(lockFade).mul(0.9).add(strand.mul(strandFade).mul(0.05)).mul(hairLen));
+  const normal = bumpNormal(T, height.mul(0.0013));
+  const rim = T.pow(T.float(1).sub(T.clamp(T.dot(normal, T.positionView.negate().normalize()), 0, 1)), 3);
+  n = { col, normal, rim, rest };
+  furCache.set(u, n);
+  return n;
+}
+
+/**
+ * Pet fur (engine M5 material feature `fur`): the coat's colours and markings from its fields, tabby
+ * stripes, ticking, countershading, locks and strands along the way the hair lies, their relief and a
+ * soft rim of light.
+ */
+export const FUR = defineFeature<CoatUniforms>({
+  id: 'fur',
+  key: () => 'kynds-pet-fur-2',
+  glsl(shader, uniforms) {
     Object.assign(shader.uniforms, uniforms);
     shader.vertexShader = shader.vertexShader
       .replace('#include <common>', '#include <common>\n' + VERT_PARS)
@@ -385,22 +456,43 @@ export function furMaterial(plan: CoatPlan): THREE.MeshStandardMaterial {
       .replace('#include <map_fragment>', FRAG_COLOR)
       .replace('#include <normal_fragment_maps>', '#include <normal_fragment_maps>\n' + FRAG_BUMP)
       .replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\n' + FRAG_RIM);
+  },
+  tslDiffuse(u, T) {
+    const n = furNodes(u, T);
+    // (The GLSL puts the coat in place of three's map step, over a white material.)
+    return (c) => T.vec4(n.col, c.a);
+  },
+  tsl(m, u, T) {
+    const n = furNodes(u, T);
+    m.normalNode = n.normal;
+    m.emissiveNode = T.diffuseColor.rgb.mul(n.rim).mul(0.16);
+  },
+});
+
+/** One fur material per pet; the program is shared by every pet. */
+export function furMaterial(plan: CoatPlan): THREE.MeshStandardMaterial {
+  const m = new THREE.MeshStandardMaterial({ color: '#ffffff', roughness: 0.86, metalness: 0 });
+  const uniforms: CoatUniforms = {
+    uBase: { value: new THREE.Color(plan.base) },
+    uSecond: { value: new THREE.Color(plan.second) },
+    uThird: { value: new THREE.Color(plan.third) },
+    uWhite: { value: new THREE.Color(plan.white) },
+    uStripeCol: { value: new THREE.Color(plan.stripe) },
+    uCoatOpts: { value: new THREE.Vector4(plan.secondSoft, plan.stripeFreq, plan.ticking, plan.fluff) },
   };
-  m.customProgramCacheKey = () => 'kynds-pet-fur-2';
+  m.userData.coatUniforms = uniforms;
+  addFeature<CoatUniforms>(m, 'fur', uniforms);
   return m;
 }
 
 /**
- * One shell of fur: the body pushed out along its normals (and combed back along the way the hair
- * lies), with only the strands left standing. A stack of these round a long coat breaks the smooth
- * silhouette into real fluff; a couple round a short coat give it a soft, fuzzy edge.
+ * A fur shell (engine M5 material feature `fur-shell`): pushed out along the skinned normal and
+ * combed down the way the hair lies; only the strands of this layer are left standing.
  */
-export function furShellMaterial(plan: CoatPlan, layer: number, length: number, density: number): THREE.MeshStandardMaterial {
-  const m = furMaterial(plan);
-  const base = m.onBeforeCompile;
-  const shell = { uLayer: { value: layer }, uShellLen: { value: length }, uDensity: { value: density } };
-  m.onBeforeCompile = (shader, r) => {
-    base.call(m, shader, r);
+export const FUR_SHELL = defineFeature<ShellParams>({
+  id: 'fur-shell',
+  key: () => 'kynds-pet-fur-shell-2',
+  glsl(shader, { shell }) {
     Object.assign(shader.uniforms, shell);
     shader.vertexShader = shader.vertexShader
       .replace('#include <common>', '#include <common>\nuniform float uLayer;\nuniform float uShellLen;\nattribute float aFur;\nvarying float vFur;')
@@ -424,8 +516,39 @@ export function furShellMaterial(plan: CoatPlan, layer: number, length: number, 
           // Shadowed near the skin, bright at the tips.
           diffuseColor.rgb *= mix(0.72, 1.06, uLayer);
         }`);
-  };
-  m.customProgramCacheKey = () => 'kynds-pet-fur-shell-2';
+  },
+  tsl(m, { shell }, T) {
+    // (After skinning, as the GLSL's insert after `skinning_vertex`: three applies positionNode last.)
+    const layer = T.uniform(shell.uLayer.value), len = T.uniform(shell.uShellLen.value);
+    const fl = len.mul(T.attribute('aFur', 'float'));
+    m.positionNode = T.positionLocal
+      .add(T.normalLocal.normalize().mul(fl).mul(layer).mul(0.55))
+      .add(T.attribute('aFlow', 'vec3').add(T.vec3(0, -0.7, 0)).normalize().mul(fl).mul(T.pow(layer, 1.6)).mul(1.5));
+  },
+  tslDiffuse({ shell }, T) {
+    const { hash } = petNoiseNodes(T);
+    const layer = T.uniform(shell.uLayer.value), density = T.uniform(shell.uDensity.value);
+    const cell = T.attribute('aRest', 'vec3').mul(density);
+    const f = T.fract(cell).sub(0.5);
+    const h = hash(T.floor(cell));
+    const r = T.float(0.72).sub(layer.mul(0.42)).mul(h.mul(0.6).add(0.7));
+    const fur = T.attribute('aFur', 'float');
+    return (c) => {
+      fur.mul(1.15).lessThan(layer).or(T.length(f.xy).add(T.length(f.yz).mul(0.4)).greaterThan(r)).or(h.lessThan(layer.mul(0.4))).discard();
+      return T.vec4(c.rgb.mul(T.mix(0.72, 1.06, layer)), c.a);
+    };
+  },
+});
+
+/**
+ * One shell of fur: the body pushed out along its normals (and combed back along the way the hair
+ * lies), with only the strands left standing. A stack of these round a long coat breaks the smooth
+ * silhouette into real fluff; a couple round a short coat give it a soft, fuzzy edge.
+ */
+export function furShellMaterial(plan: CoatPlan, layer: number, length: number, density: number): THREE.MeshStandardMaterial {
+  const m = furMaterial(plan);
+  const shell = { uLayer: { value: layer }, uShellLen: { value: length }, uDensity: { value: density } };
+  addFeature<ShellParams>(m, 'fur-shell', { coat: m.userData.coatUniforms as CoatUniforms, shell });
   return m;
 }
 

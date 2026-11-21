@@ -36,7 +36,7 @@ export interface LegPlan {
 }
 
 export interface QuadPlan {
-  species: 'cow' | 'sheep';
+  species: 'cow' | 'sheep' | 'goat' | 'pig';
   H: number;
   joints: V3[];
   parents: number[];
@@ -46,7 +46,7 @@ export interface QuadPlan {
   muzzle: V3;
   eyes: { at: V3; r: number }[];
   ears: { at: V3; dir: V3; len: number; width: number }[];
-  horns: { at: V3; len: number; ram: boolean } | null;
+  horns: { at: V3; len: number; ram: boolean; goat?: boolean } | null;
   /** Lowest point of the belly at rest (how far the body drops to lie down). */
   belly: number;
   /** Where the tail hangs to, at rest. */
@@ -61,21 +61,27 @@ export function lookSeed(g: AnimalGenome): number {
   return (parseInt(g.coat.slice(1), 16) % 997) * 0.37 + g.size * 13 + g.build * 7 + (g.muzzle ?? 0.5) * 3;
 }
 
-export function withers(speciesId: 'cow' | 'sheep', g: AnimalGenome, stage: AnimalStage): number {
-  const base = speciesId === 'cow' ? 1.08 + g.size * 0.16 : 0.56 + g.size * 0.1;
+export function withers(speciesId: 'cow' | 'sheep' | 'goat' | 'pig', g: AnimalGenome, stage: AnimalStage): number {
+  const base = speciesId === 'cow' ? 1.08 + g.size * 0.16 : speciesId === 'goat' ? 0.6 + g.size * 0.12 : speciesId === 'pig' ? 0.56 + g.size * 0.14 : 0.56 + g.size * 0.1;
   return base * (stage === 'young' ? (speciesId === 'cow' ? 0.58 : 0.55) : 1);
 }
 
-export function quadPlan(speciesId: 'cow' | 'sheep', g: AnimalGenome, stage: AnimalStage, sex: AnimalSex): QuadPlan {
+export function quadPlan(speciesId: 'cow' | 'sheep' | 'goat' | 'pig', g: AnimalGenome, stage: AnimalStage, sex: AnimalSex): QuadPlan {
   const H = withers(speciesId, g, stage);
   const young = stage === 'young';
   const elder = stage === 'elder';
   const male = sex === 'male' && !young;
   const cow = speciesId === 'cow';
+  // A goat is built on the sheep's frame, but lean and fine-boned with no fleece to fill it out.
+  const goat = speciesId === 'goat';
+  // A pig: short legs under a long barrel, the head low on a thick neck, a snout, a curly tail.
+  const pig = speciesId === 'pig';
   // Young things are mostly leg and head; heavy beasts are wider; an old one is bonier and dips in the back.
   const wide = (0.92 + g.build * 0.16) * (young ? 0.86 : 1) * (male ? 1.08 : 1);
   const legLen = young ? 1.12 : 1;
-  const headS = young ? 1.28 : 1;
+  // (A piglet's head is a little big for it, not a calf's or lamb's great baby head: its long snout
+  // would hold its head up off the grass.)
+  const headS = young ? (pig ? 1.1 : 1.28) : 1;
   const sway = elder ? 0.025 : 0;
   const P = (x: number, y: number, z: number): V3 => [x * H, y * H, z * H];
 
@@ -83,7 +89,15 @@ export function quadPlan(speciesId: 'cow' | 'sheep', g: AnimalGenome, stage: Ani
   // A leg is drawn from its root to the ground; the body sits on top at the legs' length.
   const lift = (legLen - 1) * 0.5;
   const Y = (y: number) => y + lift;
-  const s = cow
+  const s = pig
+    ? {
+        hips: [0, Y(0.95), -0.42], spine: [0, Y(0.98) - sway, -0.05], chest: [0, Y(0.95), 0.3],
+        neck: [0, Y(0.8), 0.4], neck2: [0, Y(0.78), 0.5], head: [0, Y(0.8), 0.62], jaw: [0, Y(0.66), 0.72],
+        tail: [[0, Y(0.9), -0.66], [0, Y(0.95), -0.7], [0, Y(0.9), -0.72]], tip: [0, Y(0.86), -0.72],
+        fore: [[0.12, Y(0.68), 0.33], [0.12, Y(0.42), 0.3], [0.12, 0.2 * legLen, 0.32], [0.12, 0.05, 0.33], [0.12, 0, 0.35]],
+        hind: [[0.13, Y(0.72), -0.42], [0.14, Y(0.45), -0.33], [0.12, 0.24 * legLen, -0.47], [0.12, 0.05, -0.44], [0.12, 0, -0.42]],
+      }
+    : cow
     ? {
         hips: [0, Y(0.9), -0.4], spine: [0, Y(0.88) - sway, -0.05], chest: [0, Y(0.86), 0.32],
         neck: [0, Y(0.84), 0.52], neck2: [0, Y(0.93), 0.7], head: [0, Y(1.0), 0.86], jaw: [0, Y(0.86), 0.97],
@@ -125,9 +139,19 @@ export function quadPlan(speciesId: 'cow' | 'sheep', g: AnimalGenome, stage: Ani
   // --- the masses ------------------------------------------------------------------------
   const m: Mass[] = [];
   const W = (x: number) => x * wide;
-  const coatT = cow ? T('coat') : T('coat', 'wool');
+  const coatT = cow || goat || pig ? T('coat') : T('coat', 'wool');
   const at = (x: number, y: number, z: number) => P(x, Y(y), z);
-  if (cow) {
+  if (pig) {
+    // The barrel, deep shoulders and round hams, a belly that nearly touches the grass on an old sow.
+    m.push(ellipsoid(at(0, 0.68, -0.05), P(W(0.28), 0.3, 0.52), LB.spine, coatT));
+    m.push(ellipsoid(at(0, 0.72, 0.24), P(W(0.25), 0.28, 0.22), LB.chest, coatT, 0.08 * H));
+    m.push(ellipsoid(at(0, 0.71, -0.37), P(W(0.26), 0.28, 0.23), LB.hips, coatT, 0.08 * H));
+    // The deep belly hangs low between short legs.
+    m.push(ellipsoid(at(0, 0.48, -0.05), P(W(0.24), 0.17, 0.42), LB.spine, coatT, 0.08 * H));
+    m.push(capsule(at(0, 0.9, -0.5), at(0, 0.9, 0.32), 0.1 * H, 0.1 * H, LB.spine, coatT, 0.1 * H));
+    // The thick neck and jowls run straight into the head: a pig has hardly any neck at all.
+    m.push(ellipsoid(at(0, 0.8, 0.46), P(W(0.19), 0.2, 0.16), LB.neck, coatT, 0.1 * H));
+  } else if (cow) {
     // Barrel, ribs, brisket and rump; the angular hips and pin bones of a working cow.
     m.push(ellipsoid(at(0, 0.7, -0.04), P(W(0.26), 0.24, 0.52), LB.spine, coatT));
     m.push(ellipsoid(at(0, 0.72, 0.3), P(W(0.22), 0.25, 0.26), LB.chest, coatT, 0.08 * H));
@@ -147,8 +171,10 @@ export function quadPlan(speciesId: 'cow' | 'sheep', g: AnimalGenome, stage: Ani
     m.push(ellipsoid(at(0, 0.66, 0.58), P(0.04, male ? 0.15 : 0.12, 0.15), LB.neck, coatT, 0.06 * H, [0.4, 0, 0]));
     if (male) m.push(ellipsoid(at(0, 0.98, 0.62), P(W(0.09), 0.08, 0.18), LB.neck, coatT, 0.08 * H, [0.35, 0, 0]));
   } else {
-    // Under the wool a sheep is slight: the fleece (a morph, see LivestockAvatar) does the rest.
-    m.push(ellipsoid(at(0, 0.68, -0.03), P(W(0.17), 0.18, 0.4), LB.spine, coatT));
+    // Under the wool a sheep is slight: the fleece (a morph, see LivestockAvatar) does the rest. A
+    // goat has no fleece: a little more barrel, and a sharp, angular rump.
+    const gb = goat ? 1.14 : 1;
+    m.push(ellipsoid(at(0, 0.68, -0.03), P(W(0.17 * gb), 0.18 * gb, 0.4), LB.spine, coatT));
     m.push(ellipsoid(at(0, 0.7, 0.25), P(W(0.15), 0.19, 0.2), LB.chest, coatT, 0.07 * H));
     m.push(ellipsoid(at(0, 0.73, -0.35), P(W(0.16), 0.16, 0.19), LB.hips, coatT, 0.07 * H));
     m.push(capsule(at(0, 0.84, -0.52), at(0, 0.84, 0.28), 0.07 * H, 0.07 * H, LB.spine, coatT, 0.08 * H));
@@ -161,15 +187,29 @@ export function quadPlan(speciesId: 'cow' | 'sheep', g: AnimalGenome, stage: Ani
   // Built about the poll, then scaled for the young (a calf's or lamb's big head).
   const hp = joints[LB.head];
   const HD = (x: number, y: number, z: number): V3 => {
-    const o = cow ? [0, Y(1.0), 0.86] : [0, Y(1.05), 0.66];
+    const o = cow ? [0, Y(1.0), 0.86] : pig ? [0, Y(0.86), 0.64] : [0, Y(1.05), 0.66];
     return [hp[0] + (x - o[0]) * H * headS, hp[1] + (y - o[1]) * H * headS, hp[2] + (z - o[2]) * H * headS];
   };
   const hr = (x: number, y: number, z: number): V3 => [x * H * headS, y * H * headS, z * H * headS];
   const eyes: QuadPlan['eyes'] = [];
   const ears: QuadPlan['ears'] = [];
   let muzzle: V3;
-  const faceT = cow ? T('coat', 'face') : T('face');
-  if (cow) {
+  const faceT = cow || pig ? T('coat', 'face') : T('face');
+  if (pig) {
+    // A wedge of a head tapering to the long snout, which ends in a flat, wet disc with nostrils.
+    m.push(ellipsoid(HD(0, Y(0.85), 0.66), hr(0.12, 0.12, 0.12), LB.head, faceT, 0.06 * H));
+    m.push(capsule(HD(0, Y(0.82), 0.72), HD(0, Y(0.75), 0.9), 0.078 * H * headS, 0.056 * H * headS, LB.head, faceT, 0.05 * H));
+    m.push(ellipsoid(HD(0, Y(0.745), 0.925), hr(0.06, 0.052, 0.024), LB.head, T('muzzle', 'face'), 0.015 * H));
+    for (const sd of [-1, 1]) {
+      m.push(ellipsoid(HD(sd * 0.075, Y(0.76), 0.7), hr(0.05, 0.07, 0.07), LB.head, faceT, 0.04 * H));
+      m.push(carve(HD(sd * 0.022, Y(0.745), 0.95), 0.011 * H * headS, 0.006 * H, LB.head));
+      eyes.push({ at: HD(sd * 0.082, Y(0.885), 0.735), r: 0.013 * H * headS });
+      // Big ears, tipped forward over the eyes.
+      ears.push({ at: HD(sd * 0.072, Y(0.95), 0.655), dir: [sd * 0.55, 0.45, 0.6], len: 0.15 * H * headS, width: 0.09 * H * headS });
+    }
+    m.push(ellipsoid(HD(0, Y(0.71), 0.8), hr(0.055, 0.035, 0.09), LB.jaw, faceT, 0.03 * H));
+    muzzle = HD(0, Y(0.745), 0.95);
+  } else if (cow) {
     // A broad, flat forehead between wide-set eyes, narrowing down a long face to a square muzzle.
     m.push(ellipsoid(HD(0, Y(0.985), 0.9), hr(0.115, 0.1, 0.1), LB.head, faceT, 0.05 * H));
     m.push(ellipsoid(HD(0, Y(0.955), 0.96), hr(0.122, 0.12, 0.055), LB.head, faceT, 0.05 * H, [0.95, 0, 0]));
@@ -201,10 +241,17 @@ export function quadPlan(speciesId: 'cow' | 'sheep', g: AnimalGenome, stage: Ani
       m.push(ellipsoid(HD(sd * 0.055, Y(1.01), 0.7), hr(0.026, 0.028, 0.03), LB.head, faceT, 0.02 * H));
       m.push(carve(HD(sd * 0.018, Y(0.895), 0.866), 0.008 * H * headS, 0.005 * H, LB.head));
       eyes.push({ at: HD(sd * 0.073, Y(1.015), 0.705), r: 0.017 * H * headS });
-      // Ears out level to the sides, just behind the eyes.
-      ears.push({ at: HD(sd * 0.068, Y(1.035), 0.66), dir: [sd, -0.08, -0.12], len: 0.12 * H * headS, width: 0.05 * H * headS });
+      // Ears out level to the sides, just behind the eyes (a goat's pricked up and out).
+      ears.push(goat
+        ? { at: HD(sd * 0.062, Y(1.05), 0.655), dir: [sd * 0.85, 0.42, -0.3], len: 0.13 * H * headS, width: 0.045 * H * headS }
+        : { at: HD(sd * 0.068, Y(1.035), 0.66), dir: [sd, -0.08, -0.12], len: 0.12 * H * headS, width: 0.05 * H * headS });
     }
     muzzle = HD(0, Y(0.87), 0.865);
+    if (goat && !young) {
+      // The beard: a tuft hanging from the chin, longer on a billy.
+      const len = male ? 0.13 : 0.07;
+      m.push(capsule(HD(0, Y(0.875), 0.79), HD(0, Y(0.875 - len), 0.765), 0.022 * H * headS, 0.008 * H * headS, LB.jaw, faceT, 0.012 * H));
+    }
   }
 
   // --- legs ------------------------------------------------------------------------------
@@ -212,7 +259,7 @@ export function quadPlan(speciesId: 'cow' | 'sheep', g: AnimalGenome, stage: Ani
     const { joints: j, fore } = legs[l];
     const b = (k: number) => lleg(l, k);
     const k = (v: number) => v * H * (young ? 0.95 : 1) * (cow ? 1 : 0.95);
-    const thick = cow ? 1 : 0.82;
+    const thick = cow ? 1 : pig ? 1.15 : 0.82;
     if (fore) {
       m.push(capsule(j[0], j[1], k(0.085) * wide, k(0.064) * wide, b(0), coatT, 0.06 * H));
       m.push(capsule(j[1], j[2], k(0.06) * thick, k(0.04) * thick, b(1), T('coat', 'lowleg'), 0.04 * H));
@@ -237,6 +284,11 @@ export function quadPlan(speciesId: 'cow' | 'sheep', g: AnimalGenome, stage: Ani
   // --- udder, tail -----------------------------------------------------------------------
   joints[LUDDER] = at(0, 0.5, -0.4);
   parents[LUDDER] = LB.hips;
+  if (goat && sex === 'female' && !young) {
+    // A nanny's small, high udder with its two teats.
+    m.push(ellipsoid(at(0, 0.49, -0.34), P(W(0.07), 0.06, 0.08), LUDDER, T('udder'), 0.03 * H));
+    for (const sd of [-1, 1]) m.push(capsule(at(sd * 0.03, 0.45, -0.33), at(sd * 0.035, 0.4, -0.31), 0.012 * H, 0.009 * H, LUDDER, T('udder'), 0.008 * H));
+  }
   if (cow && sex === 'female' && !young) {
     const full = elder ? 0.9 : 1;
     m.push(ellipsoid(at(0, 0.45, -0.4), P(W(0.12) * full, 0.09 * full, 0.15), LUDDER, T('udder'), 0.05 * H));
@@ -249,6 +301,19 @@ export function quadPlan(speciesId: 'cow' | 'sheep', g: AnimalGenome, stage: Ani
     m.push(capsule(tj[1], tj[2], 0.02 * H, 0.016 * H, LB.tail + 1, coatT, 0.004 * H));
     m.push(capsule(tj[2], tj[3], 0.016 * H, 0.014 * H, LB.tail + 2, coatT, 0.004 * H));
     m.push(ellipsoid([tj[3][0], tj[3][1] + 0.02 * H, tj[3][2]], P(0.034, 0.09, 0.034), LB.tail + 2, T('switch'), 0.02 * H));
+  } else if (pig) {
+    // A thin tail in a corkscrew curl.
+    let prev: V3 = tj[0];
+    for (let i = 1; i <= 6; i++) {
+      const a = i * 1.15;
+      const q: V3 = [tj[0][0] + Math.sin(a) * 0.025 * H, tj[0][1] + Math.cos(a) * 0.025 * H - 0.005 * H, tj[0][2] - i * 0.012 * H];
+      m.push(capsule(prev, q, 0.011 * H, 0.009 * H, LB.tail, coatT, 0.004 * H));
+      prev = q;
+    }
+  } else if (goat) {
+    // A goat's tail: short, flat and cocked up.
+    const up: V3 = [tj[0][0], tj[0][1] + 0.08 * H, tj[0][2] - 0.07 * H];
+    m.push(capsule(tj[0], up, 0.03 * H, 0.016 * H, LB.tail, coatT, 0.02 * H));
   } else {
     // Long, woolly tails: the old breeds were never docked.
     m.push(capsule(tj[0], tj[1], 0.05 * H, 0.04 * H, LB.tail, coatT, 0.03 * H));
@@ -256,7 +321,7 @@ export function quadPlan(speciesId: 'cow' | 'sheep', g: AnimalGenome, stage: Ani
     m.push(capsule(tj[2], tj[3], 0.032 * H, 0.024 * H, LB.tail + 2, coatT, 0.006 * H));
   }
 
-  const horns = (g.horns ?? 0) > 0 ? { at: cow ? HD(0.085, Y(1.03), 0.885) : HD(0.05, Y(1.07), 0.655), len: (g.horns ?? 0) * (cow ? 0.4 : male ? 0.6 : 0.3) * H * headS * (young ? 0.3 : 1), ram: !cow && male } : null;
+  const horns = (g.horns ?? 0) > 0 ? { at: cow ? HD(0.085, Y(1.03), 0.885) : HD(0.05, Y(1.07), 0.655), len: (g.horns ?? 0) * (cow ? 0.4 : goat ? (male ? 0.75 : 0.45) : male ? 0.6 : 0.3) * H * headS * (young ? 0.3 : 1), ram: !cow && !goat && male, goat } : null;
   return {
     species: speciesId,
     H,
@@ -268,9 +333,9 @@ export function quadPlan(speciesId: 'cow' | 'sheep', g: AnimalGenome, stage: Ani
     eyes,
     ears,
     horns,
-    belly: (cow ? Y(0.44) : Y(0.46)) * H,
+    belly: (cow ? Y(0.44) : pig ? Y(0.32) : Y(0.46)) * H,
     tailTip: tj[3],
-    fleece: cow ? 0 : H * 0.15 * (0.7 + g.coatLength * 0.4) * (young ? 0.6 : 1),
+    fleece: cow || goat || pig ? 0 : H * 0.15 * (0.7 + g.coatLength * 0.4) * (young ? 0.6 : 1),
     young,
   };
 }

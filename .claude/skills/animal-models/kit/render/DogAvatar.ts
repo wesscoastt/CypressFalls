@@ -1,4 +1,6 @@
 import * as THREE from 'three';
+import type { RiggedAnimal } from '../engine/anim/rig.ts';
+import { twoBone } from '../engine/anim/ik.ts';
 import { petProp } from './petProps.ts';
 import type { AnimalActivity, AnimalGenome } from '../sim/animals/Animal.ts';
 import type { AnimalStage } from '../sim/animals/Species.ts';
@@ -92,7 +94,7 @@ function shared<T extends THREE.Material>(key: string, make: () => T): T {
   return m;
 }
 
-export class DogAvatar {
+export class DogAvatar implements RiggedAnimal<AnimalActivity, THREE.Group> {
   readonly root = new THREE.Group();
   readonly headAnchor = new THREE.Object3D();
   private rig: PetRig;
@@ -209,7 +211,7 @@ export class DogAvatar {
       }
       smoothChainWeights(body.positions, body.skinIndex, body.skinWeight, rig, BONE.tail, TAIL_BONES, rig.joints.slice(BONE.tail, BONE.tail + TAIL_BONES).concat([tailTip(rig)]));
       groundMidline(body.positions, body.skinIndex, body.skinWeight, rig);
-      diffuseWeights(meshNeighbours(body.indices, body.positions.length / 3), body.skinIndex, body.skinWeight, 4);
+      diffuseWeights(meshNeighbours(body.indices, body.positions.length / 3), body.skinIndex, body.skinWeight, rig.species === 'cat' ? 14 : 4);
       geometry.setAttribute('position', new THREE.BufferAttribute(body.positions, 3));
       geometry.setAttribute('normal', new THREE.BufferAttribute(body.normals, 3));
       geometry.setAttribute('skinIndex', new THREE.BufferAttribute(body.skinIndex, 4));
@@ -1224,17 +1226,11 @@ export class DogAvatar {
     const theta = f[3];
     const ankle = target.clone().add(new THREE.Vector3(0, Math.cos(theta) * L3, -Math.sin(theta) * L3));
     // Two-bone IK from the shoulder/hip to the wrist/hock.
-    const toAnkle = ankle.clone().sub(j0);
-    let d = toAnkle.length();
-    const dir = toAnkle.clone().divideScalar(d || 1);
-    d = clamp(d, Math.abs(L1 - L2) + 1e-4, L1 + L2 - 1e-4);
-    const a = Math.acos(clamp((L1 * L1 + d * d - L2 * L2) / (2 * L1 * d), -1, 1));
     const parentQ = new THREE.Quaternion().setFromRotationMatrix(parentM);
     // Elbows point back; stifles point forward. The hint follows the body's pitch.
     const pole = new THREE.Vector3(0, leg.front ? -0.25 : 0.1, leg.front ? -1 : 1).applyQuaternion(parentQ);
-    const perp = pole.sub(dir.clone().multiplyScalar(pole.dot(dir))).normalize();
-    const j1 = j0.clone().add(dir.clone().multiplyScalar(Math.cos(a) * L1)).add(perp.multiplyScalar(Math.sin(a) * L1));
-    const j2 = j0.clone().add(dir.multiplyScalar(d));
+    const ik = twoBone(j0.toArray(), ankle.toArray(), L1, L2, pole.toArray());
+    const j1 = new THREE.Vector3(...ik.mid), j2 = new THREE.Vector3(...ik.end);
     // When the target is out of reach, keep the lower segment hanging from the reached point.
     const pawPos = j2.clone().add(target.clone().sub(ankle));
     const rest = leg.joints;

@@ -1,4 +1,7 @@
 import * as THREE from 'three';
+import type { RiggedAnimal } from '../engine/anim/rig.ts';
+import { twoBonePlanar } from '../engine/anim/ik.ts';
+import { addFeature, defineFeature, type TNode, type TSL } from '../engine/render/MaterialFeatures.ts';
 import type { AnimalActivity, AnimalGenome, AnimalSex } from '../sim/animals/Animal.ts';
 import type { AnimalStage } from '../sim/animals/Species.ts';
 import { diffuseWeights, meshNeighbours, sculpt, type V3 } from './sdfMesh.ts';
@@ -89,6 +92,35 @@ function coatColour(plan: QuadPlan, g: AnimalGenome, sex: AnimalSex, elder: bool
     out.lerp(darkCoat ? col('#3a2f2c') : col('#d9a296'), t[LT.udder] * 0.85);
     out.lerp(g.pattern === 'masked' || darkCoat ? second : col(mixHex(g.coat, '#2a1e18', 0.45)), t[LT.switch] * 0.8);
     if (sex === 'male') out.lerp(second, smooth((y - 0.8) * 5) * smooth((z - 0.45) * 6) * 0.2);
+  } else if (plan.species === 'pig') {
+    // Pink, black, ginger; spotted like an orchard pig, or a saddleback's white belt over the shoulders.
+    if (g.pattern === 'patched') {
+      const n = fbm(x * 4.2 + seed, y * 4.2, z * 4.2 + seed * 0.3);
+      if (n > 0.6) out.copy(second);
+    } else if (g.pattern === 'masked') {
+      const belt = smooth((0.13 - Math.abs(z - 0.24)) * 25) * (y > 0.12 ? 1 : 0);
+      const foreleg = smooth((z - 0.24) * 12) * smooth((0.55 - y) * 6);
+      out.lerp(second, Math.max(belt, foreleg * (1 - t[LT.hoof])));
+    } else out.lerp(second, clamp(smooth((y - 0.95) * 8) * 0.25 + t[LT.lowleg] * 0.2, 0, 1));
+    // The snout's disc: pink and wet on a pale pig, slate on a dark one.
+    const dark = base.getHSL({ h: 0, s: 0, l: 0 }).l < 0.25;
+    const disc = t[LT.muzzle] * smooth((z - (plan.muzzle[2] / H - 0.035)) * 50);
+    out.lerp(dark ? col('#3a3030') : col('#d98a86'), disc * 0.9);
+    if (!dark) out.lerp(col('#e8a49a'), t[LT.ear] * 0.25);
+  } else if (plan.species === 'goat') {
+    // A goat's short coat: pied in splashes, or (chamois) tawny with a black stripe down the back,
+    // black stockings and a dark face stripe; a solid coat darker along the back and down the legs.
+    if (g.pattern === 'patched') {
+      const n = fbm(x * 2.6 + seed, y * 2.6, z * 2.6 + seed * 0.3);
+      if (n > 0.55) out.copy(second);
+    } else if (g.pattern === 'masked') {
+      const stripe = smooth((0.05 - Math.abs(p[0] / H)) * 40) * smooth((y - 0.8) * 10);
+      const stockings = smooth((0.4 - y) * 9);
+      const faceStripe = t[LT.face] * smooth((0.025 - Math.abs(p[0] / H)) * 50);
+      out.lerp(second, Math.max(stripe, stockings, t[LT.lowleg], t[LT.muzzle] * 0.7, faceStripe * 0.85, smooth((0.5 - y) * 10) * 0.55));
+    } else out.lerp(second, clamp(t[LT.lowleg] * 0.35 + smooth((y - 0.86) * 8) * 0.2, 0, 1));
+    out.lerp(col('#2a2321'), t[LT.muzzle] * smooth((z - (plan.muzzle[2] / H - 0.04)) * 40) * 0.7);
+    out.lerp(col('#c9a296'), t[LT.udder] * 0.7);
   } else {
     // A sheep: the fleece, and the bare face and legs (dark on a blackface, spotted on a Jacob).
     const bare = clamp((t[LT.face] + t[LT.lowleg] + t[LT.muzzle]) - t[LT.wool] * 0.6, 0, 1);
@@ -114,9 +146,10 @@ function coatColour(plan: QuadPlan, g: AnimalGenome, sex: AnimalSex, elder: bool
  * own space, so the curls ride with the sheep), darker down in the crevices, with a soft sheen on
  * the tips. Only where the fleece grows (`aWool`); the face and legs are plain hair.
  */
-function woolMaterial(): THREE.MeshStandardMaterial {
-  const m = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.95, metalness: 0 });
-  m.onBeforeCompile = (sh) => {
+export const WOOL = defineFeature<null>({
+  id: 'wool',
+  key: () => 'stock-wool-1',
+  glsl(sh) {
     sh.vertexShader = sh.vertexShader
       .replace('#include <common>', '#include <common>\nattribute float aWool;\nvarying float vWool;\nvarying vec3 vWoolP;')
       .replace('#include <morphtarget_vertex>', '#include <morphtarget_vertex>\nvWool = aWool;\nvWoolP = transformed;');
@@ -149,8 +182,60 @@ float woolh = woolH(vWoolP);
 diffuseColor.rgb *= mix(1.0, 0.7 + 0.42 * woolh, vWool);`)
       .replace('#include <normal_fragment_maps>', `#include <normal_fragment_maps>
 normal = woolPerturb(-vViewPosition, normal, vec2(dFdx(woolh), dFdy(woolh)) * vWool * 1.6, faceDirection);`);
-  };
-  m.customProgramCacheKey = () => 'stock-wool-1';
+  },
+  tslDiffuse(_, T) {
+    const n = woolNodes(T);
+    return (c) => T.vec4(c.rgb.mul(T.mix(1, n.h.mul(0.42).add(0.7), n.wool)), c.a);
+  },
+  tsl(m, _, T) {
+    m.normalNode = woolNodes(T).normal;
+  },
+});
+
+const woolCache = new WeakMap<object, Record<string, TNode>>();
+/**
+ * The curls as nodes. (The GLSL takes the curls' position after the fleece's morph; the nodes take
+ * the rest position, so on a grown fleece the curls lie a little differently: the same look.)
+ */
+function woolNodes(T: TSL): Record<string, TNode> {
+  let n = woolCache.get(T);
+  if (n) return n;
+  const hash = T.Fn(([p0]: TNode[]) => {
+    const p = T.fract(p0.mul(0.3183099).add(0.1)).mul(17);
+    return T.fract(p.x.mul(p.y).mul(p.z).mul(p.x.add(p.y).add(p.z)));
+  });
+  const noise = T.Fn(([x]: TNode[]) => {
+    const i = T.floor(x), f0 = T.fract(x);
+    const f = f0.mul(f0).mul(T.vec3(3).sub(f0.mul(2)));
+    const h = (dx: number, dy: number, dz: number) => hash(i.add(T.vec3(dx, dy, dz)));
+    return T.mix(
+      T.mix(T.mix(h(0, 0, 0), h(1, 0, 0), f.x), T.mix(h(0, 1, 0), h(1, 1, 0), f.x), f.y),
+      T.mix(T.mix(h(0, 0, 1), h(1, 0, 1), f.x), T.mix(h(0, 1, 1), h(1, 1, 1), f.x), f.y),
+      f.z,
+    );
+  });
+  const p = T.attribute('position', 'vec3');
+  const wool = T.attribute('aWool', 'float');
+  const a = T.float(1).sub(T.abs(noise(p.mul(70)).mul(2).sub(1)));
+  const b = T.float(1).sub(T.abs(noise(p.mul(160).add(11)).mul(2).sub(1)));
+  const h = a.mul(0.65).add(b.mul(0.35));
+  // woolPerturb: the derivative bump with normalised screen tangents.
+  const nrm = T.normalView.mul(T.faceDirection);
+  const sx = T.dFdx(T.positionView).normalize(), sy = T.dFdy(T.positionView).normalize();
+  const r1 = T.cross(sy, nrm), r2 = T.cross(nrm, sx);
+  const det = T.dot(sx, r1).mul(T.faceDirection);
+  const k = wool.mul(1.6);
+  const g = T.sign(det).mul(T.dFdx(h).mul(k).mul(r1).add(T.dFdy(h).mul(k).mul(r2)));
+  const normal = T.abs(det).mul(nrm).sub(g).normalize();
+  n = { h, wool, normal };
+  woolCache.set(T, n);
+  return n;
+}
+
+/** One wool material per animal (it carries the fleece's vertex colours). */
+export function woolMaterial(): THREE.MeshStandardMaterial {
+  const m = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.95, metalness: 0 });
+  addFeature<null>(m, 'wool', null);
   return m;
 }
 
@@ -209,7 +294,7 @@ interface Pose {
 }
 const POSE_KEYS: (keyof Pose)[] = ['drop', 'pitch', 'roll', 'neck', 'neck2', 'head', 'yaw', 'jaw', 'chew', 'ears', 'tail', 'eyes', 'lie'];
 
-export class LivestockAvatar {
+export class LivestockAvatar implements RiggedAnimal<AnimalActivity, THREE.Group> {
   readonly root = new THREE.Group();
   readonly headAnchor = new THREE.Object3D();
   readonly plan: QuadPlan;
@@ -243,7 +328,7 @@ export class LivestockAvatar {
   private readonly tmpQ = new THREE.Quaternion();
   private readonly tmpM = new THREE.Matrix4();
 
-  constructor(g: AnimalGenome, stage: AnimalStage, speciesId: 'cow' | 'sheep', sex: AnimalSex = 'female') {
+  constructor(g: AnimalGenome, stage: AnimalStage, speciesId: 'cow' | 'sheep' | 'goat' | 'pig', sex: AnimalSex = 'female') {
     const plan = quadPlan(speciesId, g, stage, sex);
     this.plan = plan;
     const H = plan.H;
@@ -360,6 +445,7 @@ export class LivestockAvatar {
       return geo;
     });
     const coat = speciesId === 'sheep' ? shared('stock-wool', woolMaterial) : shared('stock-coat-cow', () => new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.78, metalness: 0 }));
+    // (A goat's coat is the cow's short hair; its eyes are the sheep's golden grazer's eyes.)
     const body = new THREE.SkinnedMesh(geometry, coat);
     body.name = 'stock-body';
     body.castShadow = true;
@@ -377,7 +463,7 @@ export class LivestockAvatar {
     head.add(this.headAnchor);
 
     // Eyes: dark and wet for a cow; amber with the long pupil of a grazer for a sheep.
-    const eyeMat = speciesId === 'sheep'
+    const eyeMat = speciesId === 'sheep' || speciesId === 'goat'
       ? shared('stock-eye-sheep', () => new THREE.MeshStandardMaterial({ map: sheepEyeTexture(g.eye), roughness: 0.12 }))
       : shared('stock-eye-cow', () => new THREE.MeshStandardMaterial({ color: '#1b120d', roughness: 0.1 }));
     for (const e of plan.eyes) {
@@ -405,7 +491,9 @@ export class LivestockAvatar {
       pivot.quaternion.setFromUnitVectors(new THREE.Vector3(1, 0, 0), dir);
       const outer = new THREE.Mesh(earGeometry(e.len, e.width, 1), shared(`stock-ear-${earColour.getHexString()}`, () => new THREE.MeshStandardMaterial({ color: earColour.clone(), roughness: 0.8, side: THREE.DoubleSide })));
       outer.castShadow = true;
-      const inner = new THREE.Mesh(earGeometry(e.len * 0.82, e.width * 0.7, 0.5), shared(`stock-ear-in-${speciesId}`, () => new THREE.MeshStandardMaterial({ color: speciesId === 'cow' ? '#c4958a' : '#c9a296', roughness: 0.9 })));
+      // (Inside a dark pig's ear it's dark too: a pale inner ear on a black pig reads as a horn.)
+      const innerCol = speciesId === 'cow' ? '#c4958a' : speciesId === 'pig' ? mixHex(g.coat, '#d9a296', 0.35) : '#c9a296';
+      const inner = new THREE.Mesh(earGeometry(e.len * 0.82, e.width * 0.7, 0.5), shared(`stock-ear-in-${speciesId}-${innerCol}`, () => new THREE.MeshStandardMaterial({ color: innerCol, roughness: 0.9 })));
       inner.position.set(e.len * 0.06, 0, e.width * 0.05);
       const ear = new THREE.Group();
       ear.add(outer, inner);
@@ -428,6 +516,12 @@ export class LivestockAvatar {
             const t = i / 6;
             pts.push(new THREE.Vector3(o.x + sd * L * (0.15 + t * 0.75), o.y + L * (0.05 + Math.pow(t, 1.6) * 0.6), o.z + L * (Math.sin(t * Math.PI) * 0.3 - t * 0.05)));
           }
+        } else if (h.goat) {
+          // Scimitar horns: up off the poll and sweeping back over the neck, spreading a little.
+          for (let i = 0; i <= 7; i++) {
+            const t = i / 7;
+            pts.push(new THREE.Vector3(o.x + sd * L * (0.04 + t * 0.22), o.y + L * (0.62 * Math.sin(t * 1.35) - 0.05 * t), o.z - L * (0.18 * t + 0.62 * t * t)));
+          }
         } else if (h.ram) {
           // A spiral round the ear: back, down and forward, widening outwards.
           for (let i = 0; i <= 10; i++) {
@@ -442,7 +536,7 @@ export class LivestockAvatar {
             pts.push(new THREE.Vector3(o.x + sd * L * (0.05 + t * 0.3), o.y + L * (0.15 + Math.sin(t * 2) * 0.25), o.z - L * t * 0.6));
           }
         }
-        const r0 = speciesId === 'cow' ? H * 0.026 : H * (h.ram ? 0.04 : 0.022);
+        const r0 = speciesId === 'cow' ? H * 0.026 : H * (h.ram ? 0.04 : h.goat ? 0.03 : 0.022);
         const hornMat = shared('stock-horn', () => new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.45 }));
         const horn = new THREE.Mesh(taperedTube(pts, r0, r0 * 0.15, speciesId === 'cow' ? 0 : 9, base, tip), hornMat);
         horn.castShadow = true;
@@ -500,7 +594,8 @@ export class LivestockAvatar {
         improved = false;
         for (let k = 0; k < 4; k++) for (const s of [-1, 1]) {
           const t = best.slice();
-          t[k] = clamp(t[k] + s * step, k === 3 ? -0.05 : -0.6, k === 3 ? 0.18 : 1.6);
+          // (A pig roots with its whole forehand down: it may pitch further forward than a cow.)
+          t[k] = clamp(t[k] + s * step, k === 3 ? -0.05 : -0.6, k === 3 ? (this.plan.species === 'pig' ? 0.3 : 0.18) : 1.6);
           const c = cost(t);
           if (c < bc) { bc = c; best = t; improved = true; }
         }
@@ -758,13 +853,9 @@ function dist3(a: V3, b: V3): number {
  * line (an elbow), +1 in front of it (a stifle).
  */
 function ik2(y0: number, z0: number, y1: number, z1: number, l0: number, l1: number, bend: number): [number, number] {
-  const dy = y0 - y1, dz = z1 - z0;
-  const d = clamp(Math.hypot(dy, dz), Math.abs(l0 - l1) + 1e-4, l0 + l1 - 1e-4);
-  const base = Math.atan2(dz, dy);
-  const a = Math.acos(clamp((l0 * l0 + d * d - l1 * l1) / (2 * l0 * d), -1, 1));
-  const up = base + bend * a;
-  const my = y0 - l0 * Math.cos(up), mz = z0 + l0 * Math.sin(up);
-  return [up, Math.atan2(z1 - mz, my - y1)];
+  // (The engine's planar solver with "down" as its first axis: angles from straight down.)
+  const r = twoBonePlanar([-y0, z0], [-y1, z1], l0, l1, bend, 1e-4, true);
+  return [r.upper, r.lower];
 }
 
 /** An ear: a soft leaf along +X, cupped a little. */

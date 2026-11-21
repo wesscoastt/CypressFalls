@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import type { RiggedAnimal } from '../engine/anim/rig.ts';
 import type { AnimalActivity, AnimalGenome, AnimalSex } from '../sim/animals/Animal.ts';
 import type { AnimalStage } from '../sim/animals/Species.ts';
 import { capsule, diffuseWeights, ellipsoid, meshNeighbours, sculpt, type Mass, type V3 } from './sdfMesh.ts';
@@ -48,11 +49,14 @@ interface HenPlan {
   legs: V3[][];
   chick: boolean;
   male: boolean;
+  /** A goose (or a gander, or a gosling): the same bird plan, longer in the neck and the body. */
+  goose: boolean;
 }
 
-function henPlan(g: AnimalGenome, stage: AnimalStage, sex: AnimalSex): HenPlan {
+function henPlan(g: AnimalGenome, stage: AnimalStage, sex: AnimalSex, goose = false): HenPlan {
   const chick = stage === 'young';
   const male = sex === 'male' && !chick;
+  if (goose) return goosePlan(g, chick, male);
   const S = (chick ? 0.42 : 1) * (male ? 1.15 : 1) * (0.92 + g.size * 0.16);
   const P = (x: number, y: number, z: number): V3 => [x * S, y * S, z * S];
   const joints: V3[] = [];
@@ -95,7 +99,57 @@ function henPlan(g: AnimalGenome, stage: AnimalStage, sex: AnimalSex): HenPlan {
   const head = joints[HB.head];
   const HD = (x: number, y: number, z: number): V3 => [head[0] + x * S * hs, head[1] + y * S * hs, head[2] + z * S * hs];
   m.push(ellipsoid(HD(0, 0.008, 0.008), [0.026 * S * hs, 0.028 * S * hs, 0.034 * S * hs], HB.head, T('head'), 0.012 * S));
-  return { S, joints, parents, masses: m, head: HD(0, 0.008, 0.008), legs, chick, male };
+  return { S, joints, parents, masses: m, head: HD(0, 0.008, 0.008), legs, chick, male, goose: false };
+}
+
+/**
+ * A goose: a long, boat-shaped body carried level, a low paunch between short legs, a pointed tail,
+ * long folded wings, and a long upright neck to a narrow head. A gosling is a ball of down with a
+ * short neck. Same skeleton as the hen, so the same gait, pecking (grazing) and settling code works.
+ */
+function goosePlan(g: AnimalGenome, chick: boolean, male: boolean): HenPlan {
+  const S = (chick ? 0.45 : 1) * (male ? 1.08 : 1) * (0.92 + g.size * 0.16) * 1.75;
+  const P = (x: number, y: number, z: number): V3 => [x * S, y * S, z * S];
+  const joints: V3[] = [];
+  const parents: number[] = [];
+  const put = (i: number, p: V3, parent: number) => { joints[i] = p; parents[i] = parent; };
+  const ny = chick ? 0.78 : 1;
+  put(HB.body, P(0, 0.2, -0.01), -1);
+  put(HB.neck, P(0, 0.27, 0.09), HB.body);
+  put(HB.neck2, P(0, 0.36 * ny, 0.112), HB.neck);
+  put(HB.head, P(0, 0.45 * ny, 0.118), HB.neck2);
+  put(HB.tail, P(0, 0.22, -0.15), HB.body);
+  put(HB.wingL, P(0.07, 0.24, 0.02), HB.body);
+  put(HB.wingR, P(-0.07, 0.24, 0.02), HB.body);
+  const legs: V3[][] = [];
+  for (let l = 0; l < 2; l++) {
+    const sd = l === 0 ? 1 : -1;
+    const lj = [P(sd * 0.045, 0.16, 0.02), P(sd * 0.045, 0.075, 0), P(sd * 0.045, 0, 0.018)];
+    legs.push(lj);
+    lj.forEach((p, k) => put(hleg(l, k), p, k ? hleg(l, k - 1) : HB.body));
+  }
+  const m: Mass[] = [];
+  const fluff = chick ? 1.2 : 1;
+  m.push(ellipsoid(P(0, 0.2, -0.02), P(0.085 * fluff, 0.074 * fluff, chick ? 0.115 : 0.15), HB.body, T('body'), 0, [-0.12, 0, 0]));
+  m.push(ellipsoid(P(0, 0.21, 0.075), P(0.074 * fluff, 0.072, 0.075), HB.body, T('breast'), 0.03 * S));
+  // The paunch: a goose's low belly, nearly brushing the grass between its legs.
+  m.push(ellipsoid(P(0, 0.155, -0.04), P(0.074 * fluff, 0.055, chick ? 0.08 : 0.11), HB.body, T('breast'), 0.03 * S));
+  for (let l = 0; l < 2; l++) m.push(ellipsoid(P((l ? -1 : 1) * 0.045, 0.15, 0.005), P(0.032, 0.042, 0.042), hleg(l, 0), T('breast'), 0.02 * S));
+  if (!chick) {
+    // A short pointed tail, cocked up a little.
+    m.push(ellipsoid(P(0, 0.228, -0.125), P(0.058, 0.04, 0.06), HB.tail, T('tail'), 0.025 * S, [-0.2, 0, 0]));
+    m.push(ellipsoid(P(0, 0.238, -0.175), P(0.034, 0.02, 0.046), HB.tail, T('tail'), 0.015 * S, [-0.35, 0, 0]));
+    // Long wings folded over the back, the tips crossing above the tail.
+    for (const sd of [1, -1]) m.push(ellipsoid(P(sd * 0.068, 0.228, -0.045), P(0.026, 0.054, 0.13), sd > 0 ? HB.wingL : HB.wingR, T('wing'), 0.012 * S, [-0.14, 0, sd * 0.06]));
+  }
+  // The long neck: thick at the shoulders, slim up to the head.
+  m.push(capsule(P(0, 0.24, 0.075), joints[HB.neck2], 0.05 * S * fluff, 0.03 * S, HB.neck, T('neck'), 0.03 * S));
+  m.push(capsule(joints[HB.neck2], P(0, 0.44 * ny, 0.118), 0.03 * S, 0.027 * S, HB.neck2, T('neck'), 0.012 * S));
+  const hs = chick ? 1.35 : 1;
+  const head = joints[HB.head];
+  const HD = (x: number, y: number, z: number): V3 => [head[0] + x * S * hs, head[1] + y * S * hs, head[2] + z * S * hs];
+  m.push(ellipsoid(HD(0, 0.008, 0.01), [0.025 * S * hs, 0.027 * S * hs, 0.04 * S * hs], HB.head, T('head'), 0.012 * S));
+  return { S, joints, parents, masses: m, head: HD(0, 0.008, 0.01), legs, chick, male, goose: true };
 }
 
 /** Feather colour at a vertex: the breed's pattern over the body, hackles and tail. */
@@ -103,6 +157,7 @@ function featherColour(plan: HenPlan, g: AnimalGenome, p: V3, t: Float32Array, s
   const S = plan.S;
   const x = p[0] / S, y = p[1] / S, z = p[2] / S;
   const base = col(g.coat), second = col(g.secondary);
+  if (plan.goose) return gooseColour(plan, g, x, y, z, t, seed, base, second, out);
   if (plan.chick) {
     // Down: pale yellow for a white or cuckoo hen's chick, striped chipmunk-brown for the rest.
     const pale = g.type === 'white_hen' || g.type === 'cuckoo';
@@ -134,7 +189,36 @@ function featherColour(plan: HenPlan, g: AnimalGenome, p: V3, t: Float32Array, s
   return out;
 }
 
-export class HenAvatar {
+/** A goose's plumage: white; greylag grey-brown with a pale belly and barred wings; saddleback white with a grey head and saddle. */
+function gooseColour(plan: HenPlan, g: AnimalGenome, x: number, y: number, z: number, t: Float32Array, seed: number, base: THREE.Color, second: THREE.Color, out: THREE.Color): THREE.Color {
+  const n = valueNoise(x * 60, y * 60, z * 60);
+  if (plan.chick) {
+    // Goslings: yellow down for a white bird's, olive-grey (yellow beneath) for the rest.
+    out.set(g.type === 'white_goose' ? '#ecd977' : '#8b8656');
+    if (g.type !== 'white_goose') out.lerp(col('#d9cb7a'), smooth((0.19 - y) * 25));
+    return out.multiplyScalar(0.94 + n * 0.12);
+  }
+  out.copy(base);
+  if (g.pattern === 'ticked') {
+    // Greylag: paler on the breast, white under the tail, every wing feather edged in buff.
+    out.lerp(col('#a59c8e'), smooth((0.2 - y) * 18) * (1 - t[TG.wing]));
+    out.lerp(col('#efebe2'), smooth((0.19 - y) * 30) * smooth((-0.06 - z) * 20));
+    // Rows of feathers across the folded wing, each with a pale tip.
+    const row = Math.sin(z * 120 + y * 45 + valueNoise(x * 20, y * 20, z * 20) * 1.5);
+    out.lerp(second, smooth((t[TG.wing] - 0.35) * 3) * smooth(row * 3 - 2.1) * 0.45);
+    out.lerp(col('#5f584e'), t[TG.neck] * 0.25 + t[TG.head] * 0.3);
+  } else if (g.pattern === 'masked') {
+    // Saddleback: grey head and neck, and a grey saddle over the back and wings.
+    const saddle = Math.max(t[TG.neck] * smooth((y - 0.27) * 30), t[TG.head], t[TG.wing] * 0.9, t[TG.body] * smooth((y - 0.245) * 40) * smooth((0.06 - z) * 20));
+    out.lerp(second, saddle);
+  } else {
+    // A white goose's wings and back take a faint cream.
+    out.lerp(col('#e9e2d2'), t[TG.wing] * 0.5);
+  }
+  return out.multiplyScalar(0.93 + valueNoise(x * 140 + seed, y * 140, z * 140) * 0.12);
+}
+
+export class HenAvatar implements RiggedAnimal<AnimalActivity, THREE.Group> {
   readonly root = new THREE.Group();
   readonly headAnchor = new THREE.Object3D();
   private plan: HenPlan;
@@ -166,8 +250,8 @@ export class HenAvatar {
   private jab: [number, number, number] = [0.6, 1.2, 0.5];
   private poise: [number, number, number] = [0.3, 0.3, 0.2];
 
-  constructor(g: AnimalGenome, stage: AnimalStage, sex: AnimalSex = 'female') {
-    const plan = henPlan(g, stage, sex);
+  constructor(g: AnimalGenome, stage: AnimalStage, sex: AnimalSex = 'female', kind: 'hen' | 'goose' = 'hen') {
+    const plan = henPlan(g, stage, sex, kind === 'goose');
     this.plan = plan;
     this.seed = lookSeed(g);
     const S = plan.S;
@@ -182,7 +266,7 @@ export class HenAvatar {
       this.bones[i].position.set(j[0] - pj[0], j[1] - pj[1], j[2] - pj[2]);
       (p >= 0 ? this.bones[p] : this.root).add(this.bones[i]);
     });
-    const key = JSON.stringify([g, stage, sex]);
+    const key = JSON.stringify([g, stage, sex, kind]);
     let geo = geoCache.get(key);
     if (!geo) {
       const voxel = S * 0.0075 * (plan.chick ? 1.5 : 1);
@@ -229,15 +313,18 @@ export class HenAvatar {
     const L = (p: V3) => new THREE.Vector3(p[0] - hj[0], p[1] - hj[1], p[2] - hj[2]);
     const hs = plan.chick ? 1.25 : 1;
     const hc = L(plan.head);
+    if (plan.goose) this.gooseHead(head, hc, g, hs);
     const red = shared('hen-comb', () => new THREE.MeshStandardMaterial({ color: '#c42b2a', roughness: 0.55 }));
     const horn = shared('hen-beak', () => new THREE.MeshStandardMaterial({ color: plan.chick ? '#e6b54a' : g.type === 'black_hen' ? '#3d3a36' : '#d8a945', roughness: 0.45 }));
     // Beak: a curved cone, the upper mandible hooked over the lower.
+    if (!plan.goose) {
     const beak = new THREE.Mesh(new THREE.ConeGeometry(0.0095 * S * hs, 0.026 * S * hs, 10), horn);
     beak.rotation.x = Math.PI / 2 + 0.35;
     beak.position.set(hc.x, hc.y - 0.006 * S * hs, hc.z + 0.04 * S * hs);
     beak.scale.set(1, 1, 0.75);
     head.add(beak);
-    if (!plan.chick) {
+    }
+    if (!plan.chick && !plan.goose) {
       // The single comb: a row of points, tall on a cockerel; the wattles hang below the beak.
       const combH = (plan.male ? 0.034 : 0.013) * S;
       const n = plan.male ? 5 : 4;
@@ -269,11 +356,12 @@ export class HenAvatar {
     }
     // Eyes: an orange iris round a black pupil, set on the sides of the head.
     const iris = shared(`hen-iris-${g.eye}`, () => new THREE.MeshStandardMaterial({ color: plan.chick ? '#151210' : g.eye, roughness: 0.2 }));
+    const ex = plan.goose ? 0.021 : 0.022, ez = plan.goose ? 0.02 : 0.012;
     const pupilMat = shared('hen-pupil', () => new THREE.MeshStandardMaterial({ color: '#0b0908', roughness: 0.1 }));
     for (const sd of [-1, 1]) {
       const r = 0.0058 * S * hs;
       const eye = new THREE.Mesh(new THREE.SphereGeometry(r, 12, 8), iris);
-      eye.position.set(hc.x + sd * 0.022 * S * hs, hc.y + 0.008 * S * hs, hc.z + 0.012 * S * hs);
+      eye.position.set(hc.x + sd * ex * S * hs, hc.y + 0.008 * S * hs, hc.z + ez * S * hs);
       const pupil = new THREE.Mesh(new THREE.SphereGeometry(r * 0.55, 10, 8), pupilMat);
       pupil.position.set(sd * r * 0.62, 0, r * 0.25);
       eye.add(pupil);
@@ -282,28 +370,44 @@ export class HenAvatar {
     }
     this.headAnchor.position.set(hc.x, hc.y, hc.z + 0.02 * S);
     head.add(this.headAnchor);
-    this.beakTip.position.set(hc.x, hc.y - 0.012 * S * hs, hc.z + 0.052 * S * hs);
+    if (plan.goose) this.beakTip.position.set(hc.x, hc.y - 0.016 * S * hs, hc.z + 0.09 * S * hs);
+    else this.beakTip.position.set(hc.x, hc.y - 0.012 * S * hs, hc.z + 0.052 * S * hs);
     head.add(this.beakTip);
 
     // Legs and feet: scaly shanks and four toes, three forward and one back; a spur on a cockerel.
-    const legMat = shared(`hen-leg-${g.type}`, () => new THREE.MeshStandardMaterial({ color: g.type === 'black_hen' || g.type === 'cuckoo' ? (g.type === 'cuckoo' ? '#d9c79a' : '#4a4c50') : '#d6ad48', roughness: 0.6 }));
+    const legMat = plan.goose
+      ? shared(`goose-leg-${plan.chick}`, () => new THREE.MeshStandardMaterial({ color: plan.chick ? '#a08a4e' : '#e3842c', roughness: 0.55 }))
+      : shared(`hen-leg-${g.type}`, () => new THREE.MeshStandardMaterial({ color: g.type === 'black_hen' || g.type === 'cuckoo' ? (g.type === 'cuckoo' ? '#d9c79a' : '#4a4c50') : '#d6ad48', roughness: 0.6 }));
+    const shankR = plan.goose ? 0.0085 : 0.006;
     for (let l = 0; l < 2; l++) {
       const [knee, hock, foot] = plan.legs[l];
       const shankLen = Math.hypot(hock[1] - foot[1], hock[2] - foot[2]);
-      const shank = new THREE.Mesh(new THREE.CylinderGeometry(0.0055 * S, 0.0065 * S, shankLen, 8), legMat);
+      const shank = new THREE.Mesh(new THREE.CylinderGeometry(shankR * 0.92 * S, shankR * 1.08 * S, shankLen, 8), legMat);
       // Along the shank bone (from the hock to the foot), in its own space.
       shank.position.set((foot[0] - hock[0]) / 2, (foot[1] - hock[1]) / 2, (foot[2] - hock[2]) / 2);
       shank.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), new THREE.Vector3(foot[0] - hock[0], foot[1] - hock[1], foot[2] - hock[2]).normalize());
       this.bones[hleg(l, 1)].add(shank);
-      if (plan.male) {
+      if (plan.male && !plan.goose) {
         const spur = new THREE.Mesh(new THREE.ConeGeometry(0.003 * S, 0.014 * S, 6), legMat);
         spur.position.set(0, (foot[1] - hock[1]) * 0.55, -0.006 * S);
         spur.rotation.x = -Math.PI / 2 - 0.4;
         this.bones[hleg(l, 1)].add(spur);
       }
       const toes = new THREE.Group();
-      for (const [a, len] of [[-0.45, 0.034], [0, 0.04], [0.45, 0.034], [Math.PI, 0.02]] as [number, number][]) {
-        const toe = new THREE.Mesh(new THREE.CapsuleGeometry(0.0032 * S, len * S, 3, 6), legMat);
+      const toeSet: [number, number][] = plan.goose ? [[-0.5, 0.042], [0, 0.048], [0.5, 0.042]] : [[-0.45, 0.034], [0, 0.04], [0.45, 0.034], [Math.PI, 0.02]];
+      if (plan.goose) {
+        // The web: a fan of skin between the three front toes, flat on the ground.
+        const web = new THREE.Mesh(new THREE.CircleGeometry(0.046 * S, 10, -Math.PI / 2 - 0.52, 1.04), shared(`goose-web-${plan.chick}`, () => {
+          const w = (legMat as THREE.MeshStandardMaterial).clone();
+          w.side = THREE.DoubleSide;
+          return w;
+        }));
+        web.rotation.x = -Math.PI / 2;
+        web.position.y = 0.0025 * S;
+        toes.add(web);
+      }
+      for (const [a, len] of toeSet) {
+        const toe = new THREE.Mesh(new THREE.CapsuleGeometry((plan.goose ? 0.0036 : 0.0032) * S, len * S, 3, 6), legMat);
         toe.rotation.set(Math.PI / 2, 0, 0);
         const holder = new THREE.Object3D();
         holder.rotation.y = a * (l === 0 ? 1 : -1);
@@ -319,6 +423,23 @@ export class HenAvatar {
     });
     this.jab = this.solvePeck(0.008 * S, 0.65);
     this.poise = this.solvePeck(0.1 * S, 0.35);
+  }
+
+  /** A goose's head parts: the flat orange bill with its pale nail. */
+  private gooseHead(head: THREE.Bone, hc: THREE.Vector3, g: AnimalGenome, hs: number): void {
+    const S = this.plan.S;
+    const billMat = shared(`goose-bill-${this.plan.chick}`, () => new THREE.MeshStandardMaterial({ color: this.plan.chick ? '#5b5340' : '#e98a2a', roughness: 0.45 }));
+    const len = 0.05 * S * hs;
+    const bill = new THREE.Mesh(new THREE.CylinderGeometry(0.0075 * S * hs, 0.0135 * S * hs, len, 14), billMat);
+    // Wide and flat, sloping a little down from the forehead.
+    bill.scale.set(1.15, 1, 0.5);
+    bill.rotation.x = Math.PI / 2 + 0.18;
+    bill.position.set(hc.x, hc.y - 0.009 * S * hs, hc.z + 0.036 * S * hs + len * 0.5);
+    head.add(bill);
+    const nail = new THREE.Mesh(new THREE.SphereGeometry(0.0062 * S * hs, 10, 6), shared(`goose-nail-${g.type}`, () => new THREE.MeshStandardMaterial({ color: this.plan.chick ? '#4a4334' : '#efd9b0', roughness: 0.4 })));
+    nail.scale.set(1.2, 0.55, 1);
+    nail.position.set(hc.x, hc.y - 0.016 * S * hs, hc.z + 0.036 * S * hs + len * 0.98);
+    head.add(nail);
   }
 
   /** Pose the neck chain (as `animate` does) and return the beak tip's height and reach. */
@@ -406,7 +527,7 @@ export class HenAvatar {
 
     // Head bob while walking: the head stays put, then shoots forward with each step.
     const stepPh = (phase * 2) % 1;
-    const bob = this.moveW * (1 - this.runW) * (stepPh < 0.75 ? 0.5 - stepPh / 0.75 : -0.5 + (stepPh - 0.75) / 0.25);
+    const bob = (this.plan.goose ? 0 : 1) * this.moveW * (1 - this.runW) * (stepPh < 0.75 ? 0.5 - stepPh / 0.75 : -0.5 + (stepPh - 0.75) / 0.25);
     const lerp = THREE.MathUtils.lerp;
     const pk = (k: number) => lerp(this.poise[k], this.jab[k], jab) * this.peck;
     const bodyPitch = pk(0) + this.moveW * 0.12 + this.runW * 0.15 - this.lie * 0.1;
@@ -417,9 +538,10 @@ export class HenAvatar {
 
     // Body height: on her legs, or settled down on them (sleeping, or wriggled into a dust bath).
     const legsY = j[HB.body][1];
-    const sitY = 0.108 * S;
+    const sitY = (this.plan.goose ? 0.11 : 0.108) * S;
     const roll = activity === 'roll' && !moving ? Math.sin(t * 9) * 0.35 * this.lie : 0;
-    const wobble = this.moveW * Math.sin(phase * Math.PI * 2) * 0.08;
+    // A goose waddles: a big roll from foot to foot.
+    const wobble = this.moveW * Math.sin(phase * Math.PI * 2) * (this.plan.goose ? 0.16 : 0.08);
     b[HB.body].position.set(0, THREE.MathUtils.lerp(legsY, sitY, this.lie) - this.moveW * Math.abs(Math.sin(phase * Math.PI * 2)) * 0.006 * S, j[HB.body][2]);
     b[HB.body].rotation.set(this.bodyPitch, 0, wobble + roll);
     // Fluffed up for sleep.
@@ -467,8 +589,9 @@ export class HenAvatar {
       const my = top.y - l0 * Math.cos(up), mz = top.z + l0 * Math.sin(up);
       let lo = Math.atan2(tz - mz, my - ty);
       // Settled: drumstick tucked forward, shank flat back under the body.
-      up = THREE.MathUtils.lerp(up, 0.9, this.lie);
-      lo = THREE.MathUtils.lerp(lo, -1.35, this.lie);
+      // A goose's short legs fold right up under its paunch.
+      up = THREE.MathUtils.lerp(up, this.plan.goose ? 1.3 : 0.9, this.lie);
+      lo = THREE.MathUtils.lerp(lo, this.plan.goose ? -1.5 : -1.35, this.lie);
       const rest0 = Math.atan2(hock[2] - knee[2], knee[1] - hock[1]);
       const rest1 = Math.atan2(foot[2] - hock[2], hock[1] - foot[1]);
       const w0 = -(up - rest0), w1 = -(lo - rest1);
